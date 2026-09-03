@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>号码知识库 · 全维度智能预警</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+:root{
+  --bg:#F6F0E6; --ink:#2E2B28; --ink2:#6B655E; --line:#D8D2C8;
+  --warn:#C83C32; --warnbg:#FBE8E6; --btn2:#4F6367; --ok:#5A6C51;
+  --gold:#B8956A; --thbg:#EFE8DC; --rowodd:#F6F0E6; --roweven:#FDF8F0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.wrap{max-width:1200px;margin:0 auto;padding:16px 12px 40px}
+/* 头部 */
+.header{text-align:center;padding:28px 0 20px;position:relative}
+.header .seal{display:inline-block;width:52px;height:52px;line-height:52px;background:var(--warn);color:#fff;border-radius:10px;font-size:22px;font-weight:700;margin-bottom:12px;box-shadow:0 2px 8px rgba(200,60,50,.3)}
+.header h1{font-size:26px;letter-spacing:4px;font-weight:800;color:var(--ink)}
+.header .sub{font-size:13px;color:var(--ink2);margin-top:8px;letter-spacing:2px}
+/* 筛选栏 */
+.toolbar{display:flex;gap:12px;align-items:center;justify-content:center;margin:18px 0;flex-wrap:wrap}
+.toolbar select,.toolbar button{padding:8px 16px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;color:var(--ink);cursor:pointer;outline:none}
+.toolbar button{background:var(--warn);color:#fff;border:none;font-weight:600}
+.toolbar button:hover{opacity:.9}
+.stat-bar{text-align:center;font-size:13px;color:var(--ink2);margin-bottom:16px}
+.stat-bar b{color:var(--warn);font-size:16px}
+/* 当前遗漏榜 */
+.rank-board{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.rank-board h3{font-size:15px;margin-bottom:12px;color:var(--ink);letter-spacing:2px;font-weight:700}
+.rank-board h3 .hot{color:var(--warn);font-size:12px;font-weight:400;letter-spacing:1px}
+.rank-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rank-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:13px;background:#f3efe5;border:1px solid #e8e2d4;color:var(--ink2)}
+.rank-chip .n{font-family:'Roboto Mono',monospace;font-weight:800;color:var(--btn2)}
+.rank-chip.hot{background:var(--warnbg);border-color:#ecc8c4}
+.rank-chip.hot .n{color:var(--warn)}
+/* 表格 */
+.table-card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:1200px}
+thead th{background:var(--thbg);color:var(--ink);font-weight:600;font-size:12px;padding:12px 8px;border-bottom:2px solid var(--line);white-space:nowrap;position:sticky;top:0}
+tbody td{padding:11px 8px;text-align:center;font-size:13px;border-bottom:1px solid #f0ece2;white-space:nowrap}
+tbody tr:nth-child(odd){background:var(--rowodd)}
+tbody tr:nth-child(even){background:var(--roweven)}
+tbody tr.warn-row{background:var(--warnbg)}
+.num-cell{font-family:'Roboto Mono',monospace;font-weight:700;font-size:16px}
+.rank-cell{font-family:'Roboto Mono',monospace;color:var(--btn2);font-weight:700}
+/* 标签 chips */
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:#f3efe5;color:var(--ink2);border:1px solid #e8e2d4;margin:1px}
+.tag.warn{background:var(--warn);color:#fff;border-color:var(--warn);font-weight:600}
+.tag.empty{background:transparent;border:1px dashed #ddd5c4;color:#c5bda8}
+/* 移动卡片 */
+.mobile-list{display:none}
+@media(max-width:760px){
+  .header{padding:12px 0 8px}
+  .header .seal{width:36px;height:36px;line-height:36px;font-size:16px;margin-bottom:6px;border-radius:8px}
+  .header h1{font-size:17px;letter-spacing:2px}
+  .header .sub{font-size:11px;letter-spacing:1px;margin-top:4px}
+  .toolbar{margin:10px 0;gap:8px}
+  .stat-bar{margin-bottom:8px;font-size:12px}
+  .rank-board{padding:10px;margin-bottom:10px;border-radius:12px}
+  .rank-board h3{font-size:14px;margin-bottom:8px}
+  .rank-chips{gap:6px}
+  .rank-chip{padding:4px 9px;font-size:12px}
+  .table-scroll{display:none}
+  .mobile-list{display:block}
+  .m-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
+  .m-card.warn-row{background:var(--warnbg);border-color:#ecc8c4}
+  .m-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .m-num{font-family:'Roboto Mono',monospace;font-size:20px;font-weight:800;color:var(--ink)}
+  .m-rank{font-size:12px;color:var(--btn2)}
+  .m-tags{display:flex;flex-wrap:wrap;gap:3px}
+}
+.empty{padding:60px 20px;text-align:center;color:#b8b0a0}
+.empty .icon{font-size:48px;display:block;margin-bottom:12px}
+.footer{text-align:center;color:#c0b8a5;font-size:12px;margin-top:24px;letter-spacing:2px}
+/* 访问密码门 */
+.gate{min-height:78vh;display:flex;align-items:center;justify-content:center}
+.gate-box{background:#fff;border:1px solid var(--line);border-radius:16px;padding:44px 32px;width:100%;max-width:360px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.06)}
+.gate-box .seal{margin:0 auto 14px}
+.gate-box h2{font-size:20px;letter-spacing:4px;margin-bottom:6px;color:var(--ink);font-weight:800}
+.gate-box .sub{font-size:13px;color:var(--ink2);margin-bottom:24px;letter-spacing:2px}
+.gate-box input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;font-size:16px;text-align:center;letter-spacing:4px;outline:none;margin-bottom:14px}
+.gate-box input:focus{border-color:var(--gold)}
+.gate-box button{width:100%;padding:12px;border:none;border-radius:8px;background:var(--warn);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+.gate-box button:hover{opacity:.9}
+.gate-box .err{color:var(--warn);font-size:13px;margin-top:12px}
+</style>
+</head>
+<body>
+<div id="app" class="wrap">
+  <!-- 访问密码门 -->
+  <div v-if="!authed" class="gate">
+    <div class="gate-box">
+      <div class="seal">財</div>
+      <h2>号码知识库</h2>
+      <div class="sub">请输入访问密码</div>
+      <input type="password" v-model="pwd" placeholder="访问密码" @keyup.enter="verify">
+      <button @click="verify">进 入</button>
+      <div class="err" v-if="err">{{ err }}</div>
+    </div>
+  </div>
+
+  <template v-else>
+  <div class="header">
+    <div class="seal">財</div>
+    <h1>号码知识库全维度智能预警</h1>
+    <div class="sub">公历 · 农历生肖周期 · 十七维度标签解析 · 历史高位预警</div>
+  </div>
+
+  <div class="toolbar">
+    <select v-model="selDate" @change="load">
+      <option value="">全部日期</option>
+      <option v-for="d in dates" :key="d" :value="d">{{ d }}</option>
+    </select>
+    <button @click="load">🖌 查询</button>
+  </div>
+
+  <div class="stat-bar">
+    共 <b>{{ total }}</b> 条已匹配数据<span v-if="warnCount > 0">，其中预警 <b style="color:var(--warn)">{{ warnCount }}</b> 条</span>
+  </div>
+
+  <!-- 当前遗漏榜 -->
+  <div class="rank-board">
+    <h3>⏳ 当前遗漏榜 <span class="hot">越红越接近历史高位</span></h3>
+    <div class="rank-chips">
+      <span v-for="r in dimRanks" :key="r.dim_key + r.tag_value" class="rank-chip" :class="{hot: r.current_rank >= r.history_max_rank - 2}">
+        {{ r.dim_name }}·{{ r.tag_value }} <span class="n">{{ r.current_rank }}期</span>
+      </span>
+    </div>
+    <div v-if="!dimRanks.length" style="color:#b8b0a0;text-align:center;padding:10px">暂无遗漏数据</div>
+  </div>
+
+  <!-- 桌面表格 -->
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>号码</th><th>排位</th><th>生肖</th><th>单双</th><th>大小</th><th>五行</th>
+            <th>波色</th><th>合数</th><th>家禽野兽</th><th>前后肖</th><th>吉美凶丑</th>
+            <th>阴阳</th><th>单笔双笔</th><th>天地肖</th><th>白边黑中</th><th>男女肖</th>
+            <th>琴棋书画</th><th>春夏秋冬</th><th>红蓝绿肖</th><th>头数</th><th>尾数</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in items" :key="r.id" :class="{'warn-row': r.warned}">
+            <td class="num-cell">{{ pad(r.source_number) }}</td>
+            <td class="rank-cell">{{ r.rank_value ?? '—' }}</td>
+            <td><span :class="tagCls(r,'zodiac')">{{ r.zodiac || '—' }}</span></td>
+            <td><span :class="tagCls(r,'odd_even')">{{ r.odd_even }}</span></td>
+            <td><span :class="tagCls(r,'big_small')">{{ r.big_small }}</span></td>
+            <td><span :class="tagCls(r,'five_element')">{{ r.five_element }}</span></td>
+            <td><span :class="tagCls(r,'wave_color')">{{ r.wave_color }}</span></td>
+            <td><span :class="tagCls(r,'he_sum')">{{ r.he_sum }}</span></td>
+            <td><span :class="tagCls(r,'animal_type')">{{ r.animal_type }}</span></td>
+            <td><span :class="tagCls(r,'zodiac_seq')">{{ r.zodiac_seq }}</span></td>
+            <td><span :class="tagCls(r,'beauty_type')">{{ r.beauty_type }}</span></td>
+            <td><span :class="tagCls(r,'yin_yang')">{{ r.yin_yang }}</span></td>
+            <td><span :class="tagCls(r,'stroke_type')">{{ r.stroke_type }}</span></td>
+            <td><span :class="tagCls(r,'sky_earth')">{{ r.sky_earth }}</span></td>
+            <td><span :class="tagCls(r,'edge_color')">{{ r.edge_color }}</span></td>
+            <td><span :class="tagCls(r,'gender_zodiac')">{{ r.gender_zodiac }}</span></td>
+            <td><span :class="tagCls(r,'qqsh_type')">{{ r.qqsh_type }}</span></td>
+            <td><span :class="tagCls(r,'season_type')">{{ r.season_type }}</span></td>
+            <td><span :class="tagCls(r,'zodiac_color_type')">{{ r.zodiac_color_type }}</span></td>
+            <td><span :class="tagCls(r,'head_number')">{{ r.head_number }}</span></td>
+            <td><span :class="tagCls(r,'tail_number')">{{ r.tail_number }}</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="empty" v-if="!items.length">
+      <span class="icon">🖌</span>暂无匹配数据
+    </div>
+  </div>
+
+  <!-- 移动卡片 -->
+  <div class="mobile-list">
+    <div class="m-card" v-for="r in items" :key="r.id" :class="{'warn-row': r.warned}">
+      <div class="m-head">
+        <span class="m-num">{{ pad(r.source_number) }}</span>
+        <span class="m-rank">排位 {{ r.rank_value ?? '—' }}</span>
+      </div>
+      <div class="m-tags">
+        <span v-for="(label, key) in dimLabels" :key="key" :class="tagCls(r, key)">{{ label }}:{{ r[key] || '—' }}</span>
+      </div>
+    </div>
+    <div class="empty" v-if="!items.length"><span class="icon">🖌</span>暂无匹配数据</div>
+  </div>
+
+  <div class="footer">朱砂映宣纸 · 墨色鉴乾坤</div>
+  </template>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted } = Vue;
+const API = window.location.pathname.startsWith('/number-warning') ? '/number-warning' : '';
+
+const dimLabels = {
+  zodiac:'生肖', odd_even:'单双', big_small:'大小', five_element:'五行', wave_color:'波色',
+  he_sum:'合数', animal_type:'家禽野兽', zodiac_seq:'前后肖', beauty_type:'吉美凶丑',
+  yin_yang:'阴阳', stroke_type:'单笔双笔', sky_earth:'天地肖', edge_color:'白边黑中',
+  gender_zodiac:'男女肖', qqsh_type:'琴棋书画', season_type:'春夏秋冬', zodiac_color_type:'红蓝绿肖',
+  head_number:'头数', tail_number:'尾数'
+};
+
+createApp({
+  setup(){
+    const items = ref([]);
+    const dates = ref([]);
+    const total = ref(0);
+    const selDate = ref('');
+    const dimRanks = ref([]);
+    const warnCount = computed(() => items.value.filter(r => r.warned).length);
+    // 访问密码门状态
+    const authed = ref(false);
+    const pwd = ref('');
+    const err = ref('');
+    const frontToken = ref(localStorage.getItem('nw_front_token') || '');
+
+    function pad(n){ return n ? String(n).padStart(2,'0') : ''; }
+    function tagCls(r, key){
+      return { tag: true, warn: r._warnDims && r._warnDims.has(key), empty: !r[key] };
+    }
+    function resetGate(){
+      localStorage.removeItem('nw_front_token');
+      frontToken.value = '';
+      authed.value = false;
+    }
+    async function verify(){
+      err.value = '';
+      try {
+        const res = await fetch(`${API}/api/front/verify`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ password: pwd.value })
+        });
+        if (!res.ok){
+          let msg = '密码错误';
+          try { msg = (await res.json()).detail || msg; } catch(e){}
+          err.value = msg;
+          return;
+        }
+        const d = await res.json();
+        frontToken.value = d.token;
+        localStorage.setItem('nw_front_token', d.token);
+        authed.value = true;
+        pwd.value = '';
+        load(); loadRanks();
+      } catch(e){ err.value = '验证失败，请重试'; }
+    }
+    async function loadRanks(){
+      try {
+        const res = await fetch(`${API}/api/front/dimRank/list?limit=30&token=${frontToken.value}`);
+        if (res.status === 401){ resetGate(); return; }
+        dimRanks.value = await res.json();
+      } catch(e){}
+    }
+    async function load(){
+      const params = new URLSearchParams();
+      if (selDate.value) params.set('record_date', selDate.value);
+      params.set('page_size', '200');
+      params.set('token', frontToken.value);
+      const res = await fetch(`${API}/api/front/numberData/list?${params}`);
+      if (res.status === 401){ resetGate(); return; }
+      const data = await res.json();
+      items.value = (data.items || []).map(r => {
+        r._warnDims = new Set((r.warn_json || []).map(w => w.dim_key));
+        r.warned = (r.warn_json || []).length > 0;
+        return r;
+      });
+      total.value = data.total || 0;
+      dates.value = data.dates || [];
+    }
+    onMounted(async () => {
+      if (frontToken.value){
+        try {
+          const res = await fetch(`${API}/api/front/numberData/list?page_size=1&token=${frontToken.value}`);
+          if (res.ok){ authed.value = true; load(); loadRanks(); return; }
+        } catch(e){}
+        resetGate();
+      }
+    });
+    return { items, dates, total, selDate, dimRanks, warnCount, dimLabels, pad, tagCls, load, authed, pwd, err, verify };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

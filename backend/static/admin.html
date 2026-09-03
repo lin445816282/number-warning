@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>号码知识库 · 管理后台</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+:root{
+  --bg:#F6F0E6; --ink:#2E2B28; --ink2:#6B655E; --line:#D8D2C8;
+  --warn:#C83C32; --warnbg:#FBE8E6; --btn2:#4F6367; --ok:#5A6C51;
+  --gold:#B8956A; --thbg:#EFE8DC; --rowodd:#F6F0E6; --roweven:#FDF8F0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--ink)}
+a{color:var(--warn);text-decoration:none}
+/* ===== 登录页 ===== */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;
+  background:linear-gradient(160deg,#F6F0E6 0%,#EDE4D3 40%,#E4D9C4 100%)}
+.login-wrap::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 30% 20%,rgba(184,149,106,.15),transparent 60%),
+             radial-gradient(ellipse at 70% 80%,rgba(79,99,103,.12),transparent 55%),
+             radial-gradient(ellipse at 80% 15%,rgba(200,60,50,.08),transparent 50%)}
+.login-card{position:relative;z-index:1;background:#fff;border:1px solid var(--line);border-radius:18px;
+  padding:40px 32px 32px;width:92%;max-width:380px;box-shadow:0 12px 40px rgba(46,43,40,.10);text-align:center}
+.seal{width:56px;height:56px;line-height:56px;background:var(--warn);color:#fff;border-radius:12px;
+  font-size:26px;font-weight:800;margin:0 auto 14px;box-shadow:0 3px 10px rgba(200,60,50,.3)}
+.login-card h1{font-size:20px;letter-spacing:3px;margin-bottom:6px}
+.login-card .sub{font-size:12px;color:var(--ink2);margin-bottom:26px;letter-spacing:2px}
+.field{text-align:left;margin-bottom:16px}
+.field label{display:block;font-size:13px;color:var(--ink2);margin-bottom:6px}
+.field input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:8px;font-size:15px;outline:none;background:#fbf8f1}
+.field input:focus{border-color:var(--gold)}
+.btn{display:inline-block;padding:11px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s}
+.btn-primary{background:var(--warn);color:#fff}
+.btn-primary:hover{opacity:.9}
+.btn-secondary{background:var(--btn2);color:#fff}
+.btn-ghost{background:#f3efe5;color:var(--ink2)}
+.btn-danger{background:#8c2b24;color:#fff}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:6px}
+.btn-block{width:100%}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+/* ===== 主布局 ===== */
+.layout{display:flex;min-height:100vh}
+.sidebar{width:210px;background:#fff;border-right:1px solid var(--line);padding:20px 0;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.sidebar .logo{text-align:center;padding:0 16px 18px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.sidebar .logo .seal{width:44px;height:44px;line-height:44px;font-size:20px;margin-bottom:8px}
+.sidebar .logo b{font-size:15px;letter-spacing:2px;display:block}
+.sidebar .logo .rname{font-size:11px;color:var(--ink2);margin-top:4px}
+.menu-item{display:block;padding:12px 22px;font-size:14px;color:var(--ink);cursor:pointer;border-left:3px solid transparent;transition:.15s}
+.menu-item:hover{background:var(--rowodd)}
+.menu-item.active{background:var(--warnbg);border-left-color:var(--warn);color:var(--warn);font-weight:600}
+.main{flex:1;padding:22px;min-width:0}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.topbar h2{font-size:20px;letter-spacing:2px}
+.topbar .user-info{font-size:13px;color:var(--ink2)}
+.logout-btn{color:var(--warn);cursor:pointer;margin-left:12px}
+/* 卡片 */
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 1px 5px rgba(0,0,0,.03)}
+.card-title{font-size:15px;font-weight:700;margin-bottom:14px;letter-spacing:1px;color:var(--ink)}
+/* 统计卡片 */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:18px}
+.stat-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;text-align:center}
+.stat-card .num{font-size:30px;font-weight:800;color:var(--warn);font-family:'Roboto Mono',monospace}
+.stat-card .num.green{color:var(--ok)}
+.stat-card .num.blue{color:var(--btn2)}
+.stat-card .label{font-size:12px;color:var(--ink2);margin-top:6px;letter-spacing:1px}
+/* 表格 */
+.table-scroll{overflow-x:auto}
+table.data{width:100%;border-collapse:collapse;font-size:13px}
+table.data th{background:var(--thbg);color:var(--ink);font-weight:600;padding:10px 10px;text-align:left;border-bottom:2px solid var(--line);white-space:nowrap}
+table.data td{padding:10px;border-bottom:1px solid #f0ece2;white-space:nowrap}
+table.data tr:nth-child(odd) td{background:var(--rowodd)}
+table.data tr:nth-child(even) td{background:var(--roweven)}
+table.data tr.warn td{background:var(--warnbg)}
+/* 工具条 */
+.toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.toolbar input,.toolbar select{padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;outline:none;background:#fbf8f1}
+/* 标签 */
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;background:#f3efe5;color:var(--ink2);border:1px solid #e8e2d4;margin:1px}
+.tag.warn{background:var(--warn);color:#fff;border-color:var(--warn)}
+.tag.ok{background:var(--ok);color:#fff}
+.tag.blue{background:var(--btn2);color:#fff}
+/* 弹窗 */
+.modal-mask{position:fixed;inset:0;background:rgba(46,43,40,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:86vh;overflow-y:auto;padding:24px}
+.modal h3{font-size:17px;letter-spacing:1px;margin-bottom:18px}
+.modal .field{margin-bottom:14px}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+/* 分页 */
+.pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.pager button{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+.pager button.active{background:var(--warn);color:#fff;border-color:var(--warn)}
+.pager .info{font-size:12px;color:var(--ink2)}
+/* 预警明细 */
+.warn-detail{background:var(--warnbg);border:1px solid #ecc8c4;border-radius:8px;padding:12px;margin-bottom:8px;font-size:13px}
+.warn-detail b{color:var(--warn)}
+.dim-tags{display:flex;flex-wrap:wrap;gap:6px}
+/* 移动端 */
+@media(max-width:820px){
+  .layout{flex-direction:column}
+  .sidebar{width:100%;height:auto;position:static;display:flex;overflow-x:auto;padding:10px;border-right:none;border-bottom:1px solid var(--line)}
+  .sidebar .logo{display:none}
+  .menu-item{white-space:nowrap;border-left:none;border-bottom:2px solid transparent;padding:10px 14px}
+  .menu-item.active{border-bottom-color:var(--warn);background:transparent}
+  .main{padding:14px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ===== 登录 ===== -->
+  <div class="login-wrap" v-if="!token">
+    <div class="login-card">
+      <div class="seal">财</div>
+      <h1>号码知识库</h1>
+      <div class="sub">全维度智能预警系统 · 管理后台</div>
+      <div class="field">
+        <label>账号</label>
+        <input v-model="loginForm.username" placeholder="请输入账号" @keyup.enter="doLogin">
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input v-model="loginForm.password" type="password" placeholder="请输入密码" @keyup.enter="doLogin">
+      </div>
+      <button class="btn btn-primary btn-block" :disabled="logging" @click="doLogin">{{ logging ? '登录中…' : '登 录' }}</button>
+      <div style="margin-top:14px;font-size:12px;color:#b8b0a0">默认账号 admin / admin123</div>
+    </div>
+  </div>
+
+  <!-- ===== 主界面 ===== -->
+  <div class="layout" v-else>
+    <div class="sidebar">
+      <div class="logo">
+        <div class="seal">财</div>
+        <b>号码知识库</b>
+        <div class="rname">{{ role.role_name }} · {{ user.real_name || user.username }}</div>
+      </div>
+      <div class="menu-item" v-for="m in menus" :key="m.id" :class="{active: cur===m.path}" @click="go(m.path)">
+        {{ m.menu_name }}
+      </div>
+      <div class="menu-item" @click="doLogout" style="color:var(--warn)">退出登录</div>
+    </div>
+
+    <div class="main">
+      <!-- 仪表盘 -->
+      <template v-if="cur==='/dashboard'">
+        <div class="topbar"><h2>仪表盘</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num">{{ dash.total_records }}</div><div class="label">总数据</div></div>
+          <div class="stat-card"><div class="num green">{{ dash.matched_records }}</div><div class="label">已匹配</div></div>
+          <div class="stat-card"><div class="num" style="color:var(--warn)">{{ dash.total_warn_records }}</div><div class="label">预警条数</div></div>
+          <div class="stat-card"><div class="num blue">{{ dash.active_cycle ? dash.active_cycle.cycle_name : '—' }}</div><div class="label">当前生效周期</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">维度遗漏概览（各维度当前遗漏最久标签）</div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>维度</th><th>遗漏最久标签</th><th>当前遗漏</th><th>历史最高</th></tr></thead>
+              <tbody>
+                <tr v-for="r in dash.dim_rank_overview" :key="r.dim_key">
+                  <td>{{ r.dim_name }}</td>
+                  <td><b>{{ r.tag_value }}</b></td>
+                  <td :style="rankStyle(r)">{{ r.current_rank }} 期</td>
+                  <td>{{ r.history_max_rank }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!dash.dim_rank_overview.length" style="color:#b8b0a0;font-size:13px;text-align:center;padding:20px">暂无遗漏数据</div>
+        </div>
+        <div class="card">
+          <div class="card-title">最新预警清单（近 50 条）</div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>号码</th><th>排位</th><th>日期</th><th>预警明细</th></tr></thead>
+              <tbody>
+                <tr v-for="r in dash.warn_list" :key="r.id">
+                  <td><b>{{ pad(r.source_number) }}</b></td>
+                  <td>{{ r.rank_value }}</td>
+                  <td>{{ r.record_date }}</td>
+                  <td><span class="tag warn" v-for="w in r.warn_json" :key="w.dim_key" :title="w.warn_desc">{{ w.dim_name }}-{{ w.tag_value }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!dash.warn_list.length" style="color:#b8b0a0;font-size:13px;text-align:center;padding:20px">暂无预警</div>
+        </div>
+      </template>
+
+      <!-- 号码数据 -->
+      <template v-if="cur==='/records'">
+        <div class="topbar"><h2>号码数据管理</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <div class="card-title">筛选</div>
+          <div class="toolbar">
+            <input type="date" v-model="recFilter.record_date">
+            <input v-model="recFilter.source_number" placeholder="号码" style="width:100px">
+            <select v-model="recFilter.warn_status"><option value="">全部状态</option><option value="warn">仅预警</option><option value="normal">无预警</option></select>
+            <select v-model="recFilter.warn_dim_key">
+              <option value="">全部维度</option>
+              <option v-for="(n,k) in dimLabels" :key="k" :value="k">{{ n }}</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" @click="recPage=1;loadRecords()">查询</button>
+            <button class="btn btn-primary btn-sm" v-if="canOperate" @click="openAdd">＋ 录入数据</button>
+            <button class="btn btn-primary btn-sm" v-if="canOperate && selectedIds.length" @click="batchMatch">批量匹配({{selectedIds.length}})</button>
+            <button class="btn btn-primary btn-sm" v-if="canOperate" @click="batchMatchAll">⚡ 一键匹配</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th v-if="canOperate"><input type="checkbox" @change="toggleAll" :checked="allSelected"></th>
+                <th>ID</th><th>日期</th><th>号码</th><th>排位</th><th>生肖</th><th>状态</th><th>预警</th><th>操作</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="r in recs" :key="r.id" :class="{warn: r.warn_json.length}">
+                  <td v-if="canOperate"><input type="checkbox" :value="r.id" v-model="selectedIds"></td>
+                  <td>{{ r.id }}</td>
+                  <td>{{ r.record_date }}</td>
+                  <td><b>{{ pad(r.source_number) }}</b></td>
+                  <td>{{ r.rank_value ?? '—' }}</td>
+                  <td>{{ r.zodiac || '—' }}</td>
+                  <td><span class="tag" :class="r.status===1?'ok':(r.status===2?'warn':'')">{{ ['待匹配','已匹配','失败'][r.status] }}</span></td>
+                  <td><span class="tag warn" v-for="w in r.warn_json" :key="w.dim_key" :title="w.warn_desc">{{ w.dim_name }}-{{ w.tag_value }}</span><span v-if="!r.warn_json.length" style="color:#c5bda8">—</span></td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" @click="openDetail(r)">详情</button>
+                    <button class="btn btn-primary btn-sm" v-if="canOperate && r.status!==1" @click="matchOne(r)">匹配</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!recs.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无数据</div>
+          <div class="pager" v-if="recTotalPages>1">
+            <button @click="recPage>1&&(recPage--,loadRecords())">上一页</button>
+            <span class="info">第 {{ recPage }} / {{ recTotalPages }} 页 · 共 {{ recTotal }} 条</span>
+            <button @click="recPage<recTotalPages&&(recPage++,loadRecords())">下一页</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 周期配置 -->
+      <template v-if="cur==='/cycles'">
+        <div class="topbar"><h2>农历生肖周期配置</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <button class="btn btn-primary btn-sm" v-if="canOperate" @click="openCycleAdd">＋ 新增周期</button>
+        </div>
+        <div class="card" v-for="c in cycles" :key="c.id">
+          <div class="card-title">{{ c.cycle_name }} <span class="tag" :class="c.is_enable?'ok':'blue'">{{ c.is_enable?'启用':'禁用' }}</span></div>
+          <div style="font-size:13px;color:var(--ink2);margin-bottom:10px">生效日期：{{ c.start_date }}</div>
+          <div class="dim-tags">
+            <span class="tag" v-for="(nums,z) in c.zodiac_mapping" :key="z">{{ z }}：{{ nums.join(',') }}</span>
+          </div>
+          <div style="margin-top:12px">
+            <button class="btn btn-secondary btn-sm" v-if="canOperate" @click="openCycleEdit(c)">编辑</button>
+            <button class="btn btn-danger btn-sm" v-if="isAdmin" @click="removeCycle(c)">删除</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 匹配历史 -->
+      <template v-if="cur==='/history'">
+        <div class="topbar"><h2>匹配历史溯源</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>ID</th><th>记录ID</th><th>周期</th><th>排位</th><th>状态</th><th>操作人</th><th>时间</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr v-for="h in histories" :key="h.id">
+                  <td>{{ h.id }}</td>
+                  <td>{{ h.record_id }}</td>
+                  <td>{{ h.cycle_id }}</td>
+                  <td>{{ h.rank_value }}</td>
+                  <td><span class="tag" :class="h.match_result_status===1?'ok':'warn'">{{ h.match_result_status===1?'成功':'失败' }}</span></td>
+                  <td>{{ h.operate_user || '—' }}</td>
+                  <td>{{ h.create_time }}</td>
+                  <td><button class="btn btn-secondary btn-sm" @click="openHistory(h)">快照</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!histories.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无历史</div>
+        </div>
+      </template>
+
+      <!-- 维度统计 -->
+      <template v-if="cur==='/dimstats'">
+        <div class="topbar"><h2>维度标签最高排位统计</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <button class="btn btn-danger btn-sm" v-if="isAdmin" @click="rebuildStats">🔄 一键重建统计表</button>
+          <span style="font-size:12px;color:var(--ink2);margin-left:10px">修改历史排位/删除数据后需重建</span>
+        </div>
+        <div class="card">
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>维度</th><th>标签值</th>
+                <th style="cursor:pointer" @click="sortDim('history_max_rank')">历史最高排位 {{ sortMark('history_max_rank') }}</th>
+                <th style="cursor:pointer;color:var(--warn)" @click="sortDim('current_rank')">当前遗漏 {{ sortMark('current_rank') }}</th>
+                <th>样本数</th><th>更新时间</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="d in dimStats" :key="d.id">
+                  <td>{{ d.dim_name }}</td>
+                  <td><b>{{ d.tag_value }}</b></td>
+                  <td style="font-family:'Roboto Mono',monospace;font-weight:700">
+                    <span v-if="d.history_max_rank > 0" style="cursor:pointer;color:var(--warn);text-decoration:underline dotted" title="点击查看历史最高出现时间" @click="openDimTime(d)">{{ d.history_max_rank }}</span>
+                    <span v-else>0</span>
+                  </td>
+                  <td>
+                    <span v-if="d.current_rank > 0" :style="rankStyle(d)">{{ d.current_rank }} 期</span>
+                    <span v-else style="color:var(--ok);font-weight:700">刚出</span>
+                  </td>
+                  <td>{{ d.total_sample }}</td>
+                  <td>{{ d.last_update_time }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!dimStats.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无统计</div>
+        </div>
+      </template>
+
+      <!-- 信号跟踪 -->
+      <template v-if="cur==='/signaltrack'">
+        <div class="topbar"><h2>预警信号跟踪（触发 → 后续开出）</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <button class="btn btn-danger btn-sm" v-if="isAdmin" @click="rebuildSignalTrack">🔄 一键重建信号跟踪</button>
+          <span style="font-size:12px;color:var(--ink2);margin-left:10px">信号=某标签遗漏首次接近/超过其历史最高时触发；跟踪后续几期内是否开出</span>
+        </div>
+        <div class="card">
+          <div class="card-title">整体命中率（已结算 {{ st.settled }} 条 · 跟踪中 {{ st.tracking }} 条）</div>
+          <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+            <span v-for="(v,k) in st.hit_bucket" :key="k" class="tag" style="font-size:12px">
+              {{ k }}期内开出：{{ v }}（{{ st.settled ? (v/st.settled*100).toFixed(1) : 0 }}%）
+            </span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">核心维度命中率</div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>维度</th><th>信号数</th><th>5期内</th><th>10期内</th><th>15期内</th><th>跟踪中</th></tr></thead>
+              <tbody>
+                <tr v-for="s in coreSummary" :key="s.dim_key">
+                  <td><b>{{ s.dim_name }}</b></td>
+                  <td>{{ s.total }}</td>
+                  <td>{{ s.hit5 }}<span v-if="s.rate5 != null" :style="rateColor(s.rate5)">（{{ s.rate5 }}%）</span></td>
+                  <td>{{ s.hit10 }}<span v-if="s.rate10 != null" :style="rateColor(s.rate10)">（{{ s.rate10 }}%）</span></td>
+                  <td>{{ s.hit15 }}<span v-if="s.rate15 != null" :style="rateColor(s.rate15)">（{{ s.rate15 }}%）</span></td>
+                  <td>{{ s.tracking || 0 }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">其他维度命中率（5期内）</div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>维度</th><th>信号数</th><th>5期内命中</th><th>命中率</th><th>跟踪中</th></tr></thead>
+              <tbody>
+                <tr v-for="s in otherSummary" :key="s.dim_key">
+                  <td>{{ s.dim_name }}</td>
+                  <td>{{ s.total }}</td>
+                  <td>{{ s.hit5 }}</td>
+                  <td>
+                    <span v-if="s.hit_rate != null" :style="s.hit_rate>=80?'color:var(--ok);font-weight:700':(s.hit_rate<40?'color:var(--warn);font-weight:700':'')">{{ s.hit_rate }}%</span>
+                    <span v-else style="color:#b8b0a0">—</span>
+                  </td>
+                  <td>{{ s.tracking || 0 }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">信号明细（共 {{ st.total_signals }} 条，倒序）</div>
+          <div class="table-scroll" style="max-height:520px;overflow-y:auto">
+            <table class="data">
+              <thead><tr><th>触发日期</th><th>维度</th><th>标签</th><th>触发时遗漏</th><th>当时历史最高</th><th>结果</th></tr></thead>
+              <tbody>
+                <tr v-for="it in st.items" :key="it.id" :class="{warn: it.hit_interval == null}">
+                  <td>{{ it.signal_date }}</td>
+                  <td>{{ it.dim_name }}</td>
+                  <td><b>{{ it.tag_value }}</b></td>
+                  <td style="font-family:'Roboto Mono',monospace">{{ it.signal_rank }}</td>
+                  <td style="font-family:'Roboto Mono',monospace">{{ it.history_max_rank }}</td>
+                  <td>
+                    <span v-if="it.hit_interval != null" :style="it.hit_interval<=3?'color:var(--ok);font-weight:700':(it.hit_interval<=5?'color:var(--btn2)':'color:var(--warn)')">
+                      {{ it.hit_interval }}期后开（{{ it.hit_date }}）
+                    </span>
+                    <span v-else style="color:var(--warn);font-weight:700">跟踪中</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!st.items.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无信号，请先重建</div>
+        </div>
+      </template>
+
+      <!-- 系统参数 -->
+      <template v-if="cur==='/config'">
+        <div class="topbar"><h2>系统参数配置</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <div class="card-title">高位预警偏移值</div>
+          <div style="font-size:13px;color:var(--ink2);margin-bottom:14px">预警条件：当前排位 ≥ 历史最高排位 − 偏移值</div>
+          <div class="toolbar">
+            <input type="number" v-model.number="warnOffset" style="width:100px">
+            <button class="btn btn-primary btn-sm" @click="saveOffset">保存</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 用户管理 -->
+      <template v-if="cur==='/users'">
+        <div class="topbar"><h2>系统用户管理</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <button class="btn btn-primary btn-sm" @click="openUserAdd">＋ 新增用户</button>
+        </div>
+        <div class="card">
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>ID</th><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr v-for="u in users" :key="u.id">
+                  <td>{{ u.id }}</td>
+                  <td>{{ u.username }}</td>
+                  <td>{{ u.real_name }}</td>
+                  <td>{{ u.role_name || '—' }}</td>
+                  <td><span class="tag" :class="u.status===1?'ok':'warn'">{{ u.status===1?'启用':'禁用' }}</span></td>
+                  <td><button class="btn btn-secondary btn-sm" @click="openUserEdit(u)">编辑</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- 角色权限 -->
+      <template v-if="cur==='/roles'">
+        <div class="topbar"><h2>角色权限菜单</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <div class="toolbar">
+            <select v-model="selRoleId" @change="loadRoleMenus">
+              <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.role_name }}</option>
+            </select>
+          </div>
+          <div class="dim-tags" style="margin-top:12px">
+            <label v-for="m in menus_all" :key="m.id" style="font-size:13px;margin-right:14px;cursor:pointer">
+              <input type="checkbox" :value="m.id" v-model="selRoleMenus"> {{ m.menu_name }}
+            </label>
+          </div>
+          <button class="btn btn-primary btn-sm" style="margin-top:14px" @click="saveRoleMenus">保存权限</button>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- 详情弹窗 -->
+  <div class="modal-mask" v-if="showDetail" @click.self="showDetail=false">
+    <div class="modal">
+      <h3>号码 {{ pad(detail.source_number) }} 详情</h3>
+      <div class="dim-tags" style="margin-bottom:14px">
+        <span class="tag" v-for="(label,key) in dimLabels" :key="key" :class="{warn: isWarnDim(key)}">{{ label }}：{{ detail[key] || '—' }}</span>
+      </div>
+      <div v-if="detail.warn_json && detail.warn_json.length">
+        <div class="card-title" style="font-size:13px;margin-bottom:10px">⚠️ 预警明细（{{ detail.warn_json.length }} 项）</div>
+        <div class="warn-detail" v-for="w in detail.warn_json" :key="w.dim_key">
+          <b>{{ w.dim_name }}-{{ w.tag_value }}</b><br>
+          当前排位 {{ w.current_rank }} / 历史最高 {{ w.history_max_rank }} / 距高位差 {{ w.diff }} 位
+        </div>
+      </div>
+      <div class="actions"><button class="btn btn-ghost" @click="showDetail=false">关闭</button></div>
+    </div>
+  </div>
+
+  <!-- 录入弹窗 -->
+  <div class="modal-mask" v-if="showAdd" @click.self="showAdd=false">
+    <div class="modal">
+      <h3>录入号码数据</h3>
+      <div class="field"><label>数据日期</label><input type="date" v-model="addForm.record_date"></div>
+      <div class="field"><label>号码（1-49）</label><input v-model="addForm.source_number" placeholder="如 08 或 8"></div>
+      <div class="field"><label>排位</label><input type="number" v-model="addForm.rank_value" placeholder="选填"></div>
+      <div class="actions">
+        <button class="btn btn-ghost" @click="showAdd=false">取消</button>
+        <button class="btn btn-primary" @click="saveAdd">保存并匹配</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 周期编辑弹窗 -->
+  <div class="modal-mask" v-if="showCycle" @click.self="showCycle=false">
+    <div class="modal">
+      <h3>{{ cycleForm.id ? '编辑' : '新增' }}周期配置</h3>
+      <div class="field"><label>周期名称</label><input v-model="cycleForm.cycle_name" placeholder="如 丙午马年"></div>
+      <div class="field"><label>生效日期</label><input type="date" v-model="cycleForm.start_date"></div>
+      <div class="field"><label>启用</label>
+        <select v-model="cycleForm.is_enable"><option :value="1">启用</option><option :value="0">禁用</option></select>
+      </div>
+      <div class="field"><label>生肖-号码映射（JSON）</label>
+        <textarea v-model="cycleForm.mapping_text" rows="8" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font-family:monospace;font-size:12px"></textarea>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" @click="showCycle=false">取消</button>
+        <button class="btn btn-primary" @click="saveCycle">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 历史快照弹窗 -->
+  <div class="modal-mask" v-if="showHistory" @click.self="showHistory=false">
+    <div class="modal">
+      <h3>匹配快照 #{{ histDetail.id }}</h3>
+      <div v-if="histDetail.error_msg" class="warn-detail"><b>失败原因：</b>{{ histDetail.error_msg }}</div>
+      <div v-else>
+        <div class="dim-tags" style="margin-bottom:14px">
+          <span class="tag" v-for="(v,k) in (histDetail.full_match_json.labels||{})" :key="k">{{ dimLabels[k]||k }}：{{ v }}</span>
+        </div>
+        <div v-if="histDetail.warn_json && histDetail.warn_json.length">
+          <div class="card-title" style="font-size:13px;margin-bottom:8px">⚠️ 历史预警</div>
+          <div class="warn-detail" v-for="w in histDetail.warn_json" :key="w.dim_key"><b>{{ w.dim_name }}-{{ w.tag_value }}</b>：{{ w.warn_desc }}</div>
+        </div>
+      </div>
+      <div class="actions"><button class="btn btn-ghost" @click="showHistory=false">关闭</button></div>
+    </div>
+  </div>
+
+  <!-- 维度历史最高时间弹窗 -->
+  <div class="modal-mask" v-if="showDimTime" @click.self="showDimTime=false">
+    <div class="modal">
+      <h3>历史最高遗漏时间</h3>
+      <div class="field"><b style="font-size:16px">{{ dimTime.dim_name }} · {{ dimTime.tag_value }}</b></div>
+      <div class="field">历史最高遗漏：<b style="color:var(--warn)">{{ dimTime.history_max_rank }} 期</b></div>
+      <div class="field">起始（上次出现）：<b>{{ dimTime.history_max_start_date || '—' }}</b></div>
+      <div class="field">结束（本次出现）：<b>{{ dimTime.history_max_end_date || '—' }}</b></div>
+      <div class="field" style="color:var(--ink2);font-size:13px">即该标签从起始日到结束日之间，连续 {{ dimTime.history_max_rank }} 期未出现</div>
+      <div class="actions"><button class="btn btn-ghost" @click="showDimTime=false">关闭</button></div>
+    </div>
+  </div>
+
+  <!-- 用户编辑弹窗 -->
+  <div class="modal-mask" v-if="showUser" @click.self="showUser=false">
+    <div class="modal">
+      <h3>{{ userForm.id ? '编辑' : '新增' }}用户</h3>
+      <div class="field"><label>账号</label><input v-model="userForm.username" :disabled="!!userForm.id"></div>
+      <div class="field"><label>密码</label><input v-model="userForm.password" type="password" :placeholder="userForm.id?'留空不修改':'默认 123456'"></div>
+      <div class="field"><label>姓名</label><input v-model="userForm.real_name"></div>
+      <div class="field"><label>角色</label>
+        <select v-model="userForm.role_id"><option v-for="r in roles" :key="r.id" :value="r.id">{{ r.role_name }}</option></select>
+      </div>
+      <div class="field"><label>状态</label>
+        <select v-model="userForm.status"><option :value="1">启用</option><option :value="0">禁用</option></select>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" @click="showUser=false">取消</button>
+        <button class="btn btn-primary" @click="saveUser">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, onMounted } = Vue;
+const API = window.location.pathname.startsWith('/number-warning') ? '/number-warning' : '';
+
+const dimLabels = {
+  zodiac:'生肖', odd_even:'单双', big_small:'大小', five_element:'五行', wave_color:'波色',
+  he_sum:'合数', animal_type:'家禽野兽', zodiac_seq:'前后肖', beauty_type:'吉美凶丑',
+  yin_yang:'阴阳', stroke_type:'单笔双笔', sky_earth:'天地肖', edge_color:'白边黑中',
+  gender_zodiac:'男女肖', qqsh_type:'琴棋书画', season_type:'春夏秋冬', zodiac_color_type:'红蓝绿肖',
+  head_number:'头数', tail_number:'尾数'
+};
+
+function api(method, url, body){
+  const opt = { method, headers: {} };
+  const t = localStorage.getItem('nw_token');
+  if (t) opt.headers['Authorization'] = 'Bearer ' + t;
+  if (body !== undefined){ opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  return fetch(API + url, opt).then(async r => {
+    const data = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(data.detail || '请求失败');
+    return data;
+  });
+}
+
+createApp({
+  setup(){
+    const token = ref(localStorage.getItem('nw_token') || '');
+    const user = ref({}); const role = ref({}); const menus = ref([]);
+    const cur = ref('/dashboard');
+    const loginForm = reactive({ username:'', password:'' });
+    const logging = ref(false);
+    const isAdmin = computed(() => role.value.role_code === 'super_admin');
+    const canOperate = computed(() => role.value.role_code !== 'viewer');
+
+    // 仪表盘
+    const dash = ref({ total_records:0, matched_records:0, total_warn_records:0, dim_distribution:[], warn_list:[], dim_rank_overview:[], active_cycle:null, warn_rank_offset:2 });
+    // 号码数据
+    const recs = ref([]); const recPage = ref(1); const recTotal = ref(0); const recTotalPages = ref(1);
+    const recFilter = reactive({ record_date:'', source_number:'', warn_status:'', warn_dim_key:'' });
+    const selectedIds = ref([]); const allSelected = ref(false);
+    // 周期
+    const cycles = ref([]);
+    // 历史
+    const histories = ref([]);
+    // 维度统计
+    const dimStats = ref([]);
+    const dimSort = ref({ field: 'current_rank', desc: true });
+    // 信号跟踪
+    const st = ref({ items: [], summary: [], total_signals: 0, settled: 0, tracking: 0, hit_bucket: {} });
+    const coreSummary = computed(() => st.value.summary.filter(s => s.group === 'core'));
+    const otherSummary = computed(() => st.value.summary.filter(s => s.group === 'other'));
+    // 配置
+    const warnOffset = ref(2);
+    // 用户
+    const users = ref([]);
+    // 角色
+    const roles = ref([]); const menus_all = ref([]); const selRoleId = ref(null); const selRoleMenus = ref([]);
+    // 弹窗
+    const showDetail = ref(false); const detail = ref({});
+    const showAdd = ref(false); const addForm = reactive({ record_date:'', source_number:'', rank_value:null });
+    const showCycle = ref(false); const cycleForm = reactive({ id:null, cycle_name:'', start_date:'', is_enable:1, mapping_text:'' });
+    const showHistory = ref(false); const histDetail = ref({});
+    const showDimTime = ref(false); const dimTime = ref({});
+    const showUser = ref(false); const userForm = reactive({ id:null, username:'', password:'', real_name:'', role_id:null, status:1 });
+
+    function pad(n){ return n ? String(n).padStart(2,'0') : ''; }
+    function toast(msg){ alert(msg); }
+
+    async function doLogin(){
+      if (!loginForm.username || !loginForm.password) return toast('请输入账号密码');
+      logging.value = true;
+      try {
+        const data = await api('POST', '/api/system/login', { username: loginForm.username, password: loginForm.password });
+        token.value = data.token;
+        localStorage.setItem('nw_token', data.token);
+        localStorage.setItem('nw_user', JSON.stringify(data.user));
+        localStorage.setItem('nw_role', JSON.stringify(data.role));
+        localStorage.setItem('nw_menus', JSON.stringify(data.menus || []));
+        user.value = data.user; role.value = data.role; menus.value = data.menus || [];
+        cur.value = '/dashboard';
+        await loadDash();
+      } catch(e){ toast(e.message); }
+      finally { logging.value = false; }
+    }
+    function doLogout(){ localStorage.removeItem('nw_token'); token.value=''; user.value={}; role.value={}; menus.value=[]; }
+
+    function go(path){ cur.value = path; routeLoad(); }
+    function routeLoad(){
+      if (cur.value === '/dashboard') loadDash();
+      else if (cur.value === '/records') loadRecords();
+      else if (cur.value === '/cycles') loadCycles();
+      else if (cur.value === '/history') loadHistory();
+      else if (cur.value === '/dimstats') loadDimStats();
+      else if (cur.value === '/signaltrack') loadSignalTrack();
+      else if (cur.value === '/config') loadConfig();
+      else if (cur.value === '/users') loadUsers();
+      else if (cur.value === '/roles') loadRoles();
+    }
+
+    async function loadDash(){
+      try {
+        dash.value = await api('GET', '/api/dashboard/warnStat');
+        if (dash.value.warn_rank_offset != null) warnOffset.value = dash.value.warn_rank_offset;
+      } catch(e){}
+    }
+    async function loadRecords(){
+      const p = new URLSearchParams({ page: recPage.value, page_size: '20' });
+      if (recFilter.record_date) p.set('record_date', recFilter.record_date);
+      if (recFilter.source_number) p.set('source_number', recFilter.source_number);
+      if (recFilter.warn_status) p.set('warn_status', recFilter.warn_status);
+      if (recFilter.warn_dim_key) p.set('warn_dim_key', recFilter.warn_dim_key);
+      try {
+        const data = await api('GET', '/api/numberRecord/page?' + p.toString());
+        recs.value = data.items; recTotal.value = data.total; recTotalPages.value = data.total_pages; recPage.value = data.page;
+      } catch(e){}
+    }
+    async function loadCycles(){ try { cycles.value = await api('GET', '/api/zodiacCycle/list'); } catch(e){} }
+    async function loadHistory(){ try { const d = await api('GET', '/api/matchHistory/page?page_size=100'); histories.value = d.items; } catch(e){} }
+    async function loadDimStats(){
+      try {
+        dimStats.value = await api('GET', '/api/dimTagRankMax/list');
+        const c = await api('GET', '/api/sysConfig/get');
+        warnOffset.value = parseInt(c.config_value)||2;
+        sortDimStats();
+      } catch(e){}
+    }
+    function sortDim(field){
+      if (dimSort.value.field === field){ dimSort.value.desc = !dimSort.value.desc; }
+      else { dimSort.value = { field, desc: true }; }
+      sortDimStats();
+    }
+    function sortMark(field){ return dimSort.value.field === field ? (dimSort.value.desc ? '↓' : '↑') : ''; }
+    function sortDimStats(){
+      const f = dimSort.value.field, desc = dimSort.value.desc;
+      dimStats.value = [...dimStats.value].sort((a,b) => {
+        const va = (a[f] == null ? 0 : a[f]), vb = (b[f] == null ? 0 : b[f]);
+        return desc ? vb - va : va - vb;
+      });
+    }
+    function rankStyle(d){
+      const threshold = (d.history_max_rank || 0) - (warnOffset.value || 2);
+      const hot = d.total_sample >= 2 && d.current_rank >= threshold;
+      return hot
+        ? 'font-family:Roboto Mono,monospace;color:var(--warn);font-weight:800'
+        : 'font-family:Roboto Mono,monospace;color:var(--btn2)';
+    }
+    function rateColor(rate){
+      if (rate == null) return '';
+      if (rate >= 80) return 'color:var(--ok);font-weight:700';
+      if (rate < 40) return 'color:var(--warn);font-weight:700';
+      return '';
+    }
+    async function loadConfig(){ try { const c = await api('GET', '/api/sysConfig/get'); warnOffset.value = parseInt(c.config_value)||2; } catch(e){} }
+    async function loadSignalTrack(){ try { st.value = await api('GET', '/api/signalTrack/list'); } catch(e){} }
+    async function rebuildSignalTrack(){
+      if (!confirm('确定重建信号跟踪表？将从全部已匹配记录重新回放')) return;
+      try { const d = await api('POST', '/api/signalTrack/rebuild', {}); toast('重建完成，共 ' + d.count + ' 条信号'); loadSignalTrack(); } catch(e){ toast(e.message); }
+    }
+    async function loadUsers(){ try { users.value = await api('GET', '/api/system/userList'); } catch(e){} }
+    async function loadRoles(){
+      try {
+        roles.value = await api('GET', '/api/system/roleList');
+        menus_all.value = await api('GET', '/api/system/menuList');
+        if (roles.value.length && !selRoleId.value){ selRoleId.value = roles.value[0].id; await loadRoleMenus(); }
+      } catch(e){}
+    }
+    async function loadRoleMenus(){
+      if (!selRoleId.value) return;
+      try { selRoleMenus.value = await api('GET', '/api/system/roleMenus?role_id=' + selRoleId.value); } catch(e){}
+    }
+    async function saveRoleMenus(){
+      try { await api('POST', '/api/system/roleMenuSave', { role_id: selRoleId.value, menu_ids: selRoleMenus.value }); toast('已保存'); } catch(e){ toast(e.message); }
+    }
+
+    // 匹配
+    async function matchOne(r){ try { await api('POST', '/api/number/matchByKnowledge', { recordId: r.id }); toast('匹配成功'); loadRecords(); } catch(e){ toast(e.message); } }
+    async function batchMatch(){
+      try {
+        const d = await api('POST', '/api/number/batchMatch', { recordIdList: selectedIds.value });
+        toast(`成功 ${d.success} 条，失败 ${d.fail} 条`);
+        selectedIds.value = []; loadRecords(); loadDash();
+      } catch(e){ toast(e.message); }
+    }
+    async function batchMatchAll(){
+      if (!confirm('确定匹配所有「待匹配」记录？')) return;
+      try {
+        const d = await api('POST', '/api/number/batchMatch', { recordIdList: [] });
+        toast(`成功 ${d.success} 条，失败 ${d.fail} 条`);
+        selectedIds.value = []; loadRecords(); loadDash();
+      } catch(e){ toast(e.message); }
+    }
+    function toggleAll(e){ selectedIds.value = e.target.checked ? recs.value.map(r=>r.id) : []; }
+
+    // 录入
+    function openAdd(){ addForm.record_date=''; addForm.source_number=''; addForm.rank_value=null; showAdd.value=true; }
+    async function saveAdd(){
+      if (!addForm.record_date || !addForm.source_number) return toast('请填日期和号码');
+      try {
+        const d = await api('POST', '/api/number/receive', { record_date: addForm.record_date, source_number: addForm.source_number, rank_value: addForm.rank_value });
+        await api('POST', '/api/number/matchByKnowledge', { recordId: d.id });
+        toast('已录入并匹配'); showAdd.value=false; loadRecords(); loadDash();
+      } catch(e){ toast(e.message); }
+    }
+
+    // 详情
+    function openDetail(r){ detail.value = r; showDetail.value = true; }
+    function isWarnDim(key){ return (detail.value.warn_json||[]).some(w => w.dim_key === key); }
+
+    // 周期
+    function openCycleAdd(){ Object.assign(cycleForm, { id:null, cycle_name:'', start_date:'', is_enable:1, mapping_text:'{\n  "马": [1,13,25,37,49],\n  "蛇": [2,14,26,38]\n}' }); showCycle.value = true; }
+    function openCycleEdit(c){ Object.assign(cycleForm, { id:c.id, cycle_name:c.cycle_name, start_date:c.start_date, is_enable:c.is_enable, mapping_text: JSON.stringify(c.zodiac_mapping, null, 2) }); showCycle.value = true; }
+    async function saveCycle(){
+      let mapping;
+      try { mapping = JSON.parse(cycleForm.mapping_text); } catch(e){ return toast('JSON 格式错误'); }
+      const body = { cycle_name: cycleForm.cycle_name, start_date: cycleForm.start_date, is_enable: cycleForm.is_enable, zodiac_mapping: mapping };
+      try {
+        if (cycleForm.id){ body.id = cycleForm.id; await api('PUT', '/api/zodiacCycle/update', body); }
+        else await api('POST', '/api/zodiacCycle/save', body);
+        toast('已保存'); showCycle.value=false; loadCycles();
+      } catch(e){ toast(e.message); }
+    }
+    async function removeCycle(c){
+      if (!confirm('确定删除该周期？')) return;
+      try { await api('DELETE', '/api/zodiacCycle/remove', { id: c.id }); toast('已删除'); loadCycles(); } catch(e){ toast(e.message); }
+    }
+
+    // 历史快照
+    function openHistory(h){ histDetail.value = h; showHistory.value = true; }
+    function openDimTime(d){ dimTime.value = d; showDimTime.value = true; }
+
+    // 重建统计
+    async function rebuildStats(){
+      if (!confirm('确定重建统计表？将从全部已匹配记录重新聚合')) return;
+      try { const d = await api('POST', '/api/dimTagRankMax/rebuild', {}); toast('重建完成，共 ' + d.count + ' 条'); loadDimStats(); } catch(e){ toast(e.message); }
+    }
+
+    // 配置
+    async function saveOffset(){ try { await api('PUT', '/api/sysConfig/update', { config_value: String(warnOffset.value) }); toast('已保存'); } catch(e){ toast(e.message); } }
+
+    // 用户
+    function openUserAdd(){ Object.assign(userForm, { id:null, username:'', password:'', real_name:'', role_id: roles.value[0]?.id, status:1 }); showUser.value = true; }
+    function openUserEdit(u){ Object.assign(userForm, { id:u.id, username:u.username, password:'', real_name:u.real_name, role_id:u.role_id, status:u.status }); showUser.value = true; }
+    async function saveUser(){
+      const body = { id:userForm.id, username:userForm.username, password:userForm.password, real_name:userForm.real_name, role_id:userForm.role_id, status:userForm.status };
+      try { await api('POST', '/api/system/userSave', body); toast('已保存'); showUser.value=false; loadUsers(); } catch(e){ toast(e.message); }
+    }
+
+    onMounted(() => {
+      if (token.value){
+        try {
+          const payload = JSON.parse(atob(token.value.split('.')[1]));
+          if (payload.exp * 1000 < Date.now()){ doLogout(); return; }
+          user.value = JSON.parse(localStorage.getItem('nw_user') || '{}');
+          role.value = JSON.parse(localStorage.getItem('nw_role') || '{}');
+          // 去重：兼容历史缓存里可能存在的重复菜单
+          const cachedMenus = JSON.parse(localStorage.getItem('nw_menus') || '[]');
+          const seen = new Set();
+          menus.value = cachedMenus.filter(m => { const k = (m.id != null ? m.id : m.path); if (seen.has(k)) return false; seen.add(k); return true; });
+          loadDash();
+        } catch(e){ doLogout(); }
+      }
+    });
+
+    return {
+      token, user, role, menus, cur, loginForm, logging, isAdmin, canOperate,
+      dash, recs, recPage, recTotal, recTotalPages, recFilter, selectedIds, allSelected,
+      cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
+      showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
+      dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
+      sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
+      matchOne, batchMatch, batchMatchAll, toggleAll, openAdd, saveAdd, openDetail, isWarnDim,
+      openCycleAdd, openCycleEdit, saveCycle, removeCycle, openHistory, openDimTime, rebuildStats, saveOffset,
+      openUserAdd, openUserEdit, saveUser, loadRoleMenus, saveRoleMenus
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

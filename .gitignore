@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# 运行期数据库备份（如需保留数据快照请手动加入版本库）
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
