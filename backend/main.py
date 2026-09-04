@@ -28,6 +28,7 @@ app = FastAPI(title="号码知识库全维度智能预警系统")
 # ============================================================
 DIM_NAMES = {
     "zodiac": "生肖", "odd_even": "单双", "big_small": "大小",
+    "size_odd_even": "大小单双",
     "five_element": "五行", "wave_color": "号码波色", "he_sum": "合数单双",
     "animal_type": "家禽野兽", "zodiac_seq": "前后肖", "beauty_type": "吉美凶丑",
     "yin_yang": "阴阳", "stroke_type": "单笔双笔", "sky_earth": "天地肖",
@@ -130,7 +131,7 @@ CREATE TABLE IF NOT EXISTS zodiac_number_cycle_config (
 CREATE TABLE IF NOT EXISTS number_knowledge_record (
   id INTEGER PRIMARY KEY AUTOINCREMENT, record_date TEXT, source_number TEXT,
   rank_value INTEGER, zodiac TEXT DEFAULT '', odd_even TEXT DEFAULT '',
-  big_small TEXT DEFAULT '', five_element TEXT DEFAULT '', wave_color TEXT DEFAULT '',
+  big_small TEXT DEFAULT '', size_odd_even TEXT DEFAULT '', five_element TEXT DEFAULT '', wave_color TEXT DEFAULT '',
   he_sum TEXT DEFAULT '', animal_type TEXT DEFAULT '', zodiac_seq TEXT DEFAULT '',
   beauty_type TEXT DEFAULT '', yin_yang TEXT DEFAULT '', stroke_type TEXT DEFAULT '',
   sky_earth TEXT DEFAULT '', edge_color TEXT DEFAULT '', gender_zodiac TEXT DEFAULT '',
@@ -205,6 +206,8 @@ def init_db():
         db.execute("ALTER TABLE number_knowledge_record ADD COLUMN head_number TEXT DEFAULT ''")
     if "tail_number" not in ncols:
         db.execute("ALTER TABLE number_knowledge_record ADD COLUMN tail_number TEXT DEFAULT ''")
+    if "size_odd_even" not in ncols:
+        db.execute("ALTER TABLE number_knowledge_record ADD COLUMN size_odd_even TEXT DEFAULT ''")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 角色
@@ -317,6 +320,7 @@ def match_labels(source_number, zodiac_mapping):
         "zodiac": zodiac,
         "odd_even": "单数" if num in _ODD else "双数",
         "big_small": "大数" if num in _BIG else "小数",
+        "size_odd_even": ("大" if num in _BIG else "小") + ("单" if num in _ODD else "双"),
         "five_element": _NUM_FIVE.get(num, ""),
         "wave_color": _NUM_WAVE.get(num, ""),
         "he_sum": _NUM_HE.get(num, ""),
@@ -462,10 +466,10 @@ def do_match(record_id, operate_user="", db=None):
         full_json = json.dumps(full_match, ensure_ascii=False)
 
         # 5. 更新主表
-        db.execute("""UPDATE number_knowledge_record SET zodiac=?, odd_even=?, big_small=?, five_element=?, wave_color=?, he_sum=?,
+        db.execute("""UPDATE number_knowledge_record SET zodiac=?, odd_even=?, big_small=?, size_odd_even=?, five_element=?, wave_color=?, he_sum=?,
             animal_type=?, zodiac_seq=?, beauty_type=?, yin_yang=?, stroke_type=?, sky_earth=?, edge_color=?, gender_zodiac=?,
             qqsh_type=?, season_type=?, zodiac_color_type=?, head_number=?, tail_number=?, warn_json=?, status=1, match_time=?, cycle_id=? WHERE id=?""",
-            (labels["zodiac"], labels["odd_even"], labels["big_small"], labels["five_element"], labels["wave_color"], labels["he_sum"],
+            (labels["zodiac"], labels["odd_even"], labels["big_small"], labels["size_odd_even"], labels["five_element"], labels["wave_color"], labels["he_sum"],
              labels["animal_type"], labels["zodiac_seq"], labels["beauty_type"], labels["yin_yang"], labels["stroke_type"],
              labels["sky_earth"], labels["edge_color"], labels["gender_zodiac"], labels["qqsh_type"], labels["season_type"],
              labels["zodiac_color_type"], labels["head_number"], labels["tail_number"], warn_json, now, cycle["id"], record_id))
@@ -531,9 +535,9 @@ def rebuild_rank_max():
                         "diff": hist_max - gap,
                         "warn_desc": f"{DIM_NAMES.get(dim_key, dim_key)}-{tag}，当前排位{gap}，历史最高排位{hist_max}，距离高位差{hist_max - gap}位",
                     })
-        # 写回主表 warn_json + 头数/尾数 + 历史快照 gaps/warn_json
-        db.execute("UPDATE number_knowledge_record SET warn_json=?, head_number=?, tail_number=? WHERE id=?",
-                   (json.dumps(warns, ensure_ascii=False), labels["head_number"], labels["tail_number"], r["id"]))
+        # 写回主表 warn_json + 头数/尾数/大小单双 + 历史快照 gaps/warn_json
+        db.execute("UPDATE number_knowledge_record SET warn_json=?, head_number=?, tail_number=?, size_odd_even=? WHERE id=?",
+                   (json.dumps(warns, ensure_ascii=False), labels["head_number"], labels["tail_number"], labels["size_odd_even"], r["id"]))
         _write_gaps_to_history(db, r["id"], gaps, warns)
 
     # 计算「当前遗漏期数」current_rank = 最新一期序号 - 该标签最后出现序号
@@ -691,7 +695,7 @@ def receive(body: ReceiveBody):
         # 覆盖：更新开奖号 + 重置为待匹配，清空已匹配的 17 维度标签，等待重新匹配
         db.execute("""UPDATE number_knowledge_record SET
             source_number=?, rank_value=?, status=0,
-            zodiac=NULL, odd_even=NULL, big_small=NULL, five_element=NULL, wave_color=NULL, he_sum=NULL,
+            zodiac=NULL, odd_even=NULL, big_small=NULL, size_odd_even=NULL, five_element=NULL, wave_color=NULL, he_sum=NULL,
             animal_type=NULL, zodiac_seq=NULL, beauty_type=NULL, yin_yang=NULL, stroke_type=NULL, sky_earth=NULL,
             edge_color=NULL, gender_zodiac=NULL, qqsh_type=NULL, season_type=NULL, zodiac_color_type=NULL,
             head_number=NULL, tail_number=NULL,

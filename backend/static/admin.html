@@ -355,6 +355,7 @@ table.data tr.warn td{background:var(--warnbg)}
                       <td style="font-family:'Roboto Mono',monospace">{{ t.count }}</td>
                       <td style="white-space:normal;line-height:1.7">
                         <span v-for="n in t.numbers" :key="n" class="tag" style="font-family:'Roboto Mono',monospace;font-size:11px">{{ n }}</span>
+                        <button class="btn btn-sm" style="padding:2px 8px;font-size:11px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:5px;margin-left:2px" @click="copyTagNumbers(t)" :title="'复制 ' + t.tag + ' 的号码'">📋</button>
                       </td>
                       <td>
                         <span v-if="t.current_rank > 0" :style="tagRankStyle(t)">{{ t.current_rank }} 期</span>
@@ -615,7 +616,7 @@ const { createApp, ref, reactive, computed, onMounted } = Vue;
 const API = window.location.pathname.startsWith('/number-warning') ? '/number-warning' : '';
 
 const dimLabels = {
-  zodiac:'生肖', odd_even:'单双', big_small:'大小', five_element:'五行', wave_color:'波色',
+  zodiac:'生肖', odd_even:'单双', big_small:'大小', size_odd_even:'大小单双', five_element:'五行', wave_color:'波色',
   he_sum:'合数', animal_type:'家禽野兽', zodiac_seq:'前后肖', beauty_type:'吉美凶丑',
   yin_yang:'阴阳', stroke_type:'单笔双笔', sky_earth:'天地肖', edge_color:'白边黑中',
   gender_zodiac:'男女肖', qqsh_type:'琴棋书画', season_type:'春夏秋冬', zodiac_color_type:'红蓝绿肖',
@@ -772,6 +773,20 @@ createApp({
         ? 'font-family:Roboto Mono,monospace;color:var(--warn);font-weight:800'
         : 'font-family:Roboto Mono,monospace;color:var(--btn2)';
     }
+    async function copyTagNumbers(t){
+      const nums = (t.numbers || []).map(String);
+      const text = nums.join(' ');
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch(e) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch(e2) {}
+        document.body.removeChild(ta);
+      }
+      toast(`已复制「${t.tag}」号码：${text}`);
+    }
     function rankStyle(d){
       const threshold = (d.history_max_rank || 0) - (warnOffset.value || 2);
       const hot = d.total_sample >= 2 && d.current_rank >= threshold;
@@ -900,7 +915,7 @@ createApp({
       token, user, role, menus, cur, loginForm, logging, isAdmin, canOperate,
       dash, recs, recPage, recTotal, recTotalPages, recFilter, selectedIds, allSelected,
       cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
-      dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle,
+      dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

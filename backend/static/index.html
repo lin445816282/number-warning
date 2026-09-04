@@ -138,7 +138,7 @@ tbody tr.warn-row{background:var(--warnbg)}
       <table>
         <thead>
           <tr>
-            <th>号码</th><th>排位</th><th>生肖</th><th>单双</th><th>大小</th><th>五行</th>
+            <th>号码</th><th>排位</th><th>生肖</th><th>单双</th><th>大小</th><th>大小单双</th><th>五行</th>
             <th>波色</th><th>合数</th><th>家禽野兽</th><th>前后肖</th><th>吉美凶丑</th>
             <th>阴阳</th><th>单笔双笔</th><th>天地肖</th><th>白边黑中</th><th>男女肖</th>
             <th>琴棋书画</th><th>春夏秋冬</th><th>红蓝绿肖</th><th>头数</th><th>尾数</th>
@@ -151,6 +151,7 @@ tbody tr.warn-row{background:var(--warnbg)}
             <td><span :class="tagCls(r,'zodiac')">{{ r.zodiac || '—' }}</span></td>
             <td><span :class="tagCls(r,'odd_even')">{{ r.odd_even }}</span></td>
             <td><span :class="tagCls(r,'big_small')">{{ r.big_small }}</span></td>
+            <td><span :class="tagCls(r,'size_odd_even')">{{ r.size_odd_even || '—' }}</span></td>
             <td><span :class="tagCls(r,'five_element')">{{ r.five_element }}</span></td>
             <td><span :class="tagCls(r,'wave_color')">{{ r.wave_color }}</span></td>
             <td><span :class="tagCls(r,'he_sum')">{{ r.he_sum }}</span></td>
@@ -199,7 +200,7 @@ const { createApp, ref, computed, onMounted } = Vue;
 const API = window.location.pathname.startsWith('/number-warning') ? '/number-warning' : '';
 
 const dimLabels = {
-  zodiac:'生肖', odd_even:'单双', big_small:'大小', five_element:'五行', wave_color:'波色',
+  zodiac:'生肖', odd_even:'单双', big_small:'大小', size_odd_even:'大小单双', five_element:'五行', wave_color:'波色',
   he_sum:'合数', animal_type:'家禽野兽', zodiac_seq:'前后肖', beauty_type:'吉美凶丑',
   yin_yang:'阴阳', stroke_type:'单笔双笔', sky_earth:'天地肖', edge_color:'白边黑中',
   gender_zodiac:'男女肖', qqsh_type:'琴棋书画', season_type:'春夏秋冬', zodiac_color_type:'红蓝绿肖',
