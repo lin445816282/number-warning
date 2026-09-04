@@ -287,40 +287,87 @@ table.data tr.warn td{background:var(--warnbg)}
 
       <!-- 维度统计 -->
       <template v-if="cur==='/dimstats'">
-        <div class="topbar"><h2>维度标签最高排位统计</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
-        <div class="card">
-          <button class="btn btn-danger btn-sm" v-if="isAdmin" @click="rebuildStats">🔄 一键重建统计表</button>
-          <span style="font-size:12px;color:var(--ink2);margin-left:10px">修改历史排位/删除数据后需重建</span>
+        <div class="topbar"><h2>维度统计</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <!-- 子 tab 切换 -->
+        <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:14px">
+          <button class="btn btn-sm" :style="dimTab==='rank'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='rank'">标签最高排位</button>
+          <button class="btn btn-sm" :style="dimTab==='dict'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='dict';loadDimDict()">维度字典</button>
         </div>
-        <div class="card">
-          <div class="table-scroll">
-            <table class="data">
-              <thead><tr>
-                <th>维度</th><th>标签值</th>
-                <th style="cursor:pointer" @click="sortDim('history_max_rank')">历史最高排位 {{ sortMark('history_max_rank') }}</th>
-                <th style="cursor:pointer;color:var(--warn)" @click="sortDim('current_rank')">当前遗漏 {{ sortMark('current_rank') }}</th>
-                <th>样本数</th><th>更新时间</th>
-              </tr></thead>
-              <tbody>
-                <tr v-for="d in dimStats" :key="d.id">
-                  <td>{{ d.dim_name }}</td>
-                  <td><b>{{ d.tag_value }}</b></td>
-                  <td style="font-family:'Roboto Mono',monospace;font-weight:700">
-                    <span v-if="d.history_max_rank > 0" style="cursor:pointer;color:var(--warn);text-decoration:underline dotted" title="点击查看历史最高出现时间" @click="openDimTime(d)">{{ d.history_max_rank }}</span>
-                    <span v-else>0</span>
-                  </td>
-                  <td>
-                    <span v-if="d.current_rank > 0" :style="rankStyle(d)">{{ d.current_rank }} 期</span>
-                    <span v-else style="color:var(--ok);font-weight:700">刚出</span>
-                  </td>
-                  <td>{{ d.total_sample }}</td>
-                  <td>{{ d.last_update_time }}</td>
-                </tr>
-              </tbody>
-            </table>
+
+        <!-- tab1: 标签最高排位 -->
+        <template v-if="dimTab==='rank'">
+          <div class="card">
+            <button class="btn btn-danger btn-sm" v-if="isAdmin" @click="rebuildStats">🔄 一键重建统计表</button>
+            <span style="font-size:12px;color:var(--ink2);margin-left:10px">修改历史排位/删除数据后需重建</span>
           </div>
-          <div v-if="!dimStats.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无统计</div>
-        </div>
+          <div class="card">
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr>
+                  <th>维度</th><th>标签值</th>
+                  <th style="cursor:pointer" @click="sortDim('history_max_rank')">历史最高排位 {{ sortMark('history_max_rank') }}</th>
+                  <th style="cursor:pointer;color:var(--warn)" @click="sortDim('current_rank')">当前遗漏 {{ sortMark('current_rank') }}</th>
+                  <th>样本数</th><th>更新时间</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="d in dimStats" :key="d.id">
+                    <td>{{ d.dim_name }}</td>
+                    <td><b>{{ d.tag_value }}</b></td>
+                    <td style="font-family:'Roboto Mono',monospace;font-weight:700">
+                      <span v-if="d.history_max_rank > 0" style="cursor:pointer;color:var(--warn);text-decoration:underline dotted" title="点击查看历史最高出现时间" @click="openDimTime(d)">{{ d.history_max_rank }}</span>
+                      <span v-else>0</span>
+                    </td>
+                    <td>
+                      <span v-if="d.current_rank > 0" :style="rankStyle(d)">{{ d.current_rank }} 期</span>
+                      <span v-else style="color:var(--ok);font-weight:700">刚出</span>
+                    </td>
+                    <td>{{ d.total_sample }}</td>
+                    <td>{{ d.last_update_time }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="!dimStats.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无统计</div>
+          </div>
+        </template>
+
+        <!-- tab2: 维度字典 -->
+        <template v-if="dimTab==='dict'">
+          <div class="card">
+            <div class="card-title">各维度标签 → 号码映射（共 {{ dimDict.length }} 维度）</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">展示每个维度有哪些标签、各标签对应哪些号码，以及当前遗漏/历史最高遗漏</div>
+            <!-- 维度切换 -->
+            <div class="toolbar" style="gap:6px">
+              <button v-for="d in dimDict" :key="d.dim_key" class="btn btn-sm" :style="dimCur===d.dim_key?'background:var(--warn);color:#fff':'background:#f3efe5;color:var(--ink)'" @click="dimCur=d.dim_key">{{ d.dim_name }}</button>
+            </div>
+            <!-- 当前维度详情 -->
+            <div v-if="curDim">
+              <div style="display:flex;gap:10px;margin:10px 0;flex-wrap:wrap">
+                <span class="tag" style="font-size:13px;padding:4px 10px">标签数 <b>{{ curDim.tag_count }}</b></span>
+                <span class="tag" style="font-size:13px;padding:4px 10px">覆盖号码 <b>{{ curDim.total_numbers }}</b> 个</span>
+              </div>
+              <div class="table-scroll">
+                <table class="data">
+                  <thead><tr><th>标签</th><th>号码数</th><th>号码列表</th><th>当前遗漏</th><th>历史最高</th></tr></thead>
+                  <tbody>
+                    <tr v-for="t in curDim.tags" :key="t.tag" :class="{warn: t.current_rank>0 && t.current_rank >= (t.history_max_rank||99)-warnOffset}">
+                      <td><b>{{ t.tag }}</b></td>
+                      <td style="font-family:'Roboto Mono',monospace">{{ t.count }}</td>
+                      <td style="white-space:normal;line-height:1.7">
+                        <span v-for="n in t.numbers" :key="n" class="tag" style="font-family:'Roboto Mono',monospace;font-size:11px">{{ n }}</span>
+                      </td>
+                      <td>
+                        <span v-if="t.current_rank > 0" :style="tagRankStyle(t)">{{ t.current_rank }} 期</span>
+                        <span v-else style="color:var(--ok);font-weight:700">刚出</span>
+                      </td>
+                      <td style="font-family:'Roboto Mono',monospace">{{ t.history_max_rank }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
       </template>
 
       <!-- 信号跟踪 -->
@@ -610,6 +657,10 @@ createApp({
     // 维度统计
     const dimStats = ref([]);
     const dimSort = ref({ field: 'current_rank', desc: true });
+    const dimTab = ref('rank');  // rank=标签最高排位 / dict=维度字典
+    const dimDict = ref([]);
+    const dimCur = ref('');
+    const curDim = computed(() => dimDict.value.find(d => d.dim_key === dimCur.value) || null);
     // 信号跟踪
     const st = ref({ items: [], summary: [], total_signals: 0, settled: 0, tracking: 0, hit_bucket: {} });
     const coreSummary = computed(() => st.value.summary.filter(s => s.group === 'core'));
@@ -701,6 +752,25 @@ createApp({
         const va = (a[f] == null ? 0 : a[f]), vb = (b[f] == null ? 0 : b[f]);
         return desc ? vb - va : va - vb;
       });
+    }
+    async function loadDimDict(){
+      try {
+        const d = await api('GET', '/api/dimMatrix/dict');
+        dimDict.value = d.dims || [];
+        // 补充每个维度的总覆盖号码数
+        dimDict.value.forEach(dd => {
+          let total = 0; (dd.tags || []).forEach(t => total += (t.numbers || []).length);
+          dd.total_numbers = total;
+        });
+        if (!dimCur.value && dimDict.value.length) dimCur.value = dimDict.value[0].dim_key;
+      } catch(e){}
+    }
+    function tagRankStyle(t){
+      const threshold = (t.history_max_rank || 0) - (warnOffset.value || 2);
+      const hot = t.current_rank > 0 && t.current_rank >= threshold;
+      return hot
+        ? 'font-family:Roboto Mono,monospace;color:var(--warn);font-weight:800'
+        : 'font-family:Roboto Mono,monospace;color:var(--btn2)';
     }
     function rankStyle(d){
       const threshold = (d.history_max_rank || 0) - (warnOffset.value || 2);
@@ -830,6 +900,7 @@ createApp({
       token, user, role, menus, cur, loginForm, logging, isAdmin, canOperate,
       dash, recs, recPage, recTotal, recTotalPages, recFilter, selectedIds, allSelected,
       cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
+      dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

@@ -817,6 +817,64 @@ def dim_rebuild(user=Header(None, alias="authorization")):
     return {"ok": True, "count": cnt}
 
 # ============================================================
+# 十一·四·五、API — 维度字典（各维度标签→号码映射）
+# ============================================================
+@app.get("/api/dimMatrix/dict")
+def dim_matrix_dict(user=Header(None, alias="authorization")):
+    """返回 17 维度各自的标签→号码列表，附当前遗漏/历史最高统计。
+    纯只读，不影响任何现有数据。"""
+    require_user(user)
+    db = get_db()
+    # 生效周期生肖映射
+    today = datetime.now().strftime("%Y-%m-%d")
+    cycle = db.execute(
+        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 AND start_date<=? ORDER BY start_date DESC LIMIT 1",
+        (today,)).fetchone()
+    zodiac_map = DEFAULT_ZODIAC
+    if cycle:
+        try:
+            zm = json.loads(cycle["zodiac_mapping"])
+            if zm:
+                zodiac_map = zm
+        except Exception:
+            pass
+    # 1-49 逐号匹配 17 维标签 → 反转成 维度→标签→号码列表
+    dim_tags = {}
+    for n in range(1, 50):
+        labels = match_labels(n, zodiac_map)
+        for dk, tv in labels.items():
+            if not tv:
+                continue
+            dim_tags.setdefault(dk, {}).setdefault(tv, []).append(n)
+    # 关联统计表
+    rank_map = {}
+    for r in db.execute("SELECT * FROM dim_tag_rank_max").fetchall():
+        rank_map[(r["dim_key"], r["tag_value"])] = dict(r)
+    db.close()
+    # 组装
+    dims = []
+    for dk, dim_name in DIM_NAMES.items():
+        tags = []
+        for tv in sorted(dim_tags.get(dk, {}).keys()):
+            nums = dim_tags[dk][tv]
+            rr = rank_map.get((dk, tv), {})
+            tags.append({
+                "tag": tv,
+                "numbers": nums,
+                "count": len(nums),
+                "current_rank": rr.get("current_rank", 0),
+                "history_max_rank": rr.get("history_max_rank", 0),
+                "total_sample": rr.get("total_sample", 0),
+            })
+        dims.append({
+            "dim_key": dk,
+            "dim_name": dim_name,
+            "tag_count": len(tags),
+            "tags": tags,
+        })
+    return {"dims": dims}
+
+# ============================================================
 # 十一·五、API — 信号跟踪（预警触发 → 后续开出）
 # ============================================================
 @app.get("/api/signalTrack/list")
