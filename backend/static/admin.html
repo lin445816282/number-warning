@@ -878,7 +878,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <template v-if="dimTab==='track'">
           <!-- 投入引擎 · 每日资金指南 -->
           <div class="card" style="margin-top:14px;background:linear-gradient(135deg,#0f2740,#1e4a6e);border:none">
-            <div class="card-title" style="color:#fff">💰 投入引擎 · 每日资金指南
+            <div class="card-title" style="color:#fff">💰 投入引擎 · 买入日 {{ engine.bet_date }}
               <button class="btn btn-sm" @click="loadEngine()" style="float:right;padding:3px 10px;font-size:12px;background:#fff;color:#1e3a5f;border:none;border-radius:6px">🔄 刷新</button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -895,7 +895,7 @@ table.data tr.warn td{background:var(--warnbg)}
                 <div style="font-size:18px;font-weight:800;color:#7fe07f">{{ engine.available }}</div>
               </div>
               <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
-                <div style="font-size:11px;color:#cfe0f0">今日投入</div>
+                <div style="font-size:11px;color:#cfe0f0">建议投入</div>
                 <div style="font-size:18px;font-weight:800;color:#7fc4ff">{{ engine.total_amount }}</div>
               </div>
               <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
@@ -912,7 +912,7 @@ table.data tr.warn td{background:var(--warnbg)}
               <span style="opacity:.85">· {{ engine.risk_note }}</span>
             </div>
             <div v-if="engine.picks && engine.picks.length" style="background:rgba(255,255,255,.08);border-radius:8px;padding:12px">
-              <div style="color:#fff;font-weight:700;margin-bottom:8px">📌 今日建议买入（{{ engine.picks.length }} 信号 · 共 {{ engine.total_N }} 号 · 投入 {{ engine.total_amount }} 元 · 单号 {{ engine.picks[0].per }} 元）</div>
+              <div style="color:#fff;font-weight:700;margin-bottom:8px">📌 {{ engine.bet_date }} 建议买入（{{ engine.picks.length }} 信号 · 共 {{ engine.total_N }} 号 · 投入 {{ engine.total_amount }} 元 · 单号 {{ engine.picks[0].per }} 元）</div>
               <div v-for="p in engine.picks" :key="p.dim+p.tag" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,.15);font-size:13px;color:#fff">
                 <div style="font-weight:700;min-width:150px">{{ p.dim_name }}-{{ p.tag }}</div>
                 <div style="color:#cfe0f0">{{ p.N }}号 · 命中率{{ (p.hit_rate*100).toFixed(0) }}%</div>

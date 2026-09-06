@@ -1941,23 +1941,27 @@ def _compute_engine():
         picks.append({**c, 'per': per, 'amount': round(c['N'] * per, 2)})
     total_amount = round(total_N * per, 2)
 
-    # 6. 资金曲线（本金 + 已实现盈亏）
+    # 6. 资金曲线（本金 + 已实现盈亏）+ 建议买入日（数据最新期 + 1 天）
     db = get_db()
     o = db.execute("SELECT COALESCE(SUM(profit),0) AS tp FROM strategy_order WHERE open_number IS NOT NULL").fetchone()
+    lr = db.execute("SELECT MAX(record_date) AS d FROM number_knowledge_record WHERE status=1").fetchone()
     db.close()
     realized = round(o['tp'] or 0, 2)
     balance = round(capital + realized, 2)
+    last_date = lr['d'] if lr else ''
+    from datetime import timedelta
+    bet_date = (datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") if last_date else ''
 
     # 7. 风险等级（按总投入占可用资金比例）
     ratio = total_amount / available if available else 0
     if not candidates:
-        risk, risk_note = 'gray', '当前无符合标准(命中率≥红线)的待买入信号，今日建议观望'
+        risk, risk_note = 'gray', f'当前无符合标准(命中率≥红线)的待买入信号，{bet_date} 建议观望'
     elif ratio > 1:
         risk, risk_note = 'red', f'信号过多，总投入 {total_amount} 元已超可用资金 {available} 元，建议提高安全垫或降低单号金额'
     elif ratio >= 0.7:
-        risk, risk_note = 'yellow', f'今日 {len(picks)} 个信号全买，投入 {total_amount} 元占可用资金 {ratio * 100:.0f}%，接近满仓'
+        risk, risk_note = 'yellow', f'{bet_date} 建议买入 {len(picks)} 个信号，投入 {total_amount} 元占可用资金 {ratio * 100:.0f}%，接近满仓'
     else:
-        risk, risk_note = 'green', f'今日 {len(picks)} 个信号全买，投入 {total_amount} 元占可用资金 {ratio * 100:.0f}%'
+        risk, risk_note = 'green', f'{bet_date} 建议买入 {len(picks)} 个信号，投入 {total_amount} 元占可用资金 {ratio * 100:.0f}%'
 
     return {
         'capital': capital, 'safety': safety, 'available': available,
@@ -1966,6 +1970,7 @@ def _compute_engine():
         'picks': picks, 'total_N': total_N, 'total_amount': total_amount,
         'candidates_total': len(candidates), 'pending_total': len(pending),
         'ratio': round(ratio, 4),
+        'last_date': last_date, 'bet_date': bet_date,
         'realized': realized, 'balance': balance,
         'risk_level': risk, 'risk_note': risk_note,
     }
