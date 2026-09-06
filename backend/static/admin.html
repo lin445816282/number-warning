@@ -292,6 +292,8 @@ table.data tr.warn td{background:var(--warnbg)}
         <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:14px">
           <button class="btn btn-sm" :style="dimTab==='rank'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='rank'">标签最高排位</button>
           <button class="btn btn-sm" :style="dimTab==='dict'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='dict';loadDimDict()">维度字典</button>
+          <button class="btn btn-sm" :style="dimTab==='suggest'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='suggest';loadSuggest();loadBacktest();loadOrderTrack();loadOrderTrackLt4();loadOrderTrackEq2();loadOrderTrackClose();loadAlgoTrack();loadStrategyScan()">建议号码</button>
+          <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -369,14 +371,717 @@ table.data tr.warn td{background:var(--warnbg)}
             </div>
           </div>
         </template>
-      </template>
 
-      <!-- 信号跟踪 -->
+        <!-- tab3: 建议号码 -->
+        <template v-if="dimTab==='suggest'">
+          <div class="card">
+            <div class="card-title">🎯 建议号码 · 多维度遗漏信号投票</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">各维度取「当前遗漏最久」的标签，按遗漏期数取前 10 条作信号，统计每个号码命中几个信号（投票数）。选阈值后展示 ≥ 阈值 / < 阈值 两组号码。</div>
+
+            <!-- 日期查询 -->
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <span style="font-size:13px;font-weight:600;color:var(--ink)">📅 查询日期</span>
+              <input type="date" v-model="suggestDate" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fbf8f1">
+              <button class="btn btn-sm" style="padding:6px 14px;font-size:13px;background:var(--warn);color:#fff;border:none;border-radius:8px" @click="loadSuggest">查询</button>
+              <button class="btn btn-sm" v-if="suggestDate" style="padding:6px 14px;font-size:13px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:8px" @click="suggestDate='';loadSuggest()">回到今天</button>
+            </div>
+
+            <!-- 阈值选择 -->
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <span style="font-size:13px;font-weight:600;color:var(--ink)">命中票数 ≥</span>
+              <select v-model="suggestThreshold" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fbf8f1">
+                <option v-for="t in suggestOptions" :key="t" :value="t">{{ t }} 票</option>
+              </select>
+              <span style="font-size:12px;color:var(--ink2)">（票数越高越强，范围 0~{{ suggestMax }} 票）</span>
+            </div>
+
+            <!-- 号码票数网格 -->
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px">
+              <div v-for="v in suggestVotes" :key="v.number" :style="v.vote >= suggestThreshold ? 'background:#fff;border:2px solid var(--warn);border-radius:8px;padding:6px;text-align:center' : 'background:#f8f6f0;border:1px solid #eee;border-radius:8px;padding:6px;text-align:center;opacity:.55'">
+                <div style="font-size:15px;font-weight:800;color:var(--ink);font-family:'Roboto Mono',monospace">{{ pad(v.number) }}</div>
+                <div style="font-size:10px;margin-top:2px" :style="v.vote >= suggestThreshold ? 'color:var(--warn);font-weight:700' : 'color:#b8b0a0'">{{ v.vote }}票</div>
+              </div>
+            </div>
+
+            <!-- 命中明细（当前阈值下高票号码） -->
+            <div v-if="suggestKeep.length">
+              <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px">✅ 命中 ≥{{ suggestThreshold }} 票（{{ suggestKeep.length }} 个）</div>
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+                <div style="flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:1px 0;line-height:1.6">
+                  <span v-for="(v,i) in suggestKeep" :key="v.number" style="font-size:14px;font-weight:700;color:var(--ink);font-family:'Roboto Mono',monospace;white-space:nowrap">{{ v.number }}<span v-if="i < suggestKeep.length-1">·</span></span>
+                </div>
+                <button class="btn btn-sm" style="flex-shrink:0;padding:3px 10px;font-size:12px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:6px" @click="copySuggestKeep">📋 复制</button>
+              </div>
+              <div v-for="v in suggestKeep" :key="v.number" style="font-size:12px;color:var(--ink2);margin-bottom:4px;line-height:1.5">
+                <b style="font-family:'Roboto Mono',monospace;color:var(--ink)">{{ pad(v.number) }}</b>（{{ v.vote }}票）：
+                <span v-for="(h,i) in v.hit_dims" :key="i"><span class="tag" style="font-size:11px">{{ h.dim_name }}-{{ h.tag_value }}</span> </span>
+              </div>
+            </div>
+
+            <!-- 淘汰明细 -->
+            <div v-if="suggestDrop.length" style="margin-top:14px">
+              <div style="font-size:12px;font-weight:700;color:#b8b0a0;margin-bottom:6px">🚫 命中 &lt;{{ suggestThreshold }} 票（{{ suggestDrop.length }} 个）</div>
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <div style="flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:1px 0;line-height:1.6">
+                  <span v-for="(v,i) in suggestDrop" :key="v.number" style="font-size:14px;font-family:'Roboto Mono',monospace;color:#b8b0a0;white-space:nowrap">{{ v.number }}<span v-if="i < suggestDrop.length-1">·</span></span>
+                </div>
+                <button class="btn btn-sm" style="flex-shrink:0;padding:3px 10px;font-size:12px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:6px" @click="copySuggestDrop">📋 复制</button>
+              </div>
+            </div>
+
+            <!-- 信号标签依据 -->
+            <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:8px">📡 投票依据（各维度遗漏最久标签，共 {{ suggestSignals.length }} 条）</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span v-for="s in suggestSignals" :key="s.dim_key" class="tag" style="font-size:11px">{{ s.dim_name }}-{{ s.tag_value }} <b style="color:var(--warn)">{{ s.current_rank }}期</b></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 回测卡片 -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">📊 回测 · 票数 0-5 命中率（{{ backtestStart }} 起）</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">逐期回放，每期用之前数据投票、看下期开出号码的票数。每一行「≥N票」表示票数不低于 N 的号码集合：上方=命中率（本期开出号码票数≥N 的期数占比，≥0票恒为100%）；下方=最长不出期数（该档位号码距上次开出的最大期数）。</div>
+            <div class="table-scroll">
+              <table class="data">
+                <thead>
+                  <tr><th>票数</th><th v-for="m in backtestMonths" :key="m.month">{{ m.month.slice(5) }}月</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="x in [0,1,2,3,4,5]" :key="x">
+                    <td><b>≥{{ x }}票</b></td>
+                    <td v-for="m in backtestMonths" :key="m.month" style="text-align:center">
+                      <template v-if="bucketOf(m, x)">
+                        <div :style="rateColor(bucketOf(m, x).hit_rate)">{{ bucketOf(m, x).hit_rate }}%</div>
+                        <div style="font-size:10px;color:var(--ink2)">不出{{ bucketOf(m, x).max_miss }}期</div>
+                      </template>
+                      <span v-else style="color:#b8b0a0">—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 实战下单跟踪卡片 -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">💰 实战下单跟踪 · ≥4票 · 47倍
+              <span style="float:right;font-weight:400;font-size:12px">仓位
+                <select v-model="orderBetRatio" @change="loadOrderTrack();loadOrderTrackLt4();loadOrderTrackEq2();loadOrderTrackClose()" style="padding:2px 6px;font-size:12px;border:1px solid var(--line);border-radius:6px;margin-left:4px;background:#fbf8f1">
+                  <option :value="0.05">5%</option>
+                  <option :value="0.10">10%</option>
+                  <option :value="0.25">25%</option>
+                  <option :value="0.5">50%</option>
+                  <option :value="1.0">100%</option>
+                </select>
+              </span>
+            </div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">5月1日起逐期用 ≥4票 号码下单，每天下注=资金{{ Math.round(orderBetRatio*100) }}%，命中赚47倍单注、未中亏下注；翻倍提取25%，资金&lt;100破产注资重置（注资计入真实盈亏）。</div>
+
+            <!-- 汇总 -->
+            <div v-if="orderTrack.summary" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">当前资金</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrack.summary.final_cash.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计提取</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ok)">{{ orderTrack.summary.total_withdraw.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">破产</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrack.summary.bankrupt_count }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计注资</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrack.summary.total_inject.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">总净值</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrack.summary.total_net.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">净收益(扣注资)</div>
+                <div style="font-size:16px;font-weight:800" :style="orderTrack.summary.net_profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ orderTrack.summary.net_profit.toLocaleString() }}</div>
+              </div>
+            </div>
+
+            <!-- 下一天下单 -->
+            <div v-if="orderTrack.next_order" style="background:#fff;border:2px solid var(--warn);border-radius:8px;padding:10px;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px">📌 {{ orderTrack.next_order.date }} 下单（{{ orderTrack.next_order.N }} 个号）</div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">资金 {{ orderTrack.next_order.cash.toLocaleString() }} × {{ Math.round(orderBetRatio*100) }}% = 下注 <b>{{ orderTrack.next_order.bet.toLocaleString() }}</b>，每号 <b style="color:var(--warn)">{{ orderTrack.next_order.per.toLocaleString() }}</b> 元</div>
+              <div style="font-size:15px;font-weight:800;color:var(--warn);font-family:Roboto Mono,monospace;line-height:1.7">
+                <span v-for="(n,i) in orderTrack.next_order.picks" :key="n">{{ pad(n) }}{{ i < orderTrack.next_order.picks.length-1 ? ' · ' : '' }}</span>
+              </div>
+            </div>
+
+            <!-- 回测明细表 -->
+            <div class="table-scroll" style="max-height:420px">
+              <table class="data">
+                <thead>
+                  <tr><th>日期</th><th>号数</th><th>下注</th><th>单注</th><th>开出</th><th>结果</th><th>盈亏</th><th>资金</th><th>事件</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="x in (orderTrack.daily || [])" :key="x.date">
+                    <td>{{ x.date.slice(5) }}</td>
+                    <td>{{ x.N }}</td>
+                    <td>{{ x.bet.toLocaleString() }}</td>
+                    <td>{{ x.per.toLocaleString() }}</td>
+                    <td><b>{{ pad(x.open) }}</b></td>
+                    <td :style="x.hit ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">{{ x.hit ? '命中' : '未中' }}</td>
+                    <td :style="x.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ x.profit >= 0 ? '+' : '' }}{{ x.profit.toLocaleString() }}</td>
+                    <td>{{ x.cash.toLocaleString() }}</td>
+                    <td style="font-size:10px">{{ x.event }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 实战下单跟踪卡片（买票数<4） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">💰 实战下单跟踪 · 买票数&lt;4（未命中≥4票）· 47倍 · 本金{{ Math.round(orderBetRatio*100) }}%</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">5月1日起逐期买「票数&lt;4」的号码（未命中≥4票信号），每天下注=资金{{ Math.round(orderBetRatio*100) }}%、单注取整，命中赚47倍单注、未中亏下注；翻倍提取25%，资金&lt;100破产注资重置（注资计入真实盈亏）。</div>
+
+            <div v-if="orderTrackLt4.summary" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">当前资金</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrackLt4.summary.final_cash.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计提取</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ok)">{{ orderTrackLt4.summary.total_withdraw.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">破产</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrackLt4.summary.bankrupt_count }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计注资</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrackLt4.summary.total_inject.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">总净值</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrackLt4.summary.total_net.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">净收益(扣注资)</div>
+                <div style="font-size:16px;font-weight:800" :style="orderTrackLt4.summary.net_profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ orderTrackLt4.summary.net_profit.toLocaleString() }}</div>
+              </div>
+            </div>
+
+            <div v-if="orderTrackLt4.next_order" style="background:#fff;border:2px solid var(--warn);border-radius:8px;padding:10px;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px">📌 {{ orderTrackLt4.next_order.date }} 下单（{{ orderTrackLt4.next_order.N }} 个号）</div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">资金 {{ orderTrackLt4.next_order.cash.toLocaleString() }} × {{ Math.round(orderBetRatio*100) }}% = 下注 <b>{{ orderTrackLt4.next_order.bet.toLocaleString() }}</b>，每号 <b style="color:var(--warn)">{{ orderTrackLt4.next_order.per }}</b> 元</div>
+              <div style="font-size:13px;font-weight:800;color:var(--warn);font-family:Roboto Mono,monospace;line-height:1.7">
+                <span v-for="(n,i) in orderTrackLt4.next_order.picks" :key="n">{{ pad(n) }}{{ i < orderTrackLt4.next_order.picks.length-1 ? ' · ' : '' }}</span>
+              </div>
+            </div>
+
+            <div class="table-scroll" style="max-height:420px">
+              <table class="data">
+                <thead>
+                  <tr><th>日期</th><th>号数</th><th>下注</th><th>单注</th><th>开出</th><th>结果</th><th>盈亏</th><th>资金</th><th>事件</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="x in (orderTrackLt4.daily || [])" :key="x.date">
+                    <td>{{ x.date.slice(5) }}</td>
+                    <td>{{ x.N }}</td>
+                    <td>{{ x.bet.toLocaleString() }}</td>
+                    <td>{{ x.per }}</td>
+                    <td><b>{{ pad(x.open) }}</b></td>
+                    <td :style="x.hit ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">{{ x.hit ? '命中' : '未中' }}</td>
+                    <td :style="x.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ x.profit >= 0 ? '+' : '' }}{{ x.profit.toLocaleString() }}</td>
+                    <td>{{ x.cash.toLocaleString() }}</td>
+                    <td style="font-size:10px">{{ x.event }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 实战下单跟踪卡片（票数=2 · 前5信号） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">💰 实战下单跟踪 · 票数=2（前5信号）· 47倍 · 本金{{ Math.round(orderBetRatio*100) }}%</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">5月1日起逐期买「票数=2」的号码（前5条遗漏信号投票），每天下注=资金{{ Math.round(orderBetRatio*100) }}%、单注取整，命中赚47倍单注、未中亏下注；翻倍提取25%，资金&lt;100破产注资重置（注资计入真实盈亏）。</div>
+
+            <div v-if="orderTrackEq2.summary" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">当前资金</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrackEq2.summary.final_cash.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计提取</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ok)">{{ orderTrackEq2.summary.total_withdraw.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">破产</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrackEq2.summary.bankrupt_count }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计注资</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrackEq2.summary.total_inject.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">总净值</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrackEq2.summary.total_net.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">净收益(扣注资)</div>
+                <div style="font-size:16px;font-weight:800" :style="orderTrackEq2.summary.net_profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ orderTrackEq2.summary.net_profit.toLocaleString() }}</div>
+              </div>
+            </div>
+
+            <div v-if="orderTrackEq2.next_order" style="background:#fff;border:2px solid var(--warn);border-radius:8px;padding:10px;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px">📌 {{ orderTrackEq2.next_order.date }} 下单（{{ orderTrackEq2.next_order.N }} 个号）</div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">资金 {{ orderTrackEq2.next_order.cash.toLocaleString() }} × {{ Math.round(orderBetRatio*100) }}% = 下注 <b>{{ orderTrackEq2.next_order.bet.toLocaleString() }}</b>，每号 <b style="color:var(--warn)">{{ orderTrackEq2.next_order.per }}</b> 元</div>
+              <div style="font-size:15px;font-weight:800;color:var(--warn);font-family:Roboto Mono,monospace;line-height:1.7">
+                <span v-for="(n,i) in orderTrackEq2.next_order.picks" :key="n">{{ pad(n) }}{{ i < orderTrackEq2.next_order.picks.length-1 ? ' · ' : '' }}</span>
+              </div>
+            </div>
+
+            <div class="table-scroll" style="max-height:420px">
+              <table class="data">
+                <thead>
+                  <tr><th>日期</th><th>号数</th><th>下注</th><th>单注</th><th>开出</th><th>结果</th><th>盈亏</th><th>资金</th><th>事件</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="x in (orderTrackEq2.daily || [])" :key="x.date">
+                    <td>{{ x.date.slice(5) }}</td>
+                    <td>{{ x.N }}</td>
+                    <td>{{ x.bet.toLocaleString() }}</td>
+                    <td>{{ x.per }}</td>
+                    <td><b>{{ pad(x.open) }}</b></td>
+                    <td :style="x.hit ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">{{ x.hit ? '命中' : '未中' }}</td>
+                    <td :style="x.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ x.profit >= 0 ? '+' : '' }}{{ x.profit.toLocaleString() }}</td>
+                    <td>{{ x.cash.toLocaleString() }}</td>
+                    <td style="font-size:10px">{{ x.event }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 实战下单跟踪卡片（接近样本·票数=1） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">💰 实战下单跟踪 · 接近样本·票数=1 · 47倍
+              <span style="float:right;font-weight:400;font-size:12px">方案
+                <select v-model="orderScheme" @change="loadOrderTrackClose()" style="padding:2px 6px;font-size:12px;border:1px solid var(--line);border-radius:6px;margin-left:4px;background:#fbf8f1">
+                  <option value="ratio">比例下注</option>
+                  <option value="martingale">倍投叠加</option>
+                  <option value="dalembert">达朗贝尔</option>
+                </select>
+                <template v-if="orderScheme==='martingale' || orderScheme==='dalembert'">base
+                  <select v-model="orderBaseBet" @change="loadOrderTrackClose()" style="padding:2px 6px;font-size:12px;border:1px solid var(--line);border-radius:6px;margin-left:4px;background:#fbf8f1">
+                    <option :value="5">5</option>
+                    <option :value="10">10</option>
+                    <option :value="20">20</option>
+                    <option :value="50">50</option>
+                  </select>
+                </template>
+                接近
+                <select v-model="orderOffset" @change="loadOrderTrackClose()" style="padding:2px 6px;font-size:12px;border:1px solid var(--line);border-radius:6px;margin-left:4px;background:#fbf8f1">
+                  <option :value="0">0(创新高)</option>
+                  <option :value="1">1期内</option>
+                  <option :value="2">2期内</option>
+                </select>
+              </span>
+            </div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">
+              <template v-if="orderScheme==='ratio'">5月1日起逐期用「接近样本」信号（标签当前遗漏 ≥ 历史最高遗漏 − {{ orderOffset }}）投票，买「票数=1」号码；无信号时空仓不下注。每天下注=资金{{ Math.round(orderBetRatio*100) }}%、单注取整，命中赚47倍单注、未中亏下注；翻倍提取25%，资金&lt;100破产注资重置（注资计入真实盈亏）。</template>
+              <template v-else-if="orderScheme==='martingale'">倍投叠加法（马丁格尔）：基础注码 <b>{{ orderBaseBet }}</b> 元/号，不中翻倍（{{ orderBaseBet }}-{{ orderBaseBet*2 }}-{{ orderBaseBet*4 }}-{{ orderBaseBet*8 }}-{{ orderBaseBet*16 }}…），命中后注码重置回 {{ orderBaseBet }}；空仓不翻倍。资金不足以覆盖注码时破产注资重置。命中赚(47−N)×注码、未中亏N×注码。</template>
+              <template v-else>达朗贝尔法：基础注码 <b>{{ orderBaseBet }}</b> 元/号，不中加一注（{{ orderBaseBet }}-{{ orderBaseBet*2 }}-{{ orderBaseBet*3 }}-{{ orderBaseBet*4 }}…），命中减一注（不低于 1 注）；空仓不加减。注码线性增长、不翻倍爆炸。命中赚(47−N)×注码、未中亏N×注码。</template>
+            </div>
+
+            <div v-if="orderTrackClose.summary" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">当前资金</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrackClose.summary.final_cash.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计提取</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ok)">{{ orderTrackClose.summary.total_withdraw.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">破产</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrackClose.summary.bankrupt_count }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">累计注资</div>
+                <div style="font-size:16px;font-weight:800;color:var(--warn)">{{ orderTrackClose.summary.total_inject.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">总净值</div>
+                <div style="font-size:16px;font-weight:800;color:var(--ink)">{{ orderTrackClose.summary.total_net.toLocaleString() }}</div>
+              </div>
+              <div style="flex:1;min-width:88px;background:#f8f6f0;border-radius:8px;padding:8px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">净收益(扣注资)</div>
+                <div style="font-size:16px;font-weight:800" :style="orderTrackClose.summary.net_profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ orderTrackClose.summary.net_profit.toLocaleString() }}</div>
+              </div>
+            </div>
+
+            <div v-if="orderTrackClose.monthly && orderTrackClose.monthly.length" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+              <div v-for="m in orderTrackClose.monthly" :key="m.month" style="flex:1;min-width:82px;background:#fbf8f1;border:1px solid var(--line);border-radius:8px;padding:7px;text-align:center">
+                <div style="font-size:10px;color:#b8b0a0">{{ m.month.slice(5) }}月</div>
+                <div style="font-size:14px;font-weight:800" :style="m.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ m.profit >= 0 ? '+' : '' }}{{ m.profit.toLocaleString() }}</div>
+                <div style="font-size:10px;color:#b8b0a0">命中{{ m.hit_count }}/{{ m.periods }}期</div>
+              </div>
+            </div>
+
+            <div v-if="orderTrackClose.next_order" style="background:#fff;border:2px solid var(--warn);border-radius:8px;padding:10px;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px">📌 {{ orderTrackClose.next_order.date }} 下单（{{ orderTrackClose.next_order.N }} 个号）</div>
+              <template v-if="orderTrackClose.next_order.N > 0">
+                <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">资金 {{ orderTrackClose.next_order.cash.toLocaleString() }} × {{ Math.round(orderBetRatio*100) }}% = 下注 <b>{{ orderTrackClose.next_order.bet.toLocaleString() }}</b>，每号 <b style="color:var(--warn)">{{ orderTrackClose.next_order.per }}</b> 元</div>
+                <div style="font-size:15px;font-weight:800;color:var(--warn);font-family:Roboto Mono,monospace;line-height:1.7">
+                  <span v-for="(n,i) in orderTrackClose.next_order.picks" :key="n">{{ pad(n) }}{{ i < orderTrackClose.next_order.picks.length-1 ? ' · ' : '' }}</span>
+                </div>
+              </template>
+              <div v-else style="font-size:13px;color:var(--ink2);padding:4px 0">⚠️ 今日无「遗漏创历史新高」信号，空仓不下注</div>
+            </div>
+
+            <div class="table-scroll" style="max-height:420px">
+              <table class="data">
+                <thead>
+                  <tr><th>日期</th><th>号数</th><th>下注</th><th>单注</th><th>开出</th><th>结果</th><th>盈亏</th><th>资金</th><th>事件</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="x in (orderTrackClose.daily || [])" :key="x.date">
+                    <td>{{ x.date.slice(5) }}</td>
+                    <td>{{ x.N }}</td>
+                    <td>{{ x.bet.toLocaleString() }}</td>
+                    <td>{{ x.per }}</td>
+                    <td><b>{{ pad(x.open) }}</b></td>
+                    <td :style="x.hit ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">{{ x.hit ? '命中' : '未中' }}</td>
+                    <td :style="x.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ x.profit >= 0 ? '+' : '' }}{{ x.profit.toLocaleString() }}</td>
+                    <td>{{ x.cash.toLocaleString() }}</td>
+                    <td style="font-size:10px">{{ x.event }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 演算跟踪卡片（多算法前向跟踪） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">🔭 后续演算跟踪 · 多算法前向验证
+              <button class="btn btn-sm" @click="refreshAlgoTrack()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新跟踪</button>
+            </div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">6 个候选算法从最新数据日起固化「明日选号」，开奖后自动结算命中（样本外前向验证，免疫回测前视偏差）。匹配数据更新后自动刷新，也可手动点右上角刷新。</div>
+
+            <div v-if="algoTrack.algos && algoTrack.algos.length">
+              <div v-for="a in algoTrack.algos" :key="a.key" style="background:#fbf8f1;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                  <div style="font-size:13px;font-weight:700;color:var(--ink)">{{ a.name }}</div>
+                  <div style="font-size:11px" :style="a.stats.hit_rate != null ? (a.stats.hit_rate >= 0.3 ? 'color:var(--ok)' : 'color:var(--warn)') : 'color:#b8b0a0'">
+                    {{ a.stats.hit_rate != null ? ('前向命中 ' + (a.stats.hit_rate*100).toFixed(1) + '% (' + a.stats.hit + '/' + a.stats.periods + '期)') : '暂无开奖' }}
+                  </div>
+                </div>
+                <template v-if="a.pending.length">
+                  <div v-for="p in a.pending" :key="p.bet_date" style="font-size:12px;color:var(--ink2);margin-bottom:4px">
+                    📌 {{ p.bet_date }} 下单（{{ p.N }} 个号）：
+                    <span v-if="p.N > 0" style="font-weight:700;color:var(--warn);font-family:Roboto Mono,monospace">{{ (p.picks || []).map(n => pad(n)).join(' · ') }}</span>
+                    <span v-else style="color:#b8b0a0">无信号，空仓不下注</span>
+                  </div>
+                </template>
+                <template v-if="a.history.length">
+                  <div style="font-size:11px;color:#b8b0a0;margin-top:4px">
+                    已结算：
+                    <span v-for="h in a.history.slice(0, 15)" :key="h.bet_date" :style="h.hit === 1 ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">
+                      {{ h.bet_date.slice(5) }}{{ h.hit === 1 ? '中' : '空' }}·
+                    </span>
+                    <span v-if="a.history.length > 15">…</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无跟踪数据，点右上角「刷新跟踪」生成下一期选号。</div>
+          </div>
+
+          <!-- 策略演算报告卡片（高位开出后起算 · 5期再开） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">🎯 策略演算报告 · 高位开后5期内</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">「接近样本」信号（标签遗漏 ≥ 历史最高 − offset）**高位开出后起算**：标签憋到历史高位终于开出 → 买入该标签号码 → 从开完后 5 期内再开结算（命中赚 47−N、未中亏 N，每号 1 元）。扫描 offset −2~+2 × 维度筛选方案。</div>
+
+            <template v-if="strategyScan.scheme_rows && strategyScan.scheme_rows.length">
+              <div style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);border-radius:10px;padding:12px;margin-bottom:12px;color:#fff">
+                <div style="font-size:12px;opacity:.85;margin-bottom:6px">🏆 盈利最多</div>
+                <div style="font-size:15px;font-weight:800">「{{ strategyScan.conclusion.best_profit.scheme }} + offset={{ strategyScan.conclusion.best_profit.offset }}」总盈利 <b>{{ strategyScan.conclusion.best_profit.profit.toLocaleString() }}</b>（{{ strategyScan.conclusion.best_profit.events }} 事件·命中率 {{ (strategyScan.conclusion.best_profit.hit_rate*100).toFixed(1) }}%）</div>
+                <div style="font-size:12px;opacity:.9;margin-top:6px">🎯 单事件资金效率最高维度：{{ strategyScan.conclusion.best_dim.dim }}（每事件 +{{ strategyScan.conclusion.best_dim.per_event }}）</div>
+              </div>
+
+              <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px">📈 方案 × offset 盈利对比</div>
+              <div class="table-scroll" style="max-height:320px">
+                <table class="data">
+                  <thead><tr><th>方案</th><th>offset</th><th>盈利</th><th>事件</th><th>命中率</th><th>单事件</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(r,i) in strategyScan.scheme_rows" :key="r.scheme + r.offset">
+                      <td>{{ r.scheme }}</td>
+                      <td>{{ r.offset }}</td>
+                      <td :style="r.profit >= 0 ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">{{ r.profit.toLocaleString() }}</td>
+                      <td>{{ r.events }}</td>
+                      <td>{{ (r.hit_rate*100).toFixed(1) }}%</td>
+                      <td>{{ r.per_event }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 6px">⚡ 各维度单事件盈利（offset=0，<span style="color:var(--warn)">命中率&lt;55%已排除</span>，红=负预测）</div>
+              <div class="table-scroll" style="max-height:320px">
+                <table class="data">
+                  <thead><tr><th>维度</th><th>标签数</th><th>事件</th><th>命中率</th><th>盈利</th><th>单事件</th></tr></thead>
+                  <tbody>
+                    <tr v-for="r in strategyScan.dim_rows" :key="r.dim">
+                      <td>{{ r.dim }}<span v-if="r.hit_rate < 0.55" style="color:var(--warn);font-size:11px;margin-left:4px">已排除</span></td>
+                      <td>{{ r.tags }}</td>
+                      <td>{{ r.events }}</td>
+                      <td :style="r.hit_rate < 0.55 ? 'color:var(--warn);font-weight:700' : 'color:var(--ink)'">{{ (r.hit_rate*100).toFixed(1) }}%</td>
+                      <td :style="r.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ r.profit.toLocaleString() }}</td>
+                      <td :style="r.per_event < 15 ? 'color:var(--warn);font-weight:700' : 'color:var(--ink)'">{{ r.per_event }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无演算报告。</div>
+          </div>
+
+          <!-- 策略下单卡片区 -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">🛒 策略下单 · 方案卡片</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">选方案 + offset 查看回测表现，点「复制号码」复制当前演算选号。offset 越大越宽松（信号越多），<b style="color:var(--warn)">offset=2 回测盈利最高（推荐）</b>。每号 1 元，命中赚 47−N、未中亏 N。</div>
+            <div v-if="schemeCards.length" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+              <div v-for="s in schemeCards" :key="s.scheme" style="background:#fbf8f1;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+                <div style="font-size:14px;font-weight:800;color:var(--ink)">{{ s.scheme }}</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-size:12px;color:var(--ink2)">offset</span>
+                  <select v-model.number="s.offset" style="flex:1;padding:4px 8px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
+                    <option v-for="o in [-2,-1,0,1,2]" :value="o" :key="o">{{ o }}{{ o === 2 ? '（推荐）' : '' }}</option>
+                  </select>
+                </div>
+                <div style="font-size:12px;color:var(--ink2);line-height:1.8">
+                  <div>命中率 <b :style="schemeCardRow(s).hit_rate>=0.8?'color:var(--ok)':'color:var(--ink)'">{{ (schemeCardRow(s).hit_rate*100).toFixed(1) }}%</b></div>
+                  <div>盈利 <b :style="schemeCardRow(s).profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ schemeCardRow(s).profit.toLocaleString() }}</b> · 单事件 <b>{{ schemeCardRow(s).per_event }}</b></div>
+                </div>
+                <div style="font-size:12px;color:var(--ink2);line-height:1.8;border-top:1px dashed var(--line);padding-top:6px">
+                  <div>对应号码数 <b :style="schemeCardN(s) > 0 ? 'color:var(--warn);font-size:16px' : 'color:var(--ink2);font-size:16px'">{{ schemeCardN(s) != null ? schemeCardN(s) + ' 个' : '—' }}</b></div>
+                  <div v-if="schemeCardPicks(s).length" style="margin-top:3px;color:var(--warn);font-family:Roboto Mono,monospace;font-size:11px;line-height:1.5">{{ schemeCardPicks(s).map(n=>pad(n)).join(' ') }}</div>
+                  <div v-else-if="schemeCardN(s) === 0" style="margin-top:3px;color:#b8b0a0">当前无高位信号，空仓</div>
+                </div>
+                <button class="btn btn-sm" @click="copyStrategyPicks(s)" style="background:var(--warn);color:#fff;border:none;border-radius:8px;padding:8px;font-size:14px;font-weight:700">📋 复制号码</button>
+              </div>
+            </div>
+            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无方案数据。</div>
+          </div>
+
+        </template>
+          <template v-if="dimTab==='track'">
+          <!-- 投入引擎 · 每日资金指南 -->
+          <div class="card" style="margin-top:14px;background:linear-gradient(135deg,#0f2740,#1e4a6e);border:none">
+            <div class="card-title" style="color:#fff">💰 投入引擎 · 每日资金指南
+              <button class="btn btn-sm" @click="loadEngine()" style="float:right;padding:3px 10px;font-size:12px;background:#fff;color:#1e3a5f;border:none;border-radius:6px">🔄 刷新</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#cfe0f0">本金</div>
+                <div style="font-size:18px;font-weight:800;color:#fff">{{ engine.capital }}</div>
+              </div>
+              <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#cfe0f0">安全垫 {{ engine.safety_pct }}%</div>
+                <div style="font-size:18px;font-weight:800;color:#ffd166">{{ engine.safety }}</div>
+              </div>
+              <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#cfe0f0">可用资金</div>
+                <div style="font-size:18px;font-weight:800;color:#7fe07f">{{ engine.available }}</div>
+              </div>
+              <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#cfe0f0">今日投入</div>
+                <div style="font-size:18px;font-weight:800;color:#7fc4ff">{{ engine.total_amount }}</div>
+              </div>
+              <div style="flex:1;min-width:100px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px">
+                <div style="font-size:11px;color:#cfe0f0">当前余额</div>
+                <div style="font-size:18px;font-weight:800" :style="engine.balance>=engine.capital?'color:#7fe07f':'color:#ff9b9b'">{{ engine.balance }}</div>
+              </div>
+            </div>
+            <div style="font-size:13px;color:#fff;margin-bottom:10px">
+              风险：
+              <span v-if="engine.risk_level==='green'" style="color:#7fe07f;font-weight:700">🟢 安全</span>
+              <span v-else-if="engine.risk_level==='yellow'" style="color:#ffd166;font-weight:700">🟡 预警</span>
+              <span v-else-if="engine.risk_level==='gray'" style="color:#c0c8d0;font-weight:700">⚪ 观望</span>
+              <span v-else style="color:#ff9b9b;font-weight:700">🔴 超限</span>
+              <span style="opacity:.85">· {{ engine.risk_note }}</span>
+            </div>
+            <div v-if="engine.picks && engine.picks.length" style="background:rgba(255,255,255,.08);border-radius:8px;padding:12px">
+              <div style="color:#fff;font-weight:700;margin-bottom:8px">📌 今日建议买入（{{ engine.picks.length }} 信号 · 共 {{ engine.total_N }} 号 · 投入 {{ engine.total_amount }} 元 · 单号 {{ engine.picks[0].per }} 元）</div>
+              <div v-for="p in engine.picks" :key="p.dim+p.tag" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,.15);font-size:13px;color:#fff">
+                <div style="font-weight:700;min-width:150px">{{ p.dim_name }}-{{ p.tag }}</div>
+                <div style="color:#cfe0f0">{{ p.N }}号 · 命中率{{ (p.hit_rate*100).toFixed(0) }}%</div>
+                <div style="color:#ffd166">{{ p.amount }}元</div>
+                <div style="color:#7fe07f;font-family:Roboto Mono,monospace">{{ (p.picks||[]).map(n=>pad(n)).join(' ') }}</div>
+              </div>
+            </div>
+            <div v-else style="font-size:13px;color:#cfe0f0;padding:8px 0">{{ engine.risk_note }}</div>
+          </div>
+
+          <!-- 当前信号列表（待买入 + 预警中） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">📡 当前信号
+              <span style="float:right;display:flex;align-items:center;gap:8px">
+                <button class="btn btn-sm" @click="showLogicDoc = true" style="padding:3px 10px;font-size:12px">📖 时序说明</button>
+                <select v-model.number="signalOffset" @change="loadSignals()" style="padding:3px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff">
+                  <option v-for="o in [-2,-1,0,1,2]" :value="o" :key="o">offset {{ o }}</option>
+                </select>
+                <button class="btn btn-sm" @click="loadSignals()" style="padding:3px 10px;font-size:12px">🔄 刷新</button>
+              </span>
+            </div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">时序：<b>① 预警</b>（遗漏≥历史最高−offset）→ <b>② 高位开出</b> → <b>③ 开出后下一期买入</b>。只有「待买入」可复制下单；「预警中」禁止复制，避免误买。</div>
+
+            <!-- 待买入（可复制） -->
+            <div v-if="signalPending.length" style="margin-bottom:12px">
+              <div style="font-weight:700;color:var(--ok);margin-bottom:6px">✅ 待买入 · 最新一期高位开出，下一期买入（{{ signalPending.length }} 个）</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">
+                <div v-for="sig in signalPending" :key="'p'+sig.dim+sig.tag" style="background:#f4fbf4;border:1px solid #bfe3bf;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div style="font-size:14px;font-weight:800;color:var(--ink)">{{ sig.dim_name }}-{{ sig.tag }}</div>
+                    <div style="font-size:11px;color:var(--ok);font-weight:700">已高位开出</div>
+                  </div>
+                  <div style="font-size:12px;color:var(--ink2)">开出前遗漏 {{ sig.last_gap }}期 / 历史最高 {{ sig.hist_max }}期 · {{ sig.N }}个号</div>
+                  <div style="font-size:12px;color:var(--warn);font-family:Roboto Mono,monospace;line-height:1.5">{{ (sig.picks || []).map(n=>pad(n)).join(' ') }}</div>
+                  <button class="btn btn-sm" @click="copySignal(sig)" style="background:var(--ok);color:#fff;border:none;border-radius:8px;padding:8px;font-size:13px;font-weight:700">📋 复制号码下单</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 预警中（禁用复制） -->
+            <div v-if="signalWarning.length">
+              <div style="font-weight:700;color:var(--warn);margin-bottom:6px">⚠️ 预警中 · 憋到高位未开出，禁止下单（{{ signalWarning.length }} 个）</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">
+                <div v-for="sig in signalWarning" :key="'w'+sig.dim+sig.tag" style="background:#fbf8f1;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;opacity:.75">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div style="font-size:14px;font-weight:800;color:var(--ink)">{{ sig.dim_name }}-{{ sig.tag }}</div>
+                    <div style="font-size:11px;color:var(--ink2)">遗漏 {{ sig.gap }}期</div>
+                  </div>
+                  <div style="font-size:12px;color:var(--ink2)">历史最高 {{ sig.hist_max }}期 · {{ sig.N }}个号</div>
+                  <div style="font-size:12px;color:#b8b0a0;font-family:Roboto Mono,monospace;line-height:1.5">{{ (sig.picks || []).map(n=>pad(n)).join(' ') }}</div>
+                  <button class="btn btn-sm" disabled style="background:#ccc;color:#fff;border:none;border-radius:8px;padding:8px;font-size:13px;font-weight:700;cursor:not-allowed">🔒 预警中，禁复制</button>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="!signalPending.length && !signalWarning.length" style="font-size:12px;color:#b8b0a0;padding:8px 0">当前无信号，可调大 offset 放宽触发条件。</div>
+          </div>
+
+          <!-- 时序逻辑文档弹框 -->
+          <div class="modal-mask" v-if="showLogicDoc" @click.self="showLogicDoc=false">
+            <div class="modal" style="max-width:520px">
+              <div class="modal-title">📖 下单时序逻辑说明</div>
+              <div style="font-size:13px;line-height:2;color:var(--ink)">
+                <div style="background:#f3efe5;border-radius:8px;padding:12px;margin-bottom:10px">
+                  <div><b>① 预警</b>：标签遗漏 ≥ 历史最高 − offset（憋到历史高位）——<span style="color:var(--warn)">只是预警，不买</span></div>
+                  <div><b>② 高位开出</b>：该标签终于开出——<span style="color:var(--ink2)">事件兑现</span></div>
+                  <div><b>③ 下一期买入</b>：开出后的下一期买入该标签号码——<span style="color:var(--ok);font-weight:700">唯一买入点</span></div>
+                </div>
+                <div style="font-size:12px;color:var(--ink2);line-height:1.8">
+                  单次买：每号 25 元，买一次，接下来 5 期内该标签再开即命中（赚 47−N×25），否则亏 N×25。<br>
+                  连续买：每号 10→20→40→80→160 倍投，命中即停，五期固定结束。<br>
+                  核心：<b>等高位开出后才买</b>，预警阶段（还没开出）禁止下单，避免追遗漏误买。
+                </div>
+              </div>
+              <div class="actions"><button class="btn btn-ghost" @click="showLogicDoc=false">关闭</button></div>
+            </div>
+          </div>
+
+          <!-- 维度贡献统计报表（近6个月 · 单次买） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">📊 维度贡献统计 · 近6个月（单次买）
+              <button class="btn btn-sm" @click="loadDimReport()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
+            </div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:12px">窗口 <b>{{ dimReport.window_start }}</b> ~ <b>{{ dimReport.window_end }}</b> · 每号 {{ dimReport.single_bet || 25 }} 元单次买，5期内再开命中赚 47−N、未中亏 N。与下方「触发规则记录」共用方案 / offset 联动。</div>
+
+            <div v-if="dimReport.summary && dimReport.summary.events" style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);border-radius:10px;padding:12px;margin-bottom:12px;color:#fff">
+              <div style="font-size:14px;font-weight:800">近6个月单次买累计盈亏 <b :style="dimReport.summary.total_profit>=0?'color:#7fe07f':'color:#ff9b9b'">{{ dimReport.summary.total_profit>=0?'+':'' }}{{ dimReport.summary.total_profit.toLocaleString() }}</b></div>
+              <div style="font-size:12px;opacity:.85;margin-top:4px">{{ dimReport.summary.events }} 事件 · 命中 {{ dimReport.summary.hits }} · 命中率 {{ (dimReport.summary.hit_rate*100).toFixed(1) }}% · 每事件均 <b>{{ dimReport.summary.per_event>=0?'+':'' }}{{ dimReport.summary.per_event }}</b></div>
+            </div>
+
+            <div v-if="dimReport.dims && dimReport.dims.length" class="table-scroll" style="max-height:460px">
+              <table class="data">
+                <thead><tr><th style="min-width:88px">维度</th><th>事件</th><th>命中</th><th>命中率</th><th style="min-width:110px">累计盈亏</th><th>每事件</th><th style="min-width:150px">贡献占比</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in dimReport.dims" :key="r.dim">
+                    <td>{{ r.dim_name }}</td>
+                    <td>{{ r.events }}</td>
+                    <td>{{ r.hits }}</td>
+                    <td :style="r.hit_rate>=0.5?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ (r.hit_rate*100).toFixed(1) }}%</td>
+                    <td :style="r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ r.profit>=0?'+':'' }}{{ r.profit.toLocaleString() }}</td>
+                    <td :style="r.per_event>=0?'color:var(--ok)':'color:var(--warn)'">{{ r.per_event>=0?'+':'' }}{{ r.per_event }}</td>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <div style="flex:1;height:10px;background:#f0ebe0;border-radius:5px;overflow:hidden">
+                          <div :style="{width: barWidth(r.profit)+'%', background: r.profit>=0 ? 'linear-gradient(90deg,#4caf50,#7fe07f)' : 'linear-gradient(90deg,#e08a8a,#ff9b9b)', height:'100%'}"></div>
+                        </div>
+                        <span style="font-size:11px;color:var(--ink2);min-width:36px;text-align:right">{{ r.profit>=0?'+':'' }}{{ r.profit }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">该方案 + offset 近6个月无触发记录。</div>
+          </div>
+
+          <!-- 触发规则记录区（逐条 + 累计盈亏） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">📒 触发规则记录 · 累计盈亏
+              <button class="btn btn-sm" @click="loadRuleRecords()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+              <select v-model="ruleScheme" style="padding:6px 10px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
+                <option v-for="s in schemeCards" :value="s.scheme" :key="s.scheme">{{ s.scheme }}</option>
+              </select>
+              <select v-model.number="ruleOffset" style="padding:6px 10px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
+                <option v-for="o in [-2,-1,0,1,2]" :value="o" :key="o">offset {{ o }}</option>
+              </select>
+              <button class="btn btn-sm" @click="loadRuleRecords(); loadDimReport()" style="background:var(--warn);color:#fff;border:none;border-radius:6px;padding:6px 14px">查询</button>
+            </div>
+            <div v-if="ruleRecords.events" style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);border-radius:10px;padding:12px;margin-bottom:12px;color:#fff">
+              <div style="font-size:14px;font-weight:800">单次买（每号 {{ ruleRecords.single_bet }}）累计盈亏 <b :style="ruleRecords.total_profit>=0?'color:#7fe07f':'color:#ff9b9b'">{{ ruleRecords.total_profit>=0?'+':'' }}{{ ruleRecords.total_profit.toLocaleString() }}</b></div>
+              <div style="font-size:14px;font-weight:800;margin-top:2px">连续买（{{ (ruleRecords.multi_bets||[]).join('-') }}，五期固定）累计盈亏 <b :style="ruleRecords.total_profit_multi>=0?'color:#7fe07f':'color:#ff9b9b'">{{ ruleRecords.total_profit_multi>=0?'+':'' }}{{ ruleRecords.total_profit_multi.toLocaleString() }}</b></div>
+              <div style="font-size:12px;opacity:.85;margin-top:4px">命中 {{ ruleRecords.hits }}/{{ ruleRecords.events }} 事件 · 命中率 {{ (ruleRecords.hit_rate*100).toFixed(1) }}%</div>
+            </div>
+            <div v-if="ruleMonths.length" style="max-height:420px;overflow-y:auto">
+              <div v-for="m in ruleMonths" :key="m.month" style="margin-bottom:12px">
+                <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px;padding:6px 10px;background:#f3efe5;border-radius:6px">{{ m.month }} · {{ m.records.length }} 条触发 · 月单 <span :style="m.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit>=0?'+':'' }}{{ m.profit.toLocaleString() }}</span> · 月连 <span :style="m.profit_multi>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit_multi>=0?'+':'' }}{{ m.profit_multi.toLocaleString() }}</span></div>
+                <div v-for="r in m.records" :key="r.date + r.dim + r.tag" style="display:flex;align-items:flex-start;gap:10px;padding:6px 10px;border-bottom:1px dashed var(--line);font-size:12px">
+                  <div style="min-width:56px;font-weight:700;color:var(--ink2)">{{ r.date.slice(5) }}</div>
+                  <div style="flex:1;color:var(--ink)">
+                    <span style="font-weight:700">{{ r.dim_name }}-{{ r.tag }}</span>
+                    <span style="color:var(--ink2)">· {{ r.N }}号</span>
+                    <span v-if="r.hit === 1" style="color:var(--ok);font-weight:700">· 中</span>
+                    <span v-else style="color:var(--warn)">· 空</span>
+                    <span :style="r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">· 单{{ r.profit>=0?'+':'' }}{{ r.profit }}</span>
+                    <span :style="r.profit_multi>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">· 连{{ r.profit_multi>=0?'+':'' }}{{ r.profit_multi }}</span>
+                    <span style="color:var(--ink2)">· 累计单 <b :style="r.cumulative>=0?'color:var(--ok)':'color:var(--warn)'">{{ r.cumulative>=0?'+':'' }}{{ r.cumulative }}</b></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">该方案 + offset 无触发记录。</div>
+          </div>
+          </template>
+
+      </template>
       <template v-if="cur==='/signaltrack'">
         <div class="topbar"><h2>预警信号跟踪（触发 → 后续开出）</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card">
           <button class="btn btn-danger btn-sm" v-if="isAdmin" @click="rebuildSignalTrack">🔄 一键重建信号跟踪</button>
-          <span style="font-size:12px;color:var(--ink2);margin-left:10px">信号=某标签遗漏首次接近/超过其历史最高时触发；跟踪后续几期内是否开出</span>
+        </div>
+        <div class="card">
+          <div class="card-title">🎯 信号触发规则</div>
+          <div style="font-size:13px;line-height:2;color:var(--ink)">
+            某标签 <b>当前遗漏 ≥ 历史最高遗漏 − 偏移值（当前 {{ st.trigger_rule ? st.trigger_rule.offset : '—' }} 期）</b>
+            且 <b>样本 ≥ {{ st.trigger_rule ? st.trigger_rule.min_sample : '—' }} 次</b> 时，触发一次信号。
+          </div>
+          <div style="font-size:12px;color:var(--ink2);margin-top:6px">触发后跟踪该标签后续几期内是否开出（开出=结算命中，未开出=跟踪中）；每个连续遗漏周期只记一次信号。</div>
         </div>
         <div class="card">
           <div class="card-title">整体命中率（已结算 {{ st.settled }} 条 · 跟踪中 {{ st.tracking }} 条）</div>
@@ -390,11 +1095,15 @@ table.data tr.warn td{background:var(--warnbg)}
           <div class="card-title">核心维度命中率</div>
           <div class="table-scroll">
             <table class="data">
-              <thead><tr><th>维度</th><th>信号数</th><th>5期内</th><th>10期内</th><th>15期内</th><th>跟踪中</th></tr></thead>
+              <thead><tr><th>维度</th><th>信号数</th><th>1期内</th><th>2期内</th><th>3期内</th><th>4期内</th><th>5期内</th><th>10期内</th><th>15期内</th><th>跟踪中</th></tr></thead>
               <tbody>
                 <tr v-for="s in coreSummary" :key="s.dim_key">
                   <td><b>{{ s.dim_name }}</b></td>
                   <td>{{ s.total }}</td>
+                  <td>{{ s.hit1 }}<span v-if="s.rate1 != null" :style="rateColor(s.rate1)">（{{ s.rate1 }}%）</span></td>
+                  <td>{{ s.hit2 }}<span v-if="s.rate2 != null" :style="rateColor(s.rate2)">（{{ s.rate2 }}%）</span></td>
+                  <td>{{ s.hit3 }}<span v-if="s.rate3 != null" :style="rateColor(s.rate3)">（{{ s.rate3 }}%）</span></td>
+                  <td>{{ s.hit4 }}<span v-if="s.rate4 != null" :style="rateColor(s.rate4)">（{{ s.rate4 }}%）</span></td>
                   <td>{{ s.hit5 }}<span v-if="s.rate5 != null" :style="rateColor(s.rate5)">（{{ s.rate5 }}%）</span></td>
                   <td>{{ s.hit10 }}<span v-if="s.rate10 != null" :style="rateColor(s.rate10)">（{{ s.rate10 }}%）</span></td>
                   <td>{{ s.hit15 }}<span v-if="s.rate15 != null" :style="rateColor(s.rate15)">（{{ s.rate15 }}%）</span></td>
@@ -408,11 +1117,15 @@ table.data tr.warn td{background:var(--warnbg)}
           <div class="card-title">其他维度命中率（5期内）</div>
           <div class="table-scroll">
             <table class="data">
-              <thead><tr><th>维度</th><th>信号数</th><th>5期内命中</th><th>命中率</th><th>跟踪中</th></tr></thead>
+              <thead><tr><th>维度</th><th>信号数</th><th>1期内</th><th>2期内</th><th>3期内</th><th>4期内</th><th>5期内命中</th><th>命中率</th><th>跟踪中</th></tr></thead>
               <tbody>
                 <tr v-for="s in otherSummary" :key="s.dim_key">
                   <td>{{ s.dim_name }}</td>
                   <td>{{ s.total }}</td>
+                  <td>{{ s.hit1 }}<span v-if="s.rate1 != null" :style="rateColor(s.rate1)">（{{ s.rate1 }}%）</span></td>
+                  <td>{{ s.hit2 }}<span v-if="s.rate2 != null" :style="rateColor(s.rate2)">（{{ s.rate2 }}%）</span></td>
+                  <td>{{ s.hit3 }}<span v-if="s.rate3 != null" :style="rateColor(s.rate3)">（{{ s.rate3 }}%）</span></td>
+                  <td>{{ s.hit4 }}<span v-if="s.rate4 != null" :style="rateColor(s.rate4)">（{{ s.rate4 }}%）</span></td>
                   <td>{{ s.hit5 }}</td>
                   <td>
                     <span v-if="s.hit_rate != null" :style="s.hit_rate>=80?'color:var(--ok);font-weight:700':(s.hit_rate<40?'color:var(--warn);font-weight:700':'')">{{ s.hit_rate }}%</span>
@@ -662,6 +1375,143 @@ createApp({
     const dimDict = ref([]);
     const dimCur = ref('');
     const curDim = computed(() => dimDict.value.find(d => d.dim_key === dimCur.value) || null);
+    // 建议号码
+    const suggestVotes = ref([]);
+    const suggestSignals = ref([]);
+    const suggestMax = ref(0);
+    const suggestThreshold = ref(6);
+    const suggestDate = ref('');
+    const backtestMonths = ref([]);
+    const backtestStart = ref('');
+    const orderTrack = ref({});
+    const orderTrackLt4 = ref({});
+    const orderTrackEq2 = ref({});
+    const orderTrackClose = ref({});
+    const orderBetRatio = ref(0.5);
+    const orderOffset = ref(0);
+    const orderScheme = ref('ratio');
+    const orderBaseBet = ref(10);
+    const algoTrack = ref({});
+    const strategyScan = ref({});
+    const strategyOrders = ref({ months: [], total: 0 });
+    const schemeCards = computed(() => {
+      const rows = (strategyScan.value.scheme_rows || []);
+      const map = {};
+      for (const r of rows) {
+        if (!map[r.scheme]) map[r.scheme] = { scheme: r.scheme, offset: r.offset, best: r };
+        if (r.profit > map[r.scheme].best.profit) { map[r.scheme].best = r; map[r.scheme].offset = r.offset; }
+      }
+      return Object.values(map);
+    });
+    function schemeCardRow(card) {
+      const rows = (strategyScan.value.scheme_rows || []);
+      return rows.find(r => r.scheme === card.scheme && r.offset === card.offset) || card.best || { hit_rate: 0, profit: 0, per_event: 0 };
+    }
+    function schemeCardN(card) {
+      const p = (strategyScan.value.order_preview || {})[card.scheme] || {};
+      const r = p[card.offset];
+      return r ? r.N : null;
+    }
+    function schemeCardPicks(card) {
+      const p = (strategyScan.value.order_preview || {})[card.scheme] || {};
+      const r = p[card.offset];
+      return r ? (r.picks || []) : [];
+    }
+    async function loadStrategyOrders() {
+      try { strategyOrders.value = await api('GET', '/api/strategyOrder/list'); } catch (e) {}
+    }
+    async function placeStrategyOrder(card) {
+      try {
+        const r = await api('POST', '/api/strategyOrder/place', { scheme: card.scheme, offset: card.offset });
+        const o = r.order;
+        const tip = r.duplicate
+          ? `「${o.scheme} off${o.offset}」${o.bet_date} 已有待开奖下单，直接复用（${o.N} 个号）`
+          : `下单成功：${o.bet_date} · ${o.N} 个号`;
+        alert(tip);
+        await loadStrategyOrders();
+      } catch (e) { alert('下单失败：' + e.message); }
+    }
+    async function copyStrategyPicks(card) {
+      const picks = schemeCardPicks(card);
+      if (!picks.length) { alert('当前无号码可复制（空仓）'); return; }
+      const text = picks.map(n => pad(n)).join(' ');
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+      }
+      alert('已复制 ' + picks.length + ' 个号码：\n' + text);
+    }
+    // 触发规则记录（逐条 + 累计盈亏）
+    const ruleScheme = ref('全维度19');
+    const ruleOffset = ref(2);
+    const ruleRecords = ref({ records: [], total_profit: 0, hit_rate: 0, events: 0, hits: 0 });
+    // 单次跟踪 · 维度贡献统计报表（近6个月·单次买）
+    const dimReport = ref({ summary: {}, dims: [], monthly: [], window_start: '', window_end: '', single_bet: 25 });
+    // 投入引擎 · 每日资金指南
+    const engine = ref({ capital: 0, safety: 0, available: 0, budget: 0, picks: [], total_N: 0, total_amount: 0, balance: 0, risk_level: 'gray', risk_note: '' });
+    const ruleMonths = computed(() => {
+      const m = {};
+      for (const r of ruleRecords.value.records || []) {
+        const k = (r.date || '').slice(0, 7) || '未知';
+        if (!m[k]) m[k] = { month: k, records: [], profit: 0, profit_multi: 0 };
+        m[k].records.push(r);
+        m[k].profit = Math.round((m[k].profit + (r.profit || 0)) * 100) / 100;
+        m[k].profit_multi = Math.round((m[k].profit_multi + (r.profit_multi || 0)) * 100) / 100;
+      }
+      return Object.values(m).sort((a, b) => b.month.localeCompare(a.month));
+    });
+    async function loadRuleRecords() {
+      try {
+        ruleRecords.value = await api('GET', '/api/strategyOrder/rules?scheme=' + encodeURIComponent(ruleScheme.value) + '&offset=' + ruleOffset.value);
+      } catch (e) {}
+    }
+    async function loadDimReport() {
+      try {
+        dimReport.value = await api('GET', '/api/strategyOrder/dim-report?scheme=' + encodeURIComponent(ruleScheme.value) + '&offset=' + ruleOffset.value + '&months=6');
+      } catch (e) {}
+    }
+    async function loadEngine() {
+      try {
+        engine.value = await api('GET', '/api/strategyOrder/engine');
+      } catch (e) {}
+    }
+    function dimBarMax() {
+      let m = 0;
+      for (const r of dimReport.value.dims || []) m = Math.max(m, Math.abs(r.profit || 0));
+      return m || 1;
+    }
+    function barWidth(v) {
+      return Math.max(3, Math.round(Math.abs(v) / dimBarMax() * 100));
+    }
+    // 当前信号列表（预警中 + 待买入）
+    const signalWarning = ref([]);
+    const signalPending = ref([]);
+    const signalOffset = ref(2);
+    const showLogicDoc = ref(false);
+    async function loadSignals() {
+      try {
+        const d = await api('GET', '/api/strategyOrder/signals?offset=' + signalOffset.value);
+        signalWarning.value = (d.signals && d.signals.warning) || [];
+        signalPending.value = (d.signals && d.signals.pending) || [];
+      } catch (e) {}
+    }
+    function copySignal(sig) {
+      const text = (sig.picks || []).map(n => pad(n)).join(' ');
+      try { navigator.clipboard.writeText(text); } catch (e) {}
+      alert('已复制 ' + sig.dim_name + '-' + sig.tag + ' 的 ' + (sig.N || 0) + ' 个号码：\n' + text);
+    }
+    const suggestOptions = computed(() => {
+      const arr = [];
+      for (let i = 0; i <= suggestMax.value; i++) arr.push(i);
+      return arr;
+    });
+    const suggestKeep = computed(() => suggestVotes.value.filter(v => v.vote >= suggestThreshold.value));
+    const suggestDrop = computed(() => suggestVotes.value.filter(v => v.vote < suggestThreshold.value));
+    const suggestKeepText = computed(() => suggestKeep.value.map(v => String(v.number)).join('.'));
+    const suggestDropText = computed(() => suggestDrop.value.map(v => String(v.number)).join('.'));
     // 信号跟踪
     const st = ref({ items: [], summary: [], total_signals: 0, settled: 0, tracking: 0, hit_bucket: {} });
     const coreSummary = computed(() => st.value.summary.filter(s => s.group === 'core'));
@@ -766,6 +1616,86 @@ createApp({
         if (!dimCur.value && dimDict.value.length) dimCur.value = dimDict.value[0].dim_key;
       } catch(e){}
     }
+    async function loadSuggest(){
+      try {
+        const q = suggestDate.value ? '?date=' + suggestDate.value : '';
+        const d = await api('GET', '/api/suggestNumber/votes' + q);
+        suggestVotes.value = d.votes || [];
+        suggestSignals.value = d.signals || [];
+        suggestMax.value = d.max_vote || 0;
+        if (suggestThreshold.value > suggestMax.value) suggestThreshold.value = suggestMax.value;
+      } catch(e){}
+    }
+    async function loadBacktest(){
+      try {
+        const d = await api('GET', '/api/suggestNumber/backtest');
+        backtestMonths.value = d.months || [];
+        backtestStart.value = d.start_date || '';
+      } catch(e){}
+    }
+    async function loadOrderTrack(){
+      try {
+        orderTrack.value = await api('GET', '/api/suggestNumber/order-track?mode=ge4&bet_ratio=' + orderBetRatio.value);
+      } catch(e){}
+    }
+    async function loadOrderTrackLt4(){
+      try {
+        orderTrackLt4.value = await api('GET', '/api/suggestNumber/order-track?mode=lt4&bet_ratio=' + orderBetRatio.value);
+      } catch(e){}
+    }
+    async function loadOrderTrackEq2(){
+      try {
+        orderTrackEq2.value = await api('GET', '/api/suggestNumber/order-track?mode=eq2&signal_top_n=5&bet_ratio=' + orderBetRatio.value);
+      } catch(e){}
+    }
+    async function loadOrderTrackClose(){
+      try {
+        var url = '/api/suggestNumber/order-track?mode=eq1&signal_source=close_sample&offset=' + orderOffset.value + '&signal_top_n=10&bet_ratio=' + orderBetRatio.value + '&bet_scheme=' + orderScheme.value;
+        if (orderScheme.value === 'martingale') url += '&base_bet=' + orderBaseBet.value;
+        orderTrackClose.value = await api('GET', url);
+      } catch(e){}
+    }
+    async function loadAlgoTrack(){
+      try {
+        algoTrack.value = await api('GET', '/api/algoTrack/list');
+      } catch(e){}
+    }
+    async function loadStrategyScan(){
+      try {
+        strategyScan.value = await api('GET', '/api/suggestNumber/strategy-scan');
+      } catch(e){}
+    }
+    async function loadTrackTab(){
+      try {
+        if (!strategyScan.value || !strategyScan.value.scheme_rows) await loadStrategyScan();
+        await loadSignals();
+        await loadRuleRecords();
+        await loadDimReport();
+        await loadEngine();
+      } catch(e){}
+    }
+    async function refreshAlgoTrack(){
+      try {
+        await api('POST', '/api/algoTrack/refresh');
+        toast('跟踪已刷新');
+        await loadAlgoTrack();
+      } catch(e){ toast('刷新失败：' + (e.message || e)); }
+    }
+    function bucketOf(m, x){ return m.buckets.find(b => b.vote === x); }
+    function copyText(text, label){
+      const doCopy = (t) => {
+        navigator.clipboard.writeText(t).then(() => toast('已复制' + label + '：' + t)).catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = t; ta.style.position='fixed'; ta.style.opacity='0';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); toast('已复制' + label + '：' + t); } catch(e2){}
+          document.body.removeChild(ta);
+        });
+      };
+      doCopy(text);
+    }
+    function copySuggestKeep(){ copyText(suggestKeepText.value, '命中号码'); }
+    function copySuggestDrop(){ copyText(suggestDropText.value, '淘汰号码'); }
     function tagRankStyle(t){
       const threshold = (t.history_max_rank || 0) - (warnOffset.value || 2);
       const hot = t.current_rank > 0 && t.current_rank >= threshold;
@@ -916,6 +1846,7 @@ createApp({
       dash, recs, recPage, recTotal, recTotalPages, recFilter, selectedIds, allSelected,
       cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
       dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
+      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
