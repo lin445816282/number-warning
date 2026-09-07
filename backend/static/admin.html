@@ -766,7 +766,7 @@ table.data tr.warn td{background:var(--warnbg)}
             <div class="card-title">🔭 后续演算跟踪 · 多算法前向验证
               <button class="btn btn-sm" @click="refreshAlgoTrack()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新跟踪</button>
             </div>
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">6 个候选算法从最新数据日起固化「明日选号」，开奖后自动结算命中（样本外前向验证，免疫回测前视偏差）。匹配数据更新后自动刷新，也可手动点右上角刷新。</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">7 个候选算法从最新数据日起固化「明日选号」，开奖后自动结算命中（样本外前向验证，免疫回测前视偏差）。匹配数据更新后自动刷新，也可手动点右上角刷新。</div>
 
             <div v-if="algoTrack.algos && algoTrack.algos.length">
               <div v-for="a in algoTrack.algos" :key="a.key" style="background:#fbf8f1;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">
@@ -795,83 +795,6 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
             </div>
             <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无跟踪数据，点右上角「刷新跟踪」生成下一期选号。</div>
-          </div>
-
-          <!-- 策略演算报告卡片（高位开出后起算 · 5期再开） -->
-          <div class="card" style="margin-top:14px">
-            <div class="card-title">🎯 策略演算报告 · 高位开后5期内</div>
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">「接近样本」信号（标签遗漏 ≥ 历史最高 − offset）**高位开出后起算**：标签憋到历史高位终于开出 → 买入该标签号码 → 从开完后 5 期内再开结算（命中赚 47−N、未中亏 N，每号 1 元）。扫描 offset −2~+2 × 维度筛选方案。</div>
-
-            <template v-if="strategyScan.scheme_rows && strategyScan.scheme_rows.length">
-              <div style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);border-radius:10px;padding:12px;margin-bottom:12px;color:#fff">
-                <div style="font-size:12px;opacity:.85;margin-bottom:6px">🏆 盈利最多</div>
-                <div style="font-size:15px;font-weight:800">「{{ strategyScan.conclusion.best_profit.scheme }} + offset={{ strategyScan.conclusion.best_profit.offset }}」总盈利 <b>{{ strategyScan.conclusion.best_profit.profit.toLocaleString() }}</b>（{{ strategyScan.conclusion.best_profit.events }} 事件·命中率 {{ (strategyScan.conclusion.best_profit.hit_rate*100).toFixed(1) }}%）</div>
-                <div style="font-size:12px;opacity:.9;margin-top:6px">🎯 单事件资金效率最高维度：{{ strategyScan.conclusion.best_dim.dim }}（每事件 +{{ strategyScan.conclusion.best_dim.per_event }}）</div>
-              </div>
-
-              <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px">📈 方案 × offset 盈利对比</div>
-              <div class="table-scroll" style="max-height:320px">
-                <table class="data">
-                  <thead><tr><th>方案</th><th>offset</th><th>盈利</th><th>事件</th><th>命中率</th><th>单事件</th></tr></thead>
-                  <tbody>
-                    <tr v-for="(r,i) in strategyScan.scheme_rows" :key="r.scheme + r.offset">
-                      <td>{{ r.scheme }}</td>
-                      <td>{{ r.offset }}</td>
-                      <td :style="r.profit >= 0 ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">{{ r.profit.toLocaleString() }}</td>
-                      <td>{{ r.events }}</td>
-                      <td>{{ (r.hit_rate*100).toFixed(1) }}%</td>
-                      <td>{{ r.per_event }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div style="font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 6px">⚡ 各维度单事件盈利（offset=0，<span style="color:var(--warn)">命中率&lt;55%已排除</span>，红=负预测）</div>
-              <div class="table-scroll" style="max-height:320px">
-                <table class="data">
-                  <thead><tr><th>维度</th><th>标签数</th><th>事件</th><th>命中率</th><th>盈利</th><th>单事件</th></tr></thead>
-                  <tbody>
-                    <tr v-for="r in strategyScan.dim_rows" :key="r.dim">
-                      <td>{{ r.dim }}<span v-if="r.hit_rate < 0.55" style="color:var(--warn);font-size:11px;margin-left:4px">已排除</span></td>
-                      <td>{{ r.tags }}</td>
-                      <td>{{ r.events }}</td>
-                      <td :style="r.hit_rate < 0.55 ? 'color:var(--warn);font-weight:700' : 'color:var(--ink)'">{{ (r.hit_rate*100).toFixed(1) }}%</td>
-                      <td :style="r.profit >= 0 ? 'color:var(--ok)' : 'color:var(--warn)'">{{ r.profit.toLocaleString() }}</td>
-                      <td :style="r.per_event < 15 ? 'color:var(--warn);font-weight:700' : 'color:var(--ink)'">{{ r.per_event }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </template>
-            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无演算报告。</div>
-          </div>
-
-          <!-- 策略下单卡片区 -->
-          <div class="card" style="margin-top:14px">
-            <div class="card-title">🛒 策略下单 · 方案卡片</div>
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">选方案 + offset 查看回测表现，点「复制号码」复制当前演算选号。offset 越大越宽松（信号越多），<b style="color:var(--warn)">offset=2 回测盈利最高（推荐）</b>。每号 1 元，命中赚 47−N、未中亏 N。</div>
-            <div v-if="schemeCards.length" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
-              <div v-for="s in schemeCards" :key="s.scheme" style="background:#fbf8f1;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
-                <div style="font-size:14px;font-weight:800;color:var(--ink)">{{ s.scheme }}</div>
-                <div style="display:flex;align-items:center;gap:8px">
-                  <span style="font-size:12px;color:var(--ink2)">offset</span>
-                  <select v-model.number="s.offset" style="flex:1;padding:4px 8px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                    <option v-for="o in [-2,-1,0,1,2]" :value="o" :key="o">{{ o }}{{ o === 2 ? '（推荐）' : '' }}</option>
-                  </select>
-                </div>
-                <div style="font-size:12px;color:var(--ink2);line-height:1.8">
-                  <div>命中率 <b :style="schemeCardRow(s).hit_rate>=0.8?'color:var(--ok)':'color:var(--ink)'">{{ (schemeCardRow(s).hit_rate*100).toFixed(1) }}%</b></div>
-                  <div>盈利 <b :style="schemeCardRow(s).profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ schemeCardRow(s).profit.toLocaleString() }}</b> · 单事件 <b>{{ schemeCardRow(s).per_event }}</b></div>
-                </div>
-                <div style="font-size:12px;color:var(--ink2);line-height:1.8;border-top:1px dashed var(--line);padding-top:6px">
-                  <div>对应号码数 <b :style="schemeCardN(s) > 0 ? 'color:var(--warn);font-size:16px' : 'color:var(--ink2);font-size:16px'">{{ schemeCardN(s) != null ? schemeCardN(s) + ' 个' : '—' }}</b></div>
-                  <div v-if="schemeCardPicks(s).length" style="margin-top:3px;color:var(--warn);font-family:Roboto Mono,monospace;font-size:11px;line-height:1.5">{{ schemeCardPicks(s).map(n=>pad(n)).join(' ') }}</div>
-                  <div v-else-if="schemeCardN(s) === 0" style="margin-top:3px;color:#b8b0a0">当前无高位信号，空仓</div>
-                </div>
-                <button class="btn btn-sm" @click="copyStrategyPicks(s)" style="background:var(--warn);color:#fff;border:none;border-radius:8px;padding:8px;font-size:14px;font-weight:700">📋 复制号码</button>
-              </div>
-            </div>
-            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无方案数据。</div>
           </div>
 
         </template>
@@ -921,6 +844,38 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
             </div>
             <div v-else style="font-size:13px;color:#cfe0f0;padding:8px 0">{{ engine.risk_note }}</div>
+          </div>
+
+          <!-- 4维正信号 · 单期买前向验证（样本外） -->
+          <div class="card" style="margin-top:14px">
+            <div class="card-title">🔬 4维正信号 · 单期买前向验证
+              <button class="btn btn-sm" @click="refreshAlgoTrack()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
+            </div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">仅投「春夏秋冬 / 大小单双 / 号码波色 / 白边黑中」4 个稳定正信号维度（单期回测：前后半增量均超 +3%）。时序：高位开出 → 下一期买入 → 单期结算。样本外前向验证，攒 20~30 期后看命中率是否稳定在回测的 40.7%。</div>
+            <template v-if="posdimAlgo">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div style="font-size:13px;font-weight:700;color:var(--ink)">{{ posdimAlgo.name }}</div>
+                <div style="font-size:11px" :style="posdimAlgo.stats.hit_rate != null ? (posdimAlgo.stats.hit_rate >= 0.4 ? 'color:var(--ok)' : 'color:var(--warn)') : 'color:#b8b0a0'">
+                  {{ posdimAlgo.stats.hit_rate != null ? ('前向命中 ' + (posdimAlgo.stats.hit_rate*100).toFixed(1) + '% (' + posdimAlgo.stats.hit + '/' + posdimAlgo.stats.periods + '期)') : '暂无开奖（样本外验证中）' }}
+                </div>
+              </div>
+              <template v-if="posdimAlgo.pending.length">
+                <div v-for="p in posdimAlgo.pending" :key="p.bet_date" style="font-size:12px;color:var(--ink2);margin-bottom:4px">
+                  📌 {{ p.bet_date }} 下单（{{ p.N }} 个号）：
+                  <span v-if="p.N > 0" style="font-weight:700;color:var(--warn);font-family:Roboto Mono,monospace">{{ (p.picks || []).map(n => pad(n)).join(' · ') }}</span>
+                  <span v-else style="color:#b8b0a0">无信号，空仓不下注</span>
+                </div>
+              </template>
+              <template v-if="posdimAlgo.history.length">
+                <div style="font-size:11px;color:#b8b0a0;margin-top:4px">
+                  已结算：
+                  <span v-for="h in posdimAlgo.history.slice(0, 30)" :key="h.bet_date" :style="h.hit === 1 ? 'color:var(--ok);font-weight:700' : 'color:var(--warn)'">
+                    {{ h.bet_date.slice(5) }}{{ h.hit === 1 ? '中' : '空' }}·
+                  </span>
+                </div>
+              </template>
+            </template>
+            <div v-else style="font-size:12px;color:#b8b0a0;padding:8px 0">暂无跟踪数据，点「🔄 刷新」生成。</div>
           </div>
 
           <!-- 当前信号列表（待买入 + 预警中） -->
@@ -982,8 +937,7 @@ table.data tr.warn td{background:var(--warnbg)}
                   <div><b>③ 下一期买入</b>：开出后的下一期买入该标签号码——<span style="color:var(--ok);font-weight:700">唯一买入点</span></div>
                 </div>
                 <div style="font-size:12px;color:var(--ink2);line-height:1.8">
-                  单次买：每号 25 元，买一次，接下来 5 期内该标签再开即命中（赚 47−N×25），否则亏 N×25。<br>
-                  连续买：每号 10→20→40→80→160 倍投，命中即停，五期固定结束。<br>
+                  单次买：每号 25 元，下一期买入（唯一买入点），单期结算——下一期该标签开出即命中（赚 47−N×25），否则亏 N×25。<br>
                   核心：<b>等高位开出后才买</b>，预警阶段（还没开出）禁止下单，避免追遗漏误买。
                 </div>
               </div>
@@ -996,7 +950,7 @@ table.data tr.warn td{background:var(--warnbg)}
             <div class="card-title">📊 维度贡献统计 · 近6个月（单次买）
               <button class="btn btn-sm" @click="loadDimReport()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
             </div>
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:12px">窗口 <b>{{ dimReport.window_start }}</b> ~ <b>{{ dimReport.window_end }}</b> · 每号 {{ dimReport.single_bet || 25 }} 元单次买，5期内再开命中赚 47−N、未中亏 N。与下方「触发规则记录」共用方案 / offset 联动。</div>
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:12px">窗口 <b>{{ dimReport.window_start }}</b> ~ <b>{{ dimReport.window_end }}</b> · 每号 {{ dimReport.single_bet || 25 }} 元单次买，下一期买入（唯一买入点）单期结算——下一期开出命中赚 47−N、未中亏 N。与下方「触发规则记录」共用方案 / offset 联动。</div>
 
             <div v-if="dimReport.summary && dimReport.summary.events" style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);border-radius:10px;padding:12px;margin-bottom:12px;color:#fff">
               <div style="font-size:14px;font-weight:800">近6个月单次买累计盈亏 <b :style="dimReport.summary.total_profit>=0?'color:#7fe07f':'color:#ff9b9b'">{{ dimReport.summary.total_profit>=0?'+':'' }}{{ dimReport.summary.total_profit.toLocaleString() }}</b></div>
@@ -1045,12 +999,11 @@ table.data tr.warn td{background:var(--warnbg)}
             </div>
             <div v-if="ruleRecords.events" style="background:linear-gradient(135deg,#1e3a5f,#2d5a8e);border-radius:10px;padding:12px;margin-bottom:12px;color:#fff">
               <div style="font-size:14px;font-weight:800">单次买（每号 {{ ruleRecords.single_bet }}）累计盈亏 <b :style="ruleRecords.total_profit>=0?'color:#7fe07f':'color:#ff9b9b'">{{ ruleRecords.total_profit>=0?'+':'' }}{{ ruleRecords.total_profit.toLocaleString() }}</b></div>
-              <div style="font-size:14px;font-weight:800;margin-top:2px">连续买（{{ (ruleRecords.multi_bets||[]).join('-') }}，五期固定）累计盈亏 <b :style="ruleRecords.total_profit_multi>=0?'color:#7fe07f':'color:#ff9b9b'">{{ ruleRecords.total_profit_multi>=0?'+':'' }}{{ ruleRecords.total_profit_multi.toLocaleString() }}</b></div>
               <div style="font-size:12px;opacity:.85;margin-top:4px">命中 {{ ruleRecords.hits }}/{{ ruleRecords.events }} 事件 · 命中率 {{ (ruleRecords.hit_rate*100).toFixed(1) }}%</div>
             </div>
             <div v-if="ruleMonths.length" style="max-height:420px;overflow-y:auto">
               <div v-for="m in ruleMonths" :key="m.month" style="margin-bottom:12px">
-                <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px;padding:6px 10px;background:#f3efe5;border-radius:6px">{{ m.month }} · {{ m.records.length }} 条触发 · 月单 <span :style="m.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit>=0?'+':'' }}{{ m.profit.toLocaleString() }}</span> · 月连 <span :style="m.profit_multi>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit_multi>=0?'+':'' }}{{ m.profit_multi.toLocaleString() }}</span></div>
+                <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px;padding:6px 10px;background:#f3efe5;border-radius:6px">{{ m.month }} · {{ m.records.length }} 条触发 · 月盈亏 <span :style="m.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit>=0?'+':'' }}{{ m.profit.toLocaleString() }}</span></div>
                 <div v-for="r in m.records" :key="r.date + r.dim + r.tag" style="display:flex;align-items:flex-start;gap:10px;padding:6px 10px;border-bottom:1px dashed var(--line);font-size:12px">
                   <div style="min-width:56px;font-weight:700;color:var(--ink2)">{{ r.date.slice(5) }}</div>
                   <div style="flex:1;color:var(--ink)">
@@ -1058,9 +1011,8 @@ table.data tr.warn td{background:var(--warnbg)}
                     <span style="color:var(--ink2)">· {{ r.N }}号</span>
                     <span v-if="r.hit === 1" style="color:var(--ok);font-weight:700">· 中</span>
                     <span v-else style="color:var(--warn)">· 空</span>
-                    <span :style="r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">· 单{{ r.profit>=0?'+':'' }}{{ r.profit }}</span>
-                    <span :style="r.profit_multi>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">· 连{{ r.profit_multi>=0?'+':'' }}{{ r.profit_multi }}</span>
-                    <span style="color:var(--ink2)">· 累计单 <b :style="r.cumulative>=0?'color:var(--ok)':'color:var(--warn)'">{{ r.cumulative>=0?'+':'' }}{{ r.cumulative }}</b></span>
+                    <span :style="r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">· 盈亏{{ r.profit>=0?'+':'' }}{{ r.profit }}</span>
+                    <span style="color:var(--ink2)">· 累计 <b :style="r.cumulative>=0?'color:var(--ok)':'color:var(--warn)'">{{ r.cumulative>=0?'+':'' }}{{ r.cumulative }}</b></span>
                   </div>
                 </div>
               </div>
@@ -1660,6 +1612,10 @@ createApp({
         algoTrack.value = await api('GET', '/api/algoTrack/list');
       } catch(e){}
     }
+    const posdimAlgo = computed(() => {
+      const list = algoTrack.value && algoTrack.value.algos;
+      return list ? list.find(a => a.key === 'posdim_single_off2') : null;
+    });
     async function loadStrategyScan(){
       try {
         strategyScan.value = await api('GET', '/api/suggestNumber/strategy-scan');
@@ -1668,6 +1624,7 @@ createApp({
     async function loadTrackTab(){
       try {
         if (!strategyScan.value || !strategyScan.value.scheme_rows) await loadStrategyScan();
+        await loadAlgoTrack();
         await loadSignals();
         await loadRuleRecords();
         await loadDimReport();
@@ -1846,7 +1803,7 @@ createApp({
       dash, recs, recPage, recTotal, recTotalPages, recFilter, selectedIds, allSelected,
       cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
       dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
-      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,
+      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

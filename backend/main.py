@@ -206,6 +206,10 @@ DEFAULT_ZODIAC = {
     "鸡": [10,22,34,46], "猴": [11,23,35,47], "羊": [12,24,36,48],
 }
 
+# 4维稳定正信号（单期买回测验证：前后半增量均>+3%，全量增量+5~+10%，非过拟合）
+# season_type=春夏秋冬 / size_odd_even=大小单双 / wave_color=号码波色 / edge_color=白边黑中
+POS_DIMS = ["season_type", "size_odd_even", "wave_color", "edge_color"]
+
 # 演算跟踪算法清单（「后续演算跟踪」的跟踪对象，参数与 order-track 一致）
 TRACK_ALGOS = [
     {"key": "close_eq1_off0", "name": "接近样本·票数=1(创新高)", "mode": "eq1", "signal_source": "close_sample", "offset": 0, "signal_top_n": 10, "sort_by": "gap"},
@@ -214,6 +218,7 @@ TRACK_ALGOS = [
     {"key": "close_eq2_off2", "name": "接近样本·票数=2(off2)", "mode": "eq2", "signal_source": "close_sample", "offset": 2, "signal_top_n": 10, "sort_by": "gap"},
     {"key": "dim_eq2_top5", "name": "建议号码·票数=2(前5)", "mode": "eq2", "signal_source": "dim_max", "signal_top_n": 5, "sort_by": "gap"},
     {"key": "dim_ge2_top5", "name": "建议号码·票数≥2(前5)", "mode": "ge2", "signal_source": "dim_max", "signal_top_n": 5, "sort_by": "gap"},
+    {"key": "posdim_single_off2", "name": "4维正信号·单期买(off2)", "generator": "posdim_single", "offset": 2},
 ]
 
 MENUS = [
@@ -1623,7 +1628,7 @@ def _order_row_to_dict(row):
 
 def _compute_rule_records(dims, offset, window=None):
     """回放历史，逐条生成「高位开出」触发规则记录 + 累计盈亏。
-    口径：标签遗漏 gap >= 历史最高 hist_max - offset 时开出 → 买入该标签号码 → 5期内再开结算（命中赚 47−N、未中亏 N）。
+    口径：标签遗漏 gap >= 历史最高 hist_max - offset 时开出（高位开出）→ 下一期买入该标签号码（唯一买入点）→ 单期结算（下一期开出命中赚 47−N、未中亏 N）。
     window：历史最高遗漏滚动窗口（期），0/None=全量历史。"""
     db = get_db()
     cycle = db.execute(
@@ -1669,12 +1674,10 @@ def _compute_rule_records(dims, offset, window=None):
                     events_now.append((dim, tag, len(tag_nums(dim, tag))))
         # 2. 结算 + 逐条记录（单次买 + 连续买两种模式）
         for dim, tag, N in events_now:
-            # 单次买：每号 SINGLE_BET 元，买一次，5期内再开结算
+            # 单次买：每号 SINGLE_BET 元，下一期买入（唯一买入点），单期结算
             hit = False
-            for j in range(i + 1, min(i + 6, len(rows))):
-                if match_labels(rows[j]["source_number"], zodiac_map).get(dim) == tag:
-                    hit = True
-                    break
+            if i + 1 < len(rows):
+                hit = match_labels(rows[i + 1]["source_number"], zodiac_map).get(dim) == tag
             profit_single = SINGLE_BET * (STRATEGY_ODDS - N) if hit else -SINGLE_BET * N
             cumulative_single += profit_single
             # 连续买：命中就停（马丁格尔），从高位开出下一期开始，五期固定结束
@@ -1883,6 +1886,30 @@ def _compute_current_signals(offset, window=None):
     return {"warning": warning, "pending": pending}
 
 
+def _compute_posdim_single_next(offset=2, window=None):
+    """4维正信号·单期买选号：最新一期高位开出的标签（仅 POS_DIMS 4维），下一期买入号码并集。
+    用于 algo_forward_track 前向验证（方案A，样本外跑 20~30 期确认稳定后再切投入引擎）。"""
+    from datetime import timedelta
+    sig = _compute_current_signals(offset, window)
+    db = get_db()
+    last_date = db.execute(
+        "SELECT MAX(record_date) d FROM number_knowledge_record WHERE status=1").fetchone()["d"]
+    db.close()
+    picks = set()
+    detail = []
+    for p in sig.get("pending", []):
+        if p["dim"] not in POS_DIMS:
+            continue
+        picks.update(p["picks"])
+        detail.append({"dim": p["dim"], "dim_name": p["dim_name"],
+                       "tag": p["tag"], "N": p["N"]})
+    picks = sorted(picks)
+    next_date = ""
+    if last_date:
+        next_date = (datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    return {"date": next_date, "picks": picks, "N": len(picks), "detail": detail}
+
+
 def _compute_engine():
     """投入引擎：基于本金 + 当前待买入信号 + 历史命中率，输出每日下单资金指南。
     原则：① 安全垫永不投入；② 只投正期望且高命中(≥红线)的信号；③ 进取仓位按本金比例；④ 单号金额动态摊薄。"""
@@ -1906,15 +1933,25 @@ def _compute_engine():
         a['ev'] += 1
         a['hit'] += r['hit']
 
-    # 3. 筛选候选：维度命中率 ≥ 红线 且 样本 ≥ 5
+    # 3. 筛选候选：维度近3月逐月盈亏全正（近期持续盈利才计入，否则观望）+ 样本 ≥ 5
+    monthly = {}
+    for r in rec['records']:
+        m = r['date'][:7]
+        d = monthly.setdefault(r['dim'], {})
+        d[m] = d.get(m, 0) + r['profit']
+    all_months = sorted({r['date'][:7] for r in rec['records']})
+    recent3 = all_months[-3:] if len(all_months) >= 3 else all_months
+
     candidates = []
     for s in pending:
         st = dim_stat.get(s['dim'])
         if not st or st['ev'] < 5:
             continue
-        p = st['hit'] / st['ev']
-        if p * 100 < hit_floor:
+        # 近3月逐月全正才计入，否则观望
+        ms = monthly.get(s['dim'], {})
+        if not all(ms.get(m, 0) > 0 for m in recent3):
             continue
+        p = st['hit'] / st['ev']
         N = s['N']
         ev_per = p * (STRATEGY_ODDS - N) - (1 - p) * N
         candidates.append({
@@ -1955,7 +1992,7 @@ def _compute_engine():
     # 7. 风险等级（按总投入占可用资金比例）
     ratio = total_amount / available if available else 0
     if not candidates:
-        risk, risk_note = 'gray', f'当前无符合标准(命中率≥红线)的待买入信号，{bet_date} 建议观望'
+        risk, risk_note = 'gray', f'当前无近3月逐月全正的待买入信号，{bet_date} 建议观望'
     elif ratio > 1:
         risk, risk_note = 'red', f'信号过多，总投入 {total_amount} 元已超可用资金 {available} 元，建议提高安全垫或降低单号金额'
     elif ratio >= 0.7:
@@ -2093,11 +2130,14 @@ def _algo_track_settle_and_generate():
         auth = f"Bearer {token}"
         next_rows = []
         for algo in TRACK_ALGOS:
-            r = suggest_number_order_track(
-                mode=algo["mode"], signal_top_n=algo["signal_top_n"],
-                signal_source=algo["signal_source"], offset=algo.get("offset", 0),
-                sort_by=algo.get("sort_by", "gap"), user=auth)
-            nxt = r.get("next_order") or {}
+            if algo.get("generator") == "posdim_single":
+                nxt = _compute_posdim_single_next(offset=algo.get("offset", 2), window=get_strategy_window())
+            else:
+                r = suggest_number_order_track(
+                    mode=algo["mode"], signal_top_n=algo["signal_top_n"],
+                    signal_source=algo["signal_source"], offset=algo.get("offset", 0),
+                    sort_by=algo.get("sort_by", "gap"), user=auth)
+                nxt = r.get("next_order") or {}
             if nxt.get("date"):
                 next_rows.append((algo["key"], nxt["date"],
                                   json.dumps(nxt.get("picks", [])), nxt.get("N", 0)))
