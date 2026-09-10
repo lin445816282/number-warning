@@ -3166,6 +3166,7 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
     """自主跟踪·今日可下单号码：对每个 forwarding 方案实时算下一期选号（无前视偏差）。
 
     返回：精准选号(ge2/ge3)置顶，union 大并集在后，组内按回测超额降序。
+    featured 标记「今日精选」：精准选号(ge2/ge3) + 当前有号 + 均号≤6 + 回测超额>0。
     号码为 int 列表，前端 pad 补零 + 句点分隔后复制下单。"""
     require_user(user)
     db = get_db()
@@ -3183,6 +3184,11 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
         pr = "union" if srule == "high_gap" else srule.replace("high_gap_", "")
         order = _compute_current_picks(dims, s["offset"], s["window"] or get_strategy_window(), pr)
         picks = order.get("picks", [])
+        N = len(picks)
+        bt_alpha = s["bt_alpha"] or 0
+        bt_avg_n = s["bt_avg_n"] or 0
+        # 今日精选：精准选号 + 当前有号 + 均号≤6 + 回测超额>0
+        featured = (pr in ("ge2", "ge3") and N > 0 and bt_avg_n <= 6 and bt_alpha > 0)
         out.append({
             "scheme_key": s["scheme_key"],
             "scheme_name": s["scheme_name"],
@@ -3192,24 +3198,25 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
             "window": s["window"],
             "bet_date": order.get("date", ""),
             "picks": picks,
-            "N": len(picks),
+            "N": N,
             "bt_alpha": s["bt_alpha"],
             "bt_hit_rate": s["bt_hit_rate"],
             "bt_avg_n": s["bt_avg_n"],
             "fwd_periods": s["fwd_periods"],
             "fwd_hits": s["fwd_hits"],
             "fwd_profit": s["fwd_profit"],
+            "featured": featured,
         })
-    # 精准选号(ge2/ge3)置顶（买号少、可操作性强、时间分段最稳健），组内按超额降序
+    # 精选最前，然后精准选号(ge2/ge3)，再 union；组内按超额降序
     def _rank(x):
-        return (0 if x["signal_rule"] in ("ge2", "ge3") else 1, -(x["bt_alpha"] or 0))
+        return (0 if x["featured"] else (1 if x["signal_rule"] in ("ge2", "ge3") else 2), -(x["bt_alpha"] or 0))
     out.sort(key=_rank)
     return {"picks": out, "count": len(out), "date": out[0]["bet_date"] if out else ""}
 
 
 @app.get("/api/strategyScheme/detail")
 def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, alias="authorization")):
-    """单方案前向明细：每天选号 + 开奖 + 命中 + 盈亏（倒序，最新在前）。"""
+    """单方案前向明细：每天选号 + 开奖 + 命中 + 盈亏（倒序，最新在前）+ 汇总统计。"""
     require_user(user)
     db = get_db()
     rows = db.execute(
@@ -3221,6 +3228,11 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
         "FROM strategy_scheme_record WHERE scheme_key=?", (scheme_key,)).fetchone()
     db.close()
     detail = []
+    hits = 0
+    total_profit = 0.0
+    sum_n = 0
+    max_consec_miss = 0
+    cur_miss = 0
     for r in rows:
         try:
             picks = json.loads(r["picks_json"]) if r["picks_json"] else []
@@ -3229,10 +3241,28 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
         N = r["N"] or 0
         hit = r["hit"]
         profit = (SCHEME_ODDS - N) if hit == 1 else (-N if N > 0 else 0)
+        sum_n += N
+        if hit == 1:
+            hits += 1
+            total_profit += profit
+            cur_miss = 0
+        else:
+            total_profit += profit
+            cur_miss += 1
+            max_consec_miss = max(max_consec_miss, cur_miss)
         detail.append({
             "bet_date": r["bet_date"], "picks": picks, "N": N,
             "open_number": r["open_number"], "hit": hit, "profit": profit,
         })
+    cnt = len(detail)
+    summary = {
+        "periods": cnt,
+        "hits": hits,
+        "hit_rate": round(hits / cnt, 4) if cnt else 0.0,
+        "avg_n": round(sum_n / cnt, 2) if cnt else 0.0,
+        "total_profit": round(total_profit, 2),
+        "max_consec_miss": max_consec_miss,
+    }
     scheme = {}
     if s:
         try:
@@ -3244,7 +3274,7 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
             "offset": s["offset"], "window": s["window"],
             "bt_alpha": s["bt_alpha"], "bt_hit_rate": s["bt_hit_rate"],
         }
-    return {"scheme": scheme, "detail": detail, "count": len(detail)}
+    return {"scheme": scheme, "summary": summary, "detail": detail, "count": cnt}
 
 
 # ============================================================

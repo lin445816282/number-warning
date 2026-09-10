@@ -1362,20 +1362,35 @@ table.data tr.warn td{background:var(--warnbg)}
 
           <!-- tab: 自主跟踪 -->
           <template v-if="dimTab==='autotrack'">
+            <!-- 🌟 今日精选 -->
+            <div class="card" v-if="featuredList.length" style="border:2px solid var(--warn);background:linear-gradient(135deg,#fff8ef,#ffffff)">
+              <div class="card-title">🌟 今日精选 · 精准稳健有号
+                <button class="btn btn-sm" @click="copyFeatured()" style="float:right;padding:3px 10px;font-size:12px">📋 复制精选</button>
+              </div>
+              <div v-for="p in featuredList" :key="p.scheme_key" style="padding:10px 0;border-bottom:1px dashed #eee">
+                <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                  <span style="font-family:'Roboto Mono',monospace;font-size:22px;font-weight:800;color:var(--warn);letter-spacing:2px">{{ fmtPicks(p.picks) }}</span>
+                  <span style="font-size:13px;font-weight:700">{{ p.scheme_name }}</span>
+                  <span style="font-size:11px;color:var(--ink2)">买{{ p.N }}号 · 回测超额{{ p.bt_alpha>0?'+':'' }}{{ (p.bt_alpha*100).toFixed(2) }}% · 前向{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '—' }}</span>
+                  <button class="btn btn-sm" @click="copySchemePicks(p)" style="padding:2px 8px;font-size:11px">📋 复制</button>
+                </div>
+              </div>
+            </div>
             <!-- 🎯 今日可下单号码 -->
             <div class="card">
               <div class="card-title">🎯 今日可下单号码
                 <button class="btn btn-sm" @click="copyAllPicks()" style="float:right;padding:3px 10px;font-size:12px">📋 复制全部</button>
                 <button class="btn btn-sm" @click="loadSchemePicks()" style="float:right;padding:3px 10px;font-size:12px;margin-right:6px">🔄 刷新号码</button>
+                <button class="btn btn-sm" :style="showOnlyPicks?'background:var(--warn);color:#fff':'background:#f3efe5;color:var(--ink)'" @click="showOnlyPicks=!showOnlyPicks" style="float:right;padding:3px 10px;font-size:12px;margin-right:6px">只看有号</button>
               </div>
               <div style="font-size:12px;color:var(--ink2);margin-bottom:10px;line-height:1.7">
-                下一期 <b>{{ picksDate }}</b> 共 <b>{{ picksList.length }}</b> 个跟踪方案。号码<b>两位补零·句点分隔</b>，点「📋 复制」即可下单。<span style="color:var(--warn)">🎯 精准选号</span>（ge2/ge3，买号少）置顶，适合小仓位试；<b>点方案名看每日明细记录</b>。
+                下一期 <b>{{ picksDate }}</b> 共 <b>{{ picksList.length }}</b> 个跟踪方案（当前有号 <b>{{ filteredPicks.length }}</b> 个）。号码<b>两位补零·句点分隔</b>，点「📋 复制」即可下单。<span style="color:var(--warn)">🎯 精准选号</span>（ge2/ge3，买号少）置顶；<b>点方案名看每日明细记录</b>。
               </div>
               <div class="table-scroll">
                 <table class="data">
                   <thead><tr><th>方案</th><th>号码（补零）</th><th>N</th><th>回测超额</th><th>前向命中</th><th>操作</th></tr></thead>
                   <tbody>
-                    <tr v-for="p in picksList" :key="p.scheme_key">
+                    <tr v-for="p in filteredPicks" :key="p.scheme_key">
                       <td style="font-size:12px;font-weight:700;cursor:pointer" @click="toggleSchemeDetail(p)">
                         {{ p.scheme_name }}
                         <span v-if="p.signal_rule!=='union'" style="color:var(--warn);font-size:11px">🎯{{p.signal_rule}}</span>
@@ -1397,6 +1412,13 @@ table.data tr.warn td{background:var(--warnbg)}
                 </div>
                 <div v-if="schemeDetailLoading" style="color:#b8b0a0;padding:10px">加载中…</div>
                 <div v-else class="table-scroll" style="max-height:380px">
+                  <div v-if="schemeDetailSummary" style="padding:8px 12px;background:#faf6ee;border-radius:6px;margin-bottom:8px;font-size:12px;display:flex;gap:18px;flex-wrap:wrap">
+                    <span>总期数 <b>{{ schemeDetailSummary.periods }}</b></span>
+                    <span>命中 <b :style="schemeDetailSummary.hit_rate>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.hits }}/{{ schemeDetailSummary.periods }}（{{ (schemeDetailSummary.hit_rate*100).toFixed(1) }}%）</b></span>
+                    <span>均号 <b>{{ schemeDetailSummary.avg_n }}</b></span>
+                    <span>累计盈亏 <b :style="schemeDetailSummary.total_profit>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.total_profit>0?'+':'' }}{{ schemeDetailSummary.total_profit }}</b></span>
+                    <span>最大连空 <b style="color:var(--warn)">{{ schemeDetailSummary.max_consec_miss }} 期</b></span>
+                  </div>
                   <table class="data">
                     <thead><tr><th>日期</th><th>选号</th><th>N</th><th>开奖号</th><th>命中</th><th>盈亏</th></tr></thead>
                     <tbody>
@@ -1801,6 +1823,10 @@ createApp({
     const schemeDetailName = ref('');
     const schemeDetailList = ref([]);
     const schemeDetailLoading = ref(false);
+    const schemeDetailSummary = ref(null);
+    const showOnlyPicks = ref(true);
+    const featuredList = computed(() => picksList.value.filter(p => p.featured));
+    const filteredPicks = computed(() => showOnlyPicks.value ? picksList.value.filter(p => p.N > 0) : picksList.value);
     const schemeCards = computed(() => {
       const rows = (strategyScan.value.scheme_rows || []);
       const map = {};
@@ -2165,11 +2191,26 @@ createApp({
       schemeDetailOpen.value = true;
       schemeDetailLoading.value = true;
       schemeDetailList.value = [];
+      schemeDetailSummary.value = null;
       try {
         const d = await api('GET', '/api/strategyScheme/detail?scheme_key=' + p.scheme_key + '&limit=100');
         schemeDetailList.value = d.detail || [];
+        schemeDetailSummary.value = d.summary || null;
       } catch(e) { schemeDetailList.value = []; }
       finally { schemeDetailLoading.value = false; }
+    }
+    async function copyFeatured(){
+      const lines = featuredList.value.map(p => p.scheme_name + '：' + fmtPicks(p.picks));
+      if (!lines.length) { toast('当前无精选号码'); return; }
+      const txt = lines.join('\n');
+      try { await navigator.clipboard.writeText(txt); toast('已复制精选 ' + lines.length + ' 个：' + txt); }
+      catch(e) {
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); toast('已复制精选 ' + lines.length + ' 个：' + txt); } catch(e2){}
+        document.body.removeChild(ta);
+      }
     }
     function schemeStatusText(s){
       const m = { forwarding: '转前向候选', backtested: '已回测', promoted: '已转正', rejected: '已淘汰', historical: '历史已论证' };
@@ -2461,6 +2502,7 @@ createApp({
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, copySchemePicks, copyAllPicks, toggleSchemeDetail,
+      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
