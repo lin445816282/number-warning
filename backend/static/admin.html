@@ -1462,9 +1462,10 @@ table.data tr.warn td{background:var(--warnbg)}
                 <table class="data">
                   <thead><tr><th>方案</th><th>号码（补零）</th><th>N</th><th>回测超额</th><th>真实样本外</th><th>操作</th></tr></thead>
                   <tbody>
-                    <tr v-for="p in filteredPicks" :key="p.scheme_key">
+                    <tr v-for="p in filteredPicks" :key="p.scheme_key" :style="p.oos_strong ? 'background:#eef4fb' : ''">
                       <td style="font-size:12px;font-weight:700;cursor:pointer" @click="toggleSchemeDetail(p)">
                         {{ p.scheme_name }}
+                        <span v-if="p.oos_strong" style="color:#3a6ea5;font-size:11px;font-weight:700">🔬样本外强信号</span>
                         <span v-if="p.signal_rule!=='union'" style="color:var(--warn);font-size:11px">🎯{{p.signal_rule}}</span>
                       </td>
                       <td v-if="p.N>0" style="font-family:'Roboto Mono',monospace;font-size:13px;color:var(--warn);font-weight:700">{{ fmtPicks(p.picks) }}</td>

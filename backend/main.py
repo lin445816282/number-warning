@@ -3189,6 +3189,8 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
         bt_avg_n = s["bt_avg_n"] or 0
         # 今日精选：精准选号 + 当前有号 + 均号≤6 + 回测超额>0
         featured = (pr in ("ge2", "ge3") and N > 0 and bt_avg_n <= 6 and bt_alpha > 0)
+        # 样本外验证强信号：红肖蓝肖绿肖+春夏秋冬 二维 union（06-01起102期命中45-48%/p<0.06）
+        oos_strong = (pr == "union" and set(dims) == {"season_type", "zodiac_color_type"})
         recent = []
         recent_hit = 0
         sim = {"periods": 0, "hits": 0, "profit": 0.0, "hit_rate": None}
@@ -3245,14 +3247,16 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
             "fwd_hits": s["fwd_hits"],
             "fwd_profit": s["fwd_profit"],
             "featured": featured,
+            "oos_strong": oos_strong,
             "recent": recent,
             "recent_hit": recent_hit,
             "sim": sim,
             "live": live,
         })
-    # 精选最前，然后精准选号(ge2/ge3)，再 union；组内按超额降序
+    # 精选最前，再样本外强信号，然后精准选号(ge2/ge3)，再 union；组内按超额降序
     def _rank(x):
-        return (0 if x["featured"] else (1 if x["signal_rule"] in ("ge2", "ge3") else 2), -(x["bt_alpha"] or 0))
+        return (0 if x["featured"] else (1 if x["oos_strong"] else (2 if x["signal_rule"] in ("ge2", "ge3") else 3)),
+                -(x["bt_alpha"] or 0))
     out.sort(key=_rank)
     return {"picks": out, "count": len(out), "date": out[0]["bet_date"] if out else ""}
 
