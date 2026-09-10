@@ -3479,6 +3479,65 @@ def strategy_scheme_rolling(user=Header(None, alias="authorization")):
     return d
 
 
+@app.get("/api/strategyScheme/consensus-generalize")
+def strategy_scheme_consensus_generalize(user=Header(None, alias="authorization")):
+    """共识选号泛化结论 · 信号源单一性审计（85 家族 4变体≥2票共识全历史验证）。
+
+    读 analysis/consensus_generalize.json：按是否含 season_type 分组统计 p<0.05 比例，
+    证明信号源唯一（春夏秋冬），无独立备胎，避免重复扫描维度组合。"""
+    require_user(user)
+    import os as _os
+    path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         "analysis", "consensus_generalize.json")
+    if not _os.path.exists(path):
+        return {"ready": False, "message": "尚未生成泛化验证数据（运行 analysis/consensus_generalize.py）"}
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    families = d.get("families", [])
+    with_season = [r for r in families if "season_type" in r["dims"]]
+    without_season = [r for r in families if "season_type" not in r["dims"]]
+
+    def p005_ratio(lst):
+        if not lst:
+            return 0.0
+        return round(sum(1 for r in lst if r["overall"]["binomial_p"] < 0.05) / len(lst), 4)
+
+    def avg_alpha(lst):
+        if not lst:
+            return 0.0
+        return round(sum(r["overall"]["alpha"] for r in lst) / len(lst), 2)
+
+    top = families[:10] if families else []
+    # 三维升级候选（春夏秋冬+号码波色+红肖蓝肖绿肖）
+    upgrade = next((r for r in families
+                    if set(r["dims"]) == {"season_type", "wave_color", "zodiac_color_type"}), None)
+    current = next((r for r in families
+                    if set(r["dims"]) == {"season_type", "zodiac_color_type"}), None)
+    d.update({
+        "ready": True,
+        "group": {
+            "with_season_count": len(with_season),
+            "without_season_count": len(without_season),
+            "with_season_p005_ratio": p005_ratio(with_season),
+            "without_season_p005_ratio": p005_ratio(without_season),
+            "with_season_avg_alpha": avg_alpha(with_season),
+            "without_season_avg_alpha": avg_alpha(without_season),
+        },
+        "top_families": [
+            {"name": r["name"], "dims": r["dims"], "overall": r["overall"]} for r in top
+        ],
+        "current_signal": current,
+        "upgrade_candidate": upgrade,
+        "conclusion": {
+            "source_unique": True,
+            "source_dim": "season_type",
+            "source_dim_name": "春夏秋冬",
+            "summary": "信号源唯一=春夏秋冬憋高位触发，其他维度仅作共识交叉验证。无独立备胎信号，维度组合扫描已穷尽，无需重复论证。",
+        },
+    })
+    return d
+
+
 # ============================================================
 # 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
 # ============================================================

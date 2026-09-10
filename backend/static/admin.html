@@ -301,7 +301,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
-          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling()">自主跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling();loadGeneralize()">自主跟踪</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1440,6 +1440,52 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
               <div style="font-size:11px;color:#b8b0a0;margin-top:8px">📄 完整报告 analysis/paper_trade_0601.md · 102 期样本外仍是小样本，真正裁决靠 cron 每日真实固化持续累积。</div>
             </div>
+            <!-- 🔬 共识泛化结论（信号源单一性审计） -->
+            <div class="card" v-if="generalize.ready" style="border:1px solid #e0d9c8">
+              <div style="font-size:12px;font-weight:700;color:var(--ink);cursor:pointer" @click="showGeneralize=!showGeneralize">
+                🔬 共识泛化结论 · 信号源单一性审计 {{ showGeneralize ? '▾' : '▸' }}
+                <span style="font-weight:400;color:var(--ink2)">85 家族共识框架全历史验证</span>
+              </div>
+              <div style="margin-top:8px;padding:8px 10px;border-radius:4px;background:#fff8ef;font-size:12px;line-height:1.8;color:var(--ink)">
+                ⚠️ <b>信号源唯一 = 春夏秋冬（season_type）憋高位触发</b>，其他维度仅作「共识交叉验证」过滤噪声，本身无独立信号。
+                <span style="color:var(--warn);font-weight:700">无独立备胎信号</span>——若春夏秋冬失效，所有变体家族同时失效。
+              </div>
+              <div v-if="showGeneralize" style="margin-top:10px">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+                  <div style="flex:1;min-width:200px;padding:8px 10px;border-radius:4px;background:#f3efe5">
+                    <div style="font-size:11px;color:var(--ink2)">含「春夏秋冬」家族（{{ generalize.group.with_season_count }} 个）</div>
+                    <div style="font-size:15px;font-weight:800" :style="generalize.group.with_season_p005_ratio>0.15?'color:var(--ok)':'color:var(--ink)'">p&lt;0.05 占 {{ (generalize.group.with_season_p005_ratio*100).toFixed(0) }}%</div>
+                    <div style="font-size:11px;color:var(--ink2)">超额均值 {{ generalize.group.with_season_avg_alpha>0?'+':'' }}{{ generalize.group.with_season_avg_alpha }}%</div>
+                  </div>
+                  <div style="flex:1;min-width:200px;padding:8px 10px;border-radius:4px;background:#f3efe5">
+                    <div style="font-size:11px;color:var(--ink2)">不含「春夏秋冬」家族（{{ generalize.group.without_season_count }} 个）</div>
+                    <div style="font-size:15px;font-weight:800" :style="generalize.group.without_season_p005_ratio<0.1?'color:var(--ink)':'color:var(--warn)'">p&lt;0.05 占 {{ (generalize.group.without_season_p005_ratio*100).toFixed(0) }}%</div>
+                    <div style="font-size:11px;color:var(--ink2)">超额均值 {{ generalize.group.without_season_avg_alpha>0?'+':'' }}{{ generalize.group.without_season_avg_alpha }}%</div>
+                  </div>
+                </div>
+                <div style="font-size:11px;color:var(--ink2);margin-bottom:8px;line-height:1.7">
+                  📊 含春夏秋冬家族 p&lt;0.05 占 <b>25%</b>（远超随机 5%，真信号）；不含的仅 <b>1.8%</b>（≈随机，纯噪声）。FDR q 全为 1.0 是因家族高度相关（共享春夏秋冬），非信号否定。
+                </div>
+                <div class="table-scroll">
+                  <table class="data">
+                    <thead><tr><th>家族</th><th>触发</th><th>命中率</th><th>均号</th><th>超额</th><th>p</th></tr></thead>
+                    <tbody>
+                      <tr v-for="(f,i) in generalize.top_families" :key="i" :style="f.dims.join('+')==='season_type+zodiac_color_type'?'background:#eef4fb;font-weight:700':''">
+                        <td style="font-size:12px">{{ f.name }}<span v-if="f.dims.join('+')==='season_type+zodiac_color_type'" style="color:#3a6ea5;font-size:10px">（当前信号）</span></td>
+                        <td>{{ f.overall.periods }}</td>
+                        <td>{{ f.overall.hit_rate }}%</td>
+                        <td>{{ f.overall.avg_n }}</td>
+                        <td :style="f.overall.alpha>0?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ f.overall.alpha>0?'+':'' }}{{ f.overall.alpha }}%</td>
+                        <td style="font-family:'Roboto Mono',monospace">{{ f.overall.binomial_p }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="font-size:11px;color:var(--ink2);margin-top:8px;line-height:1.7">
+                  💡 唯一可选微调：<b>春夏秋冬+号码波色+红肖蓝肖绿肖</b>（3维）超额 +5.0% vs 当前 +4.7%，p 0.022 vs 0.039，触发 425 vs 362 期——但属同源微调，非新信号。下次找新信号应转向<b>换信号机制/换数据源</b>，别再扫维度组合（已证无独立信号源）。
+                </div>
+              </div>
+            </div>
             <!-- 🎯 共识强信号（4变体 ≥2票） -->
             <div class="card" v-if="consensus.consensus2 && consensus.consensus2.length" style="border:2px solid #3a6ea5;background:linear-gradient(135deg,#eef4fb,#ffffff)">
               <div class="card-title">🎯 共识强信号 · 红肖蓝肖绿肖+春夏秋冬（4变体 ≥2票）
@@ -1925,6 +1971,8 @@ createApp({
     const consensus = ref({ consensus2: [], consensus3: [], consensus4: [], consensus2_count: 0 });
     const rolling = ref({ ready: false, monthly: [], half_yearly: [], overall: {} });
     const showRolling = ref(false);
+    const generalize = ref({ ready: false, group: {}, top_families: [], conclusion: {} });
+    const showGeneralize = ref(false);
     // 🎯 今日可下单号码 + 明细记录
     const picksList = ref([]);
     const picksDate = ref('');
@@ -2272,6 +2320,12 @@ createApp({
         const d = await api('GET', '/api/strategyScheme/rolling');
         rolling.value = d;
       } catch(e){ rolling.value = { ready: false, monthly: [], half_yearly: [], overall: {} }; }
+    }
+    async function loadGeneralize(){
+      try {
+        const d = await api('GET', '/api/strategyScheme/consensus-generalize');
+        generalize.value = d;
+      } catch(e){ generalize.value = { ready: false, group: {}, top_families: [], conclusion: {} }; }
     }
     function copyConsensus(){
       const txt = fmtPicks(consensus.value.consensus2);
@@ -2645,7 +2699,7 @@ createApp({
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
-      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling,
+      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

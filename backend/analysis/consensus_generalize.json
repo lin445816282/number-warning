@@ -1,0 +1,4800 @@
+{
+  "framework": "4变体≥2票共识（offset/window=[(+2,90),(+1,60),(+2,60),(+1,90)]，与现有信号同框架）",
+  "data_range": "2025-01-01~2026-09-10",
+  "total_families": 85,
+  "sig_fdr_005": 0,
+  "families": [
+    {
+      "dims": [
+        "season_type",
+        "wave_color",
+        "zodiac_color_type"
+      ],
+      "dims_key": "season_type,wave_color,zodiac_color_type",
+      "name": "春夏秋冬+号码波色+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 425,
+        "hits": 205,
+        "hit_rate": 48.2,
+        "avg_n": 21.2,
+        "rand_base": 43.2,
+        "alpha": 5.0,
+        "binomial_p": 0.022027,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 151,
+          "hits": 75,
+          "hit_rate": 49.7,
+          "avg_n": 24.1,
+          "rand_base": 49.2,
+          "alpha": 0.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 113,
+          "hits": 49,
+          "hit_rate": 43.4,
+          "avg_n": 19.3,
+          "rand_base": 39.4,
+          "alpha": 4.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 109,
+          "hits": 54,
+          "hit_rate": 49.5,
+          "avg_n": 19.6,
+          "rand_base": 40.0,
+          "alpha": 9.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 52,
+          "hits": 27,
+          "hit_rate": 51.9,
+          "avg_n": 20.0,
+          "rand_base": 40.9,
+          "alpha": 11.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "zodiac_color_type"
+      ],
+      "dims_key": "season_type,zodiac_color_type",
+      "name": "春夏秋冬+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 362,
+        "hits": 155,
+        "hit_rate": 42.8,
+        "avg_n": 18.7,
+        "rand_base": 38.2,
+        "alpha": 4.7,
+        "binomial_p": 0.039136,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 147,
+          "hits": 60,
+          "hit_rate": 40.8,
+          "avg_n": 20.6,
+          "rand_base": 42.0,
+          "alpha": -1.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 84,
+          "hits": 35,
+          "hit_rate": 41.7,
+          "avg_n": 17.0,
+          "rand_base": 34.8,
+          "alpha": 6.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 83,
+          "hits": 38,
+          "hit_rate": 45.8,
+          "avg_n": 17.5,
+          "rand_base": 35.8,
+          "alpha": 10.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 48,
+          "hits": 22,
+          "hit_rate": 45.8,
+          "avg_n": 17.8,
+          "rand_base": 36.4,
+          "alpha": 9.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "wave_color",
+        "zodiac_color_type"
+      ],
+      "dims_key": "five_element,wave_color,zodiac_color_type",
+      "name": "五行+号码波色+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 466,
+        "hits": 204,
+        "hit_rate": 43.8,
+        "avg_n": 19.2,
+        "rand_base": 39.2,
+        "alpha": 4.6,
+        "binomial_p": 0.024142,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 137,
+          "hits": 69,
+          "hit_rate": 50.4,
+          "avg_n": 23.9,
+          "rand_base": 48.9,
+          "alpha": 1.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 138,
+          "hits": 49,
+          "hit_rate": 35.5,
+          "avg_n": 16.0,
+          "rand_base": 32.6,
+          "alpha": 2.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 133,
+          "hits": 61,
+          "hit_rate": 45.9,
+          "avg_n": 18.1,
+          "rand_base": 37.0,
+          "alpha": 8.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 58,
+          "hits": 25,
+          "hit_rate": 43.1,
+          "avg_n": 18.1,
+          "rand_base": 36.9,
+          "alpha": 6.2,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type"
+      ],
+      "dims_key": "season_type",
+      "name": "春夏秋冬",
+      "overall": {
+        "periods": 265,
+        "hits": 90,
+        "hit_rate": 34.0,
+        "avg_n": 14.4,
+        "rand_base": 29.3,
+        "alpha": 4.6,
+        "binomial_p": 0.059959,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 122,
+          "hits": 35,
+          "hit_rate": 28.7,
+          "avg_n": 15.2,
+          "rand_base": 31.1,
+          "alpha": -2.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 63,
+          "hits": 27,
+          "hit_rate": 42.9,
+          "avg_n": 13.4,
+          "rand_base": 27.4,
+          "alpha": 15.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 53,
+          "hits": 20,
+          "hit_rate": 37.7,
+          "avg_n": 14.1,
+          "rand_base": 28.8,
+          "alpha": 8.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 27,
+          "hits": 8,
+          "hit_rate": 29.6,
+          "avg_n": 13.2,
+          "rand_base": 26.9,
+          "alpha": 2.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "season_type",
+        "wave_color"
+      ],
+      "dims_key": "five_element,season_type,wave_color",
+      "name": "五行+春夏秋冬+号码波色",
+      "overall": {
+        "periods": 487,
+        "hits": 207,
+        "hit_rate": 42.5,
+        "avg_n": 18.7,
+        "rand_base": 38.2,
+        "alpha": 4.3,
+        "binomial_p": 0.027628,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 159,
+          "hits": 71,
+          "hit_rate": 44.7,
+          "avg_n": 22.3,
+          "rand_base": 45.5,
+          "alpha": -0.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 140,
+          "hits": 58,
+          "hit_rate": 41.4,
+          "avg_n": 16.4,
+          "rand_base": 33.4,
+          "alpha": 8.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 135,
+          "hits": 60,
+          "hit_rate": 44.4,
+          "avg_n": 17.6,
+          "rand_base": 36.0,
+          "alpha": 8.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 53,
+          "hits": 18,
+          "hit_rate": 34.0,
+          "avg_n": 16.8,
+          "rand_base": 34.4,
+          "alpha": -0.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "season_type",
+        "zodiac_color_type"
+      ],
+      "dims_key": "five_element,season_type,zodiac_color_type",
+      "name": "五行+春夏秋冬+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 487,
+        "hits": 212,
+        "hit_rate": 43.5,
+        "avg_n": 19.3,
+        "rand_base": 39.4,
+        "alpha": 4.2,
+        "binomial_p": 0.034494,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 160,
+          "hits": 76,
+          "hit_rate": 47.5,
+          "avg_n": 23.7,
+          "rand_base": 48.4,
+          "alpha": -0.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 127,
+          "hits": 52,
+          "hit_rate": 40.9,
+          "avg_n": 16.3,
+          "rand_base": 33.3,
+          "alpha": 7.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 143,
+          "hits": 57,
+          "hit_rate": 39.9,
+          "avg_n": 16.7,
+          "rand_base": 34.2,
+          "alpha": 5.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 57,
+          "hits": 27,
+          "hit_rate": 47.4,
+          "avg_n": 19.9,
+          "rand_base": 40.6,
+          "alpha": 6.8,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "wave_color"
+      ],
+      "dims_key": "season_type,wave_color",
+      "name": "春夏秋冬+号码波色",
+      "overall": {
+        "periods": 357,
+        "hits": 147,
+        "hit_rate": 41.2,
+        "avg_n": 18.1,
+        "rand_base": 37.0,
+        "alpha": 4.2,
+        "binomial_p": 0.055089,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 130,
+          "hits": 54,
+          "hit_rate": 41.5,
+          "avg_n": 20.7,
+          "rand_base": 42.3,
+          "alpha": -0.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 98,
+          "hits": 41,
+          "hit_rate": 41.8,
+          "avg_n": 16.8,
+          "rand_base": 34.4,
+          "alpha": 7.5,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 90,
+          "hits": 39,
+          "hit_rate": 43.3,
+          "avg_n": 17.0,
+          "rand_base": 34.7,
+          "alpha": 8.6,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 39,
+          "hits": 13,
+          "hit_rate": 33.3,
+          "avg_n": 15.1,
+          "rand_base": 30.8,
+          "alpha": 2.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type"
+      ],
+      "dims_key": "head_number,season_type",
+      "name": "头数+春夏秋冬",
+      "overall": {
+        "periods": 418,
+        "hits": 151,
+        "hit_rate": 36.1,
+        "avg_n": 15.7,
+        "rand_base": 32.1,
+        "alpha": 4.0,
+        "binomial_p": 0.042246,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 146,
+          "hits": 55,
+          "hit_rate": 37.7,
+          "avg_n": 18.8,
+          "rand_base": 38.3,
+          "alpha": -0.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 102,
+          "hits": 41,
+          "hit_rate": 40.2,
+          "avg_n": 14.5,
+          "rand_base": 29.7,
+          "alpha": 10.5,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 126,
+          "hits": 42,
+          "hit_rate": 33.3,
+          "avg_n": 13.7,
+          "rand_base": 27.9,
+          "alpha": 5.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 44,
+          "hits": 13,
+          "hit_rate": 29.5,
+          "avg_n": 14.3,
+          "rand_base": 29.2,
+          "alpha": 0.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,season_type,zodiac_color_type",
+      "name": "头数+春夏秋冬+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 474,
+        "hits": 206,
+        "hit_rate": 43.5,
+        "avg_n": 19.4,
+        "rand_base": 39.6,
+        "alpha": 3.9,
+        "binomial_p": 0.047482,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 157,
+          "hits": 74,
+          "hit_rate": 47.1,
+          "avg_n": 23.8,
+          "rand_base": 48.6,
+          "alpha": -1.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 116,
+          "hits": 49,
+          "hit_rate": 42.2,
+          "avg_n": 17.5,
+          "rand_base": 35.6,
+          "alpha": 6.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 140,
+          "hits": 57,
+          "hit_rate": 40.7,
+          "avg_n": 16.7,
+          "rand_base": 34.0,
+          "alpha": 6.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 61,
+          "hits": 26,
+          "hit_rate": 42.6,
+          "avg_n": 18.0,
+          "rand_base": 36.8,
+          "alpha": 5.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "head_number",
+        "season_type"
+      ],
+      "dims_key": "five_element,head_number,season_type",
+      "name": "五行+头数+春夏秋冬",
+      "overall": {
+        "periods": 503,
+        "hits": 206,
+        "hit_rate": 41.0,
+        "avg_n": 18.2,
+        "rand_base": 37.1,
+        "alpha": 3.8,
+        "binomial_p": 0.043091,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 162,
+          "hits": 70,
+          "hit_rate": 43.2,
+          "avg_n": 22.1,
+          "rand_base": 45.1,
+          "alpha": -1.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 133,
+          "hits": 55,
+          "hit_rate": 41.4,
+          "avg_n": 15.7,
+          "rand_base": 32.0,
+          "alpha": 9.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 157,
+          "hits": 62,
+          "hit_rate": 39.5,
+          "avg_n": 16.5,
+          "rand_base": 33.8,
+          "alpha": 5.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 51,
+          "hits": 19,
+          "hit_rate": 37.3,
+          "avg_n": 17.3,
+          "rand_base": 35.3,
+          "alpha": 2.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "season_type"
+      ],
+      "dims_key": "five_element,season_type",
+      "name": "五行+春夏秋冬",
+      "overall": {
+        "periods": 436,
+        "hits": 156,
+        "hit_rate": 35.8,
+        "avg_n": 15.7,
+        "rand_base": 31.9,
+        "alpha": 3.8,
+        "binomial_p": 0.053418,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 153,
+          "hits": 56,
+          "hit_rate": 36.6,
+          "avg_n": 18.8,
+          "rand_base": 38.4,
+          "alpha": -1.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 113,
+          "hits": 44,
+          "hit_rate": 38.9,
+          "avg_n": 13.5,
+          "rand_base": 27.5,
+          "alpha": 11.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 125,
+          "hits": 42,
+          "hit_rate": 33.6,
+          "avg_n": 14.0,
+          "rand_base": 28.6,
+          "alpha": 5.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 45,
+          "hits": 14,
+          "hit_rate": 31.1,
+          "avg_n": 15.0,
+          "rand_base": 30.6,
+          "alpha": 0.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type",
+        "wave_color"
+      ],
+      "dims_key": "head_number,season_type,wave_color",
+      "name": "头数+春夏秋冬+号码波色",
+      "overall": {
+        "periods": 473,
+        "hits": 199,
+        "hit_rate": 42.1,
+        "avg_n": 18.9,
+        "rand_base": 38.5,
+        "alpha": 3.6,
+        "binomial_p": 0.065201,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 148,
+          "hits": 69,
+          "hit_rate": 46.6,
+          "avg_n": 23.1,
+          "rand_base": 47.1,
+          "alpha": -0.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 128,
+          "hits": 53,
+          "hit_rate": 41.4,
+          "avg_n": 17.5,
+          "rand_base": 35.7,
+          "alpha": 5.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 143,
+          "hits": 59,
+          "hit_rate": 41.3,
+          "avg_n": 16.9,
+          "rand_base": 34.5,
+          "alpha": 6.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 54,
+          "hits": 18,
+          "hit_rate": 33.3,
+          "avg_n": 15.8,
+          "rand_base": 32.3,
+          "alpha": 1.1,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "big_small"
+      ],
+      "dims_key": "big_small",
+      "name": "大小",
+      "overall": {
+        "periods": 213,
+        "hits": 114,
+        "hit_rate": 53.5,
+        "avg_n": 24.6,
+        "rand_base": 50.2,
+        "alpha": 3.3,
+        "binomial_p": 0.184163,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 101,
+          "hits": 59,
+          "hit_rate": 58.4,
+          "avg_n": 24.8,
+          "rand_base": 50.5,
+          "alpha": 7.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 40,
+          "hits": 16,
+          "hit_rate": 40.0,
+          "avg_n": 24.8,
+          "rand_base": 50.6,
+          "alpha": -10.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 66,
+          "hits": 35,
+          "hit_rate": 53.0,
+          "avg_n": 24.3,
+          "rand_base": 49.6,
+          "alpha": 3.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 6,
+          "hits": 4,
+          "hit_rate": 66.7,
+          "avg_n": 24.7,
+          "rand_base": 50.3,
+          "alpha": 16.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "wave_color"
+      ],
+      "dims_key": "five_element,wave_color",
+      "name": "五行+号码波色",
+      "overall": {
+        "periods": 401,
+        "hits": 142,
+        "hit_rate": 35.4,
+        "avg_n": 15.8,
+        "rand_base": 32.2,
+        "alpha": 3.2,
+        "binomial_p": 0.096949,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 126,
+          "hits": 49,
+          "hit_rate": 38.9,
+          "avg_n": 18.4,
+          "rand_base": 37.6,
+          "alpha": 1.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 119,
+          "hits": 37,
+          "hit_rate": 31.1,
+          "avg_n": 13.6,
+          "rand_base": 27.8,
+          "alpha": 3.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 113,
+          "hits": 45,
+          "hit_rate": 39.8,
+          "avg_n": 15.9,
+          "rand_base": 32.4,
+          "alpha": 7.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 43,
+          "hits": 11,
+          "hit_rate": 25.6,
+          "avg_n": 13.7,
+          "rand_base": 28.0,
+          "alpha": -2.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "he_sum"
+      ],
+      "dims_key": "he_sum",
+      "name": "合数单双",
+      "overall": {
+        "periods": 206,
+        "hits": 114,
+        "hit_rate": 55.3,
+        "avg_n": 25.7,
+        "rand_base": 52.4,
+        "alpha": 3.0,
+        "binomial_p": 0.223493,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 67,
+          "hits": 40,
+          "hit_rate": 59.7,
+          "avg_n": 27.9,
+          "rand_base": 57.0,
+          "alpha": 2.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 46,
+          "hits": 18,
+          "hit_rate": 39.1,
+          "avg_n": 24.8,
+          "rand_base": 50.5,
+          "alpha": -11.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 72,
+          "hits": 43,
+          "hit_rate": 59.7,
+          "avg_n": 24.5,
+          "rand_base": 50.0,
+          "alpha": 9.8,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 21,
+          "hits": 13,
+          "hit_rate": 61.9,
+          "avg_n": 24.4,
+          "rand_base": 49.9,
+          "alpha": 12.1,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type",
+        "zodiac"
+      ],
+      "dims_key": "head_number,season_type,zodiac",
+      "name": "头数+春夏秋冬+生肖",
+      "overall": {
+        "periods": 602,
+        "hits": 224,
+        "hit_rate": 37.2,
+        "avg_n": 16.7,
+        "rand_base": 34.2,
+        "alpha": 3.0,
+        "binomial_p": 0.058237,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 76,
+          "hit_rate": 42.7,
+          "avg_n": 21.8,
+          "rand_base": 44.5,
+          "alpha": -1.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 180,
+          "hits": 62,
+          "hit_rate": 34.4,
+          "avg_n": 14.3,
+          "rand_base": 29.1,
+          "alpha": 5.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 172,
+          "hits": 66,
+          "hit_rate": 38.4,
+          "avg_n": 15.5,
+          "rand_base": 31.7,
+          "alpha": 6.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 20,
+          "hit_rate": 27.8,
+          "avg_n": 13.3,
+          "rand_base": 27.2,
+          "alpha": 0.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "yin_yang"
+      ],
+      "dims_key": "yin_yang",
+      "name": "阴阳",
+      "overall": {
+        "periods": 152,
+        "hits": 81,
+        "hit_rate": 53.3,
+        "avg_n": 24.6,
+        "rand_base": 50.3,
+        "alpha": 3.0,
+        "binomial_p": 0.248437,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 39,
+          "hits": 21,
+          "hit_rate": 53.8,
+          "avg_n": 24.3,
+          "rand_base": 49.5,
+          "alpha": 4.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 42,
+          "hits": 22,
+          "hit_rate": 52.4,
+          "avg_n": 24.4,
+          "rand_base": 49.8,
+          "alpha": 2.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 34,
+          "hits": 16,
+          "hit_rate": 47.1,
+          "avg_n": 24.3,
+          "rand_base": 49.6,
+          "alpha": -2.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 37,
+          "hits": 22,
+          "hit_rate": 59.5,
+          "avg_n": 25.6,
+          "rand_base": 52.2,
+          "alpha": 7.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "zodiac",
+        "zodiac_color_type"
+      ],
+      "dims_key": "season_type,zodiac,zodiac_color_type",
+      "name": "春夏秋冬+生肖+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 591,
+        "hits": 226,
+        "hit_rate": 38.2,
+        "avg_n": 17.3,
+        "rand_base": 35.3,
+        "alpha": 2.9,
+        "binomial_p": 0.074206,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 179,
+          "hits": 80,
+          "hit_rate": 44.7,
+          "avg_n": 23.3,
+          "rand_base": 47.6,
+          "alpha": -2.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 175,
+          "hits": 59,
+          "hit_rate": 33.7,
+          "avg_n": 14.6,
+          "rand_base": 29.8,
+          "alpha": 3.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 165,
+          "hits": 60,
+          "hit_rate": 36.4,
+          "avg_n": 14.4,
+          "rand_base": 29.4,
+          "alpha": 7.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 27,
+          "hit_rate": 37.5,
+          "avg_n": 15.7,
+          "rand_base": 31.9,
+          "alpha": 5.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type",
+        "size_odd_even"
+      ],
+      "dims_key": "head_number,season_type,size_odd_even",
+      "name": "头数+春夏秋冬+大小单双",
+      "overall": {
+        "periods": 474,
+        "hits": 193,
+        "hit_rate": 40.7,
+        "avg_n": 18.6,
+        "rand_base": 38.0,
+        "alpha": 2.7,
+        "binomial_p": 0.117297,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 160,
+          "hits": 71,
+          "hit_rate": 44.4,
+          "avg_n": 22.0,
+          "rand_base": 45.0,
+          "alpha": -0.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 121,
+          "hits": 49,
+          "hit_rate": 40.5,
+          "avg_n": 17.2,
+          "rand_base": 35.2,
+          "alpha": 5.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 139,
+          "hits": 55,
+          "hit_rate": 39.6,
+          "avg_n": 16.8,
+          "rand_base": 34.4,
+          "alpha": 5.2,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 54,
+          "hits": 18,
+          "hit_rate": 33.3,
+          "avg_n": 16.1,
+          "rand_base": 32.8,
+          "alpha": 0.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type",
+        "tail_number",
+        "wave_color",
+        "zodiac",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,season_type,tail_number,wave_color,zodiac,zodiac_color_type",
+      "name": "头数+春夏秋冬+尾数+号码波色+生肖",
+      "overall": {
+        "periods": 616,
+        "hits": 353,
+        "hit_rate": 57.3,
+        "avg_n": 26.8,
+        "rand_base": 54.7,
+        "alpha": 2.7,
+        "binomial_p": 0.10341,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 179,
+          "hits": 117,
+          "hit_rate": 65.4,
+          "avg_n": 32.8,
+          "rand_base": 66.9,
+          "alpha": -1.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 184,
+          "hits": 95,
+          "hit_rate": 51.6,
+          "avg_n": 24.1,
+          "rand_base": 49.2,
+          "alpha": 2.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 181,
+          "hits": 103,
+          "hit_rate": 56.9,
+          "avg_n": 24.7,
+          "rand_base": 50.5,
+          "alpha": 6.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 38,
+          "hit_rate": 52.8,
+          "avg_n": 23.8,
+          "rand_base": 48.5,
+          "alpha": 4.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "zodiac_color_type"
+      ],
+      "dims_key": "zodiac_color_type",
+      "name": "红肖蓝肖绿肖",
+      "overall": {
+        "periods": 201,
+        "hits": 79,
+        "hit_rate": 39.3,
+        "avg_n": 18.0,
+        "rand_base": 36.6,
+        "alpha": 2.7,
+        "binomial_p": 0.246477,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 82,
+          "hits": 30,
+          "hit_rate": 36.6,
+          "avg_n": 19.3,
+          "rand_base": 39.4,
+          "alpha": -2.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 43,
+          "hits": 12,
+          "hit_rate": 27.9,
+          "avg_n": 16.2,
+          "rand_base": 33.0,
+          "alpha": -5.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 45,
+          "hits": 22,
+          "hit_rate": 48.9,
+          "avg_n": 17.4,
+          "rand_base": 35.5,
+          "alpha": 13.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 31,
+          "hits": 15,
+          "hit_rate": 48.4,
+          "avg_n": 17.6,
+          "rand_base": 35.9,
+          "alpha": 12.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "zodiac_color_type"
+      ],
+      "dims_key": "five_element,zodiac_color_type",
+      "name": "五行+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 412,
+        "hits": 147,
+        "hit_rate": 35.7,
+        "avg_n": 16.2,
+        "rand_base": 33.1,
+        "alpha": 2.6,
+        "binomial_p": 0.140841,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 127,
+          "hits": 52,
+          "hit_rate": 40.9,
+          "avg_n": 20.4,
+          "rand_base": 41.7,
+          "alpha": -0.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 107,
+          "hits": 33,
+          "hit_rate": 30.8,
+          "avg_n": 13.2,
+          "rand_base": 27.0,
+          "alpha": 3.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 126,
+          "hits": 42,
+          "hit_rate": 33.3,
+          "avg_n": 14.4,
+          "rand_base": 29.3,
+          "alpha": 4.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 52,
+          "hits": 20,
+          "hit_rate": 38.5,
+          "avg_n": 16.6,
+          "rand_base": 33.9,
+          "alpha": 4.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "season_type",
+        "zodiac"
+      ],
+      "dims_key": "five_element,season_type,zodiac",
+      "name": "五行+春夏秋冬+生肖",
+      "overall": {
+        "periods": 594,
+        "hits": 225,
+        "hit_rate": 37.9,
+        "avg_n": 17.4,
+        "rand_base": 35.4,
+        "alpha": 2.5,
+        "binomial_p": 0.122601,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 177,
+          "hits": 76,
+          "hit_rate": 42.9,
+          "avg_n": 22.6,
+          "rand_base": 46.0,
+          "alpha": -3.1,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 178,
+          "hits": 64,
+          "hit_rate": 36.0,
+          "avg_n": 14.6,
+          "rand_base": 29.7,
+          "alpha": 6.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 167,
+          "hits": 63,
+          "hit_rate": 37.7,
+          "avg_n": 16.2,
+          "rand_base": 33.1,
+          "alpha": 4.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 22,
+          "hit_rate": 30.6,
+          "avg_n": 14.2,
+          "rand_base": 28.9,
+          "alpha": 1.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "head_number",
+        "wave_color"
+      ],
+      "dims_key": "five_element,head_number,wave_color",
+      "name": "五行+头数+号码波色",
+      "overall": {
+        "periods": 480,
+        "hits": 189,
+        "hit_rate": 39.4,
+        "avg_n": 18.1,
+        "rand_base": 37.0,
+        "alpha": 2.4,
+        "binomial_p": 0.144989,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 141,
+          "hits": 61,
+          "hit_rate": 43.3,
+          "avg_n": 21.8,
+          "rand_base": 44.5,
+          "alpha": -1.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 143,
+          "hits": 48,
+          "hit_rate": 33.6,
+          "avg_n": 15.4,
+          "rand_base": 31.5,
+          "alpha": 2.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 148,
+          "hits": 64,
+          "hit_rate": 43.2,
+          "avg_n": 17.6,
+          "rand_base": 35.9,
+          "alpha": 7.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 48,
+          "hits": 16,
+          "hit_rate": 33.3,
+          "avg_n": 16.8,
+          "rand_base": 34.3,
+          "alpha": -1.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "size_odd_even",
+        "wave_color"
+      ],
+      "dims_key": "season_type,size_odd_even,wave_color",
+      "name": "春夏秋冬+大小单双+号码波色",
+      "overall": {
+        "periods": 447,
+        "hits": 191,
+        "hit_rate": 42.7,
+        "avg_n": 19.8,
+        "rand_base": 40.4,
+        "alpha": 2.3,
+        "binomial_p": 0.170509,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 148,
+          "hits": 67,
+          "hit_rate": 45.3,
+          "avg_n": 23.5,
+          "rand_base": 48.0,
+          "alpha": -2.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 123,
+          "hits": 52,
+          "hit_rate": 42.3,
+          "avg_n": 18.7,
+          "rand_base": 38.1,
+          "alpha": 4.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 124,
+          "hits": 52,
+          "hit_rate": 41.9,
+          "avg_n": 18.1,
+          "rand_base": 37.0,
+          "alpha": 5.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 52,
+          "hits": 20,
+          "hit_rate": 38.5,
+          "avg_n": 16.0,
+          "rand_base": 32.7,
+          "alpha": 5.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "zodiac"
+      ],
+      "dims_key": "season_type,zodiac",
+      "name": "春夏秋冬+生肖",
+      "overall": {
+        "periods": 583,
+        "hits": 171,
+        "hit_rate": 29.3,
+        "avg_n": 13.2,
+        "rand_base": 27.0,
+        "alpha": 2.3,
+        "binomial_p": 0.10538,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 177,
+          "hits": 59,
+          "hit_rate": 33.3,
+          "avg_n": 17.8,
+          "rand_base": 36.4,
+          "alpha": -3.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 171,
+          "hits": 51,
+          "hit_rate": 29.8,
+          "avg_n": 11.7,
+          "rand_base": 23.9,
+          "alpha": 5.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 163,
+          "hits": 45,
+          "hit_rate": 27.6,
+          "avg_n": 11.3,
+          "rand_base": 23.0,
+          "alpha": 4.6,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 16,
+          "hit_rate": 22.2,
+          "avg_n": 10.0,
+          "rand_base": 20.5,
+          "alpha": 1.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "wave_color",
+        "zodiac"
+      ],
+      "dims_key": "season_type,wave_color,zodiac",
+      "name": "春夏秋冬+号码波色+生肖",
+      "overall": {
+        "periods": 590,
+        "hits": 216,
+        "hit_rate": 36.6,
+        "avg_n": 16.9,
+        "rand_base": 34.4,
+        "alpha": 2.2,
+        "binomial_p": 0.149193,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 73,
+          "hit_rate": 41.0,
+          "avg_n": 21.5,
+          "rand_base": 44.0,
+          "alpha": -3.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 174,
+          "hits": 63,
+          "hit_rate": 36.2,
+          "avg_n": 15.4,
+          "rand_base": 31.5,
+          "alpha": 4.7,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 166,
+          "hits": 60,
+          "hit_rate": 36.1,
+          "avg_n": 15.0,
+          "rand_base": 30.7,
+          "alpha": 5.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 20,
+          "hit_rate": 27.8,
+          "avg_n": 13.0,
+          "rand_base": 26.4,
+          "alpha": 1.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "wave_color"
+      ],
+      "dims_key": "wave_color",
+      "name": "号码波色",
+      "overall": {
+        "periods": 184,
+        "hits": 70,
+        "hit_rate": 38.0,
+        "avg_n": 17.6,
+        "rand_base": 35.9,
+        "alpha": 2.2,
+        "binomial_p": 0.298372,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 61,
+          "hits": 25,
+          "hit_rate": 41.0,
+          "avg_n": 20.1,
+          "rand_base": 41.0,
+          "alpha": -0.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 55,
+          "hits": 16,
+          "hit_rate": 29.1,
+          "avg_n": 16.3,
+          "rand_base": 33.4,
+          "alpha": -4.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 53,
+          "hits": 23,
+          "hit_rate": 43.4,
+          "avg_n": 16.4,
+          "rand_base": 33.4,
+          "alpha": 10.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 15,
+          "hits": 6,
+          "hit_rate": 40.0,
+          "avg_n": 16.2,
+          "rand_base": 33.1,
+          "alpha": 6.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "wave_color",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,wave_color,zodiac_color_type",
+      "name": "头数+号码波色+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 441,
+        "hits": 187,
+        "hit_rate": 42.4,
+        "avg_n": 19.8,
+        "rand_base": 40.4,
+        "alpha": 2.0,
+        "binomial_p": 0.209983,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 130,
+          "hits": 62,
+          "hit_rate": 47.7,
+          "avg_n": 24.6,
+          "rand_base": 50.2,
+          "alpha": -2.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 127,
+          "hits": 41,
+          "hit_rate": 32.3,
+          "avg_n": 16.9,
+          "rand_base": 34.5,
+          "alpha": -2.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 131,
+          "hits": 59,
+          "hit_rate": 45.0,
+          "avg_n": 18.2,
+          "rand_base": 37.1,
+          "alpha": 7.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 53,
+          "hits": 25,
+          "hit_rate": 47.2,
+          "avg_n": 18.8,
+          "rand_base": 38.3,
+          "alpha": 8.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "head_number",
+        "zodiac_color_type"
+      ],
+      "dims_key": "five_element,head_number,zodiac_color_type",
+      "name": "五行+头数+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 492,
+        "hits": 194,
+        "hit_rate": 39.4,
+        "avg_n": 18.4,
+        "rand_base": 37.5,
+        "alpha": 1.9,
+        "binomial_p": 0.207312,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 144,
+          "hits": 65,
+          "hit_rate": 45.1,
+          "avg_n": 23.3,
+          "rand_base": 47.5,
+          "alpha": -2.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 133,
+          "hits": 45,
+          "hit_rate": 33.8,
+          "avg_n": 15.1,
+          "rand_base": 30.9,
+          "alpha": 3.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 155,
+          "hits": 60,
+          "hit_rate": 38.7,
+          "avg_n": 16.8,
+          "rand_base": 34.4,
+          "alpha": 4.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 60,
+          "hits": 24,
+          "hit_rate": 40.0,
+          "avg_n": 17.8,
+          "rand_base": 36.3,
+          "alpha": 3.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "season_type",
+        "tail_number"
+      ],
+      "dims_key": "head_number,season_type,tail_number",
+      "name": "头数+春夏秋冬+尾数",
+      "overall": {
+        "periods": 580,
+        "hits": 223,
+        "hit_rate": 38.4,
+        "avg_n": 17.9,
+        "rand_base": 36.5,
+        "alpha": 1.9,
+        "binomial_p": 0.179669,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 175,
+          "hits": 77,
+          "hit_rate": 44.0,
+          "avg_n": 23.1,
+          "rand_base": 47.2,
+          "alpha": -3.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 168,
+          "hits": 59,
+          "hit_rate": 35.1,
+          "avg_n": 15.2,
+          "rand_base": 31.0,
+          "alpha": 4.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 174,
+          "hits": 65,
+          "hit_rate": 37.4,
+          "avg_n": 16.4,
+          "rand_base": 33.5,
+          "alpha": 3.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 63,
+          "hits": 22,
+          "hit_rate": 34.9,
+          "avg_n": 14.7,
+          "rand_base": 29.9,
+          "alpha": 5.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even",
+        "wave_color",
+        "zodiac_color_type"
+      ],
+      "dims_key": "size_odd_even,wave_color,zodiac_color_type",
+      "name": "大小单双+号码波色+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 428,
+        "hits": 186,
+        "hit_rate": 43.5,
+        "avg_n": 20.4,
+        "rand_base": 41.6,
+        "alpha": 1.9,
+        "binomial_p": 0.236293,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 135,
+          "hits": 65,
+          "hit_rate": 48.1,
+          "avg_n": 24.2,
+          "rand_base": 49.4,
+          "alpha": -1.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 121,
+          "hits": 42,
+          "hit_rate": 34.7,
+          "avg_n": 18.4,
+          "rand_base": 37.5,
+          "alpha": -2.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 121,
+          "hits": 51,
+          "hit_rate": 42.1,
+          "avg_n": 18.6,
+          "rand_base": 37.9,
+          "alpha": 4.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 51,
+          "hits": 28,
+          "hit_rate": 54.9,
+          "avg_n": 19.1,
+          "rand_base": 38.9,
+          "alpha": 16.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "tail_number",
+        "zodiac"
+      ],
+      "dims_key": "season_type,tail_number,zodiac",
+      "name": "春夏秋冬+尾数+生肖",
+      "overall": {
+        "periods": 614,
+        "hits": 241,
+        "hit_rate": 39.3,
+        "avg_n": 18.4,
+        "rand_base": 37.5,
+        "alpha": 1.8,
+        "binomial_p": 0.203505,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 177,
+          "hits": 81,
+          "hit_rate": 45.8,
+          "avg_n": 24.5,
+          "rand_base": 50.0,
+          "alpha": -4.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 184,
+          "hits": 72,
+          "hit_rate": 39.1,
+          "avg_n": 16.3,
+          "rand_base": 33.2,
+          "alpha": 6.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 181,
+          "hits": 65,
+          "hit_rate": 35.9,
+          "avg_n": 16.2,
+          "rand_base": 33.0,
+          "alpha": 2.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 23,
+          "hit_rate": 31.9,
+          "avg_n": 14.0,
+          "rand_base": 28.6,
+          "alpha": 3.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "head_number"
+      ],
+      "dims_key": "five_element,head_number",
+      "name": "五行+头数",
+      "overall": {
+        "periods": 428,
+        "hits": 136,
+        "hit_rate": 31.8,
+        "avg_n": 14.7,
+        "rand_base": 30.1,
+        "alpha": 1.7,
+        "binomial_p": 0.22604,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 133,
+          "hits": 47,
+          "hit_rate": 35.3,
+          "avg_n": 17.5,
+          "rand_base": 35.8,
+          "alpha": -0.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 112,
+          "hits": 34,
+          "hit_rate": 30.4,
+          "avg_n": 12.5,
+          "rand_base": 25.6,
+          "alpha": 4.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 143,
+          "hits": 44,
+          "hit_rate": 30.8,
+          "avg_n": 13.9,
+          "rand_base": 28.3,
+          "alpha": 2.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 40,
+          "hits": 11,
+          "hit_rate": 27.5,
+          "avg_n": 14.7,
+          "rand_base": 29.9,
+          "alpha": -2.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number"
+      ],
+      "dims_key": "head_number",
+      "name": "头数",
+      "overall": {
+        "periods": 276,
+        "hits": 70,
+        "hit_rate": 25.4,
+        "avg_n": 11.6,
+        "rand_base": 23.7,
+        "alpha": 1.6,
+        "binomial_p": 0.275167,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 93,
+          "hits": 26,
+          "hit_rate": 28.0,
+          "avg_n": 12.6,
+          "rand_base": 25.8,
+          "alpha": 2.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 69,
+          "hits": 16,
+          "hit_rate": 23.2,
+          "avg_n": 10.5,
+          "rand_base": 21.5,
+          "alpha": 1.7,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 89,
+          "hits": 23,
+          "hit_rate": 25.8,
+          "avg_n": 11.4,
+          "rand_base": 23.3,
+          "alpha": 2.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 25,
+          "hits": 5,
+          "hit_rate": 20.0,
+          "avg_n": 11.7,
+          "rand_base": 23.8,
+          "alpha": -3.8,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "zodiac",
+        "zodiac_color_type"
+      ],
+      "dims_key": "five_element,zodiac,zodiac_color_type",
+      "name": "五行+生肖+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 594,
+        "hits": 227,
+        "hit_rate": 38.2,
+        "avg_n": 18.0,
+        "rand_base": 36.7,
+        "alpha": 1.5,
+        "binomial_p": 0.239498,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 179,
+          "hits": 75,
+          "hit_rate": 41.9,
+          "avg_n": 23.1,
+          "rand_base": 47.1,
+          "alpha": -5.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 177,
+          "hits": 58,
+          "hit_rate": 32.8,
+          "avg_n": 14.7,
+          "rand_base": 29.9,
+          "alpha": 2.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 166,
+          "hits": 66,
+          "hit_rate": 39.8,
+          "avg_n": 16.8,
+          "rand_base": 34.3,
+          "alpha": 5.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 28,
+          "hit_rate": 38.9,
+          "avg_n": 16.2,
+          "rand_base": 33.0,
+          "alpha": 5.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,zodiac_color_type",
+      "name": "头数+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 383,
+        "hits": 136,
+        "hit_rate": 35.5,
+        "avg_n": 16.7,
+        "rand_base": 34.1,
+        "alpha": 1.5,
+        "binomial_p": 0.29477,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 124,
+          "hits": 48,
+          "hit_rate": 38.7,
+          "avg_n": 20.2,
+          "rand_base": 41.3,
+          "alpha": -2.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 97,
+          "hits": 27,
+          "hit_rate": 27.8,
+          "avg_n": 14.1,
+          "rand_base": 28.9,
+          "alpha": -1.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 112,
+          "hits": 42,
+          "hit_rate": 37.5,
+          "avg_n": 15.2,
+          "rand_base": 31.0,
+          "alpha": 6.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 50,
+          "hits": 19,
+          "hit_rate": 38.0,
+          "avg_n": 16.1,
+          "rand_base": 32.9,
+          "alpha": 5.1,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "qqsh_type",
+        "season_type"
+      ],
+      "dims_key": "head_number,qqsh_type,season_type",
+      "name": "头数+琴棋书画+春夏秋冬",
+      "overall": {
+        "periods": 484,
+        "hits": 186,
+        "hit_rate": 38.4,
+        "avg_n": 18.1,
+        "rand_base": 37.0,
+        "alpha": 1.4,
+        "binomial_p": 0.262735,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 154,
+          "hits": 66,
+          "hit_rate": 42.9,
+          "avg_n": 21.8,
+          "rand_base": 44.5,
+          "alpha": -1.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 126,
+          "hits": 49,
+          "hit_rate": 38.9,
+          "avg_n": 16.6,
+          "rand_base": 33.8,
+          "alpha": 5.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 148,
+          "hits": 52,
+          "hit_rate": 35.1,
+          "avg_n": 16.6,
+          "rand_base": 33.9,
+          "alpha": 1.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 56,
+          "hits": 19,
+          "hit_rate": 33.9,
+          "avg_n": 15.6,
+          "rand_base": 31.8,
+          "alpha": 2.1,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element"
+      ],
+      "dims_key": "five_element",
+      "name": "五行",
+      "overall": {
+        "periods": 318,
+        "hits": 78,
+        "hit_rate": 24.5,
+        "avg_n": 11.4,
+        "rand_base": 23.2,
+        "alpha": 1.3,
+        "binomial_p": 0.317096,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 110,
+          "hits": 28,
+          "hit_rate": 25.5,
+          "avg_n": 12.7,
+          "rand_base": 25.9,
+          "alpha": -0.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 76,
+          "hits": 21,
+          "hit_rate": 27.6,
+          "avg_n": 10.0,
+          "rand_base": 20.5,
+          "alpha": 7.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 100,
+          "hits": 23,
+          "hit_rate": 23.0,
+          "avg_n": 10.9,
+          "rand_base": 22.3,
+          "alpha": 0.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 32,
+          "hits": 6,
+          "hit_rate": 18.8,
+          "avg_n": 11.2,
+          "rand_base": 23.0,
+          "alpha": -4.2,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "wave_color",
+        "zodiac"
+      ],
+      "dims_key": "five_element,wave_color,zodiac",
+      "name": "五行+号码波色+生肖",
+      "overall": {
+        "periods": 594,
+        "hits": 219,
+        "hit_rate": 36.9,
+        "avg_n": 17.4,
+        "rand_base": 35.6,
+        "alpha": 1.3,
+        "binomial_p": 0.257411,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 72,
+          "hit_rate": 40.4,
+          "avg_n": 21.7,
+          "rand_base": 44.2,
+          "alpha": -3.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 177,
+          "hits": 59,
+          "hit_rate": 33.3,
+          "avg_n": 15.3,
+          "rand_base": 31.2,
+          "alpha": 2.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 167,
+          "hits": 67,
+          "hit_rate": 40.1,
+          "avg_n": 16.9,
+          "rand_base": 34.5,
+          "alpha": 5.6,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 21,
+          "hit_rate": 29.2,
+          "avg_n": 13.3,
+          "rand_base": 27.2,
+          "alpha": 1.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "wave_color"
+      ],
+      "dims_key": "head_number,wave_color",
+      "name": "头数+号码波色",
+      "overall": {
+        "periods": 365,
+        "hits": 128,
+        "hit_rate": 35.1,
+        "avg_n": 16.6,
+        "rand_base": 33.8,
+        "alpha": 1.3,
+        "binomial_p": 0.333515,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 107,
+          "hits": 43,
+          "hit_rate": 40.2,
+          "avg_n": 20.2,
+          "rand_base": 41.2,
+          "alpha": -1.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 105,
+          "hits": 30,
+          "hit_rate": 28.6,
+          "avg_n": 14.9,
+          "rand_base": 30.4,
+          "alpha": -1.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 117,
+          "hits": 44,
+          "hit_rate": 37.6,
+          "avg_n": 15.3,
+          "rand_base": 31.3,
+          "alpha": 6.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 36,
+          "hits": 11,
+          "hit_rate": 30.6,
+          "avg_n": 14.6,
+          "rand_base": 29.9,
+          "alpha": 0.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "wave_color",
+        "zodiac",
+        "zodiac_color_type"
+      ],
+      "dims_key": "wave_color,zodiac,zodiac_color_type",
+      "name": "号码波色+生肖+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 585,
+        "hits": 217,
+        "hit_rate": 37.1,
+        "avg_n": 17.5,
+        "rand_base": 35.7,
+        "alpha": 1.3,
+        "binomial_p": 0.256035,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 179,
+          "hits": 73,
+          "hit_rate": 40.8,
+          "avg_n": 22.2,
+          "rand_base": 45.3,
+          "alpha": -4.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 174,
+          "hits": 53,
+          "hit_rate": 30.5,
+          "avg_n": 15.3,
+          "rand_base": 31.2,
+          "alpha": -0.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 166,
+          "hits": 63,
+          "hit_rate": 38.0,
+          "avg_n": 15.4,
+          "rand_base": 31.4,
+          "alpha": 6.6,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 28,
+          "hit_rate": 42.4,
+          "avg_n": 16.0,
+          "rand_base": 32.7,
+          "alpha": 9.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "size_odd_even",
+        "zodiac"
+      ],
+      "dims_key": "season_type,size_odd_even,zodiac",
+      "name": "春夏秋冬+大小单双+生肖",
+      "overall": {
+        "periods": 596,
+        "hits": 211,
+        "hit_rate": 35.4,
+        "avg_n": 16.8,
+        "rand_base": 34.2,
+        "alpha": 1.2,
+        "binomial_p": 0.296488,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 75,
+          "hit_rate": 42.1,
+          "avg_n": 22.1,
+          "rand_base": 45.2,
+          "alpha": -3.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 174,
+          "hits": 58,
+          "hit_rate": 33.3,
+          "avg_n": 15.1,
+          "rand_base": 30.9,
+          "alpha": 2.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 172,
+          "hits": 56,
+          "hit_rate": 32.6,
+          "avg_n": 14.3,
+          "rand_base": 29.3,
+          "alpha": 3.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 22,
+          "hit_rate": 30.6,
+          "avg_n": 13.3,
+          "rand_base": 27.1,
+          "alpha": 3.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "size_odd_even",
+        "zodiac_color_type"
+      ],
+      "dims_key": "five_element,size_odd_even,zodiac_color_type",
+      "name": "五行+大小单双+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 492,
+        "hits": 191,
+        "hit_rate": 38.8,
+        "avg_n": 18.5,
+        "rand_base": 37.7,
+        "alpha": 1.1,
+        "binomial_p": 0.328425,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 141,
+          "hits": 67,
+          "hit_rate": 47.5,
+          "avg_n": 24.0,
+          "rand_base": 48.9,
+          "alpha": -1.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 135,
+          "hits": 44,
+          "hit_rate": 32.6,
+          "avg_n": 15.9,
+          "rand_base": 32.4,
+          "alpha": 0.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 153,
+          "hits": 53,
+          "hit_rate": 34.6,
+          "avg_n": 16.2,
+          "rand_base": 33.1,
+          "alpha": 1.6,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 63,
+          "hits": 27,
+          "hit_rate": 42.9,
+          "avg_n": 17.4,
+          "rand_base": 35.5,
+          "alpha": 7.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "size_odd_even",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,size_odd_even,zodiac_color_type",
+      "name": "头数+大小单双+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 458,
+        "hits": 182,
+        "hit_rate": 39.7,
+        "avg_n": 18.9,
+        "rand_base": 38.7,
+        "alpha": 1.1,
+        "binomial_p": 0.320002,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 146,
+          "hits": 67,
+          "hit_rate": 45.9,
+          "avg_n": 22.7,
+          "rand_base": 46.4,
+          "alpha": -0.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 123,
+          "hits": 38,
+          "hit_rate": 30.9,
+          "avg_n": 16.4,
+          "rand_base": 33.5,
+          "alpha": -2.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 130,
+          "hits": 53,
+          "hit_rate": 40.8,
+          "avg_n": 17.8,
+          "rand_base": 36.3,
+          "alpha": 4.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 59,
+          "hits": 24,
+          "hit_rate": 40.7,
+          "avg_n": 17.4,
+          "rand_base": 35.5,
+          "alpha": 5.2,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "qqsh_type",
+        "season_type"
+      ],
+      "dims_key": "five_element,qqsh_type,season_type",
+      "name": "五行+琴棋书画+春夏秋冬",
+      "overall": {
+        "periods": 487,
+        "hits": 188,
+        "hit_rate": 38.6,
+        "avg_n": 18.4,
+        "rand_base": 37.6,
+        "alpha": 1.0,
+        "binomial_p": 0.331409,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 159,
+          "hits": 65,
+          "hit_rate": 40.9,
+          "avg_n": 22.0,
+          "rand_base": 44.9,
+          "alpha": -4.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 124,
+          "hits": 53,
+          "hit_rate": 42.7,
+          "avg_n": 17.1,
+          "rand_base": 34.8,
+          "alpha": 7.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 148,
+          "hits": 50,
+          "hit_rate": 33.8,
+          "avg_n": 16.6,
+          "rand_base": 33.8,
+          "alpha": 0.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 56,
+          "hits": 20,
+          "hit_rate": 35.7,
+          "avg_n": 16.4,
+          "rand_base": 33.5,
+          "alpha": 2.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "gender_zodiac"
+      ],
+      "dims_key": "gender_zodiac",
+      "name": "男女肖",
+      "overall": {
+        "periods": 188,
+        "hits": 100,
+        "hit_rate": 53.2,
+        "avg_n": 25.6,
+        "rand_base": 52.3,
+        "alpha": 0.9,
+        "binomial_p": 0.426341,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 60,
+          "hits": 31,
+          "hit_rate": 51.7,
+          "avg_n": 26.7,
+          "rand_base": 54.5,
+          "alpha": -2.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 61,
+          "hits": 29,
+          "hit_rate": 47.5,
+          "avg_n": 24.1,
+          "rand_base": 49.2,
+          "alpha": -1.7,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 47,
+          "hits": 26,
+          "hit_rate": 55.3,
+          "avg_n": 25.2,
+          "rand_base": 51.4,
+          "alpha": 4.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 20,
+          "hits": 14,
+          "hit_rate": 70.0,
+          "avg_n": 28.1,
+          "rand_base": 57.3,
+          "alpha": 12.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "zodiac",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,zodiac,zodiac_color_type",
+      "name": "头数+生肖+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 597,
+        "hits": 218,
+        "hit_rate": 36.5,
+        "avg_n": 17.5,
+        "rand_base": 35.7,
+        "alpha": 0.9,
+        "binomial_p": 0.355862,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 179,
+          "hits": 73,
+          "hit_rate": 40.8,
+          "avg_n": 22.6,
+          "rand_base": 46.2,
+          "alpha": -5.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 180,
+          "hits": 52,
+          "hit_rate": 28.9,
+          "avg_n": 14.3,
+          "rand_base": 29.2,
+          "alpha": -0.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 172,
+          "hits": 67,
+          "hit_rate": 39.0,
+          "avg_n": 15.8,
+          "rand_base": 32.1,
+          "alpha": 6.8,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 26,
+          "hit_rate": 39.4,
+          "avg_n": 16.6,
+          "rand_base": 33.8,
+          "alpha": 5.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "head_number",
+        "zodiac"
+      ],
+      "dims_key": "five_element,head_number,zodiac",
+      "name": "五行+头数+生肖",
+      "overall": {
+        "periods": 603,
+        "hits": 216,
+        "hit_rate": 35.8,
+        "avg_n": 17.2,
+        "rand_base": 35.2,
+        "alpha": 0.7,
+        "binomial_p": 0.370351,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 70,
+          "hit_rate": 39.3,
+          "avg_n": 21.8,
+          "rand_base": 44.5,
+          "alpha": -5.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 180,
+          "hits": 56,
+          "hit_rate": 31.1,
+          "avg_n": 14.2,
+          "rand_base": 29.0,
+          "alpha": 2.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 173,
+          "hits": 69,
+          "hit_rate": 39.9,
+          "avg_n": 17.4,
+          "rand_base": 35.5,
+          "alpha": 4.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 21,
+          "hit_rate": 29.2,
+          "avg_n": 13.1,
+          "rand_base": 26.6,
+          "alpha": 2.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "qqsh_type",
+        "zodiac_color_type"
+      ],
+      "dims_key": "head_number,qqsh_type,zodiac_color_type",
+      "name": "头数+琴棋书画+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 465,
+        "hits": 183,
+        "hit_rate": 39.4,
+        "avg_n": 18.9,
+        "rand_base": 38.6,
+        "alpha": 0.7,
+        "binomial_p": 0.381069,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 145,
+          "hits": 62,
+          "hit_rate": 42.8,
+          "avg_n": 22.8,
+          "rand_base": 46.4,
+          "alpha": -3.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 121,
+          "hits": 39,
+          "hit_rate": 32.2,
+          "avg_n": 16.6,
+          "rand_base": 33.9,
+          "alpha": -1.7,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 140,
+          "hits": 58,
+          "hit_rate": 41.4,
+          "avg_n": 17.4,
+          "rand_base": 35.4,
+          "alpha": 6.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 59,
+          "hits": 24,
+          "hit_rate": 40.7,
+          "avg_n": 18.0,
+          "rand_base": 36.7,
+          "alpha": 3.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "qqsh_type",
+        "season_type",
+        "zodiac"
+      ],
+      "dims_key": "qqsh_type,season_type,zodiac",
+      "name": "琴棋书画+春夏秋冬+生肖",
+      "overall": {
+        "periods": 588,
+        "hits": 201,
+        "hit_rate": 34.2,
+        "avg_n": 16.4,
+        "rand_base": 33.5,
+        "alpha": 0.7,
+        "binomial_p": 0.371598,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 70,
+          "hit_rate": 39.3,
+          "avg_n": 21.0,
+          "rand_base": 42.8,
+          "alpha": -3.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 171,
+          "hits": 58,
+          "hit_rate": 33.9,
+          "avg_n": 14.9,
+          "rand_base": 30.5,
+          "alpha": 3.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 167,
+          "hits": 53,
+          "hit_rate": 31.7,
+          "avg_n": 14.6,
+          "rand_base": 29.8,
+          "alpha": 2.0,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 20,
+          "hit_rate": 27.8,
+          "avg_n": 12.9,
+          "rand_base": 26.3,
+          "alpha": 1.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "tail_number",
+        "wave_color"
+      ],
+      "dims_key": "head_number,tail_number,wave_color",
+      "name": "头数+尾数+号码波色",
+      "overall": {
+        "periods": 576,
+        "hits": 208,
+        "hit_rate": 36.1,
+        "avg_n": 17.4,
+        "rand_base": 35.5,
+        "alpha": 0.6,
+        "binomial_p": 0.396767,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 163,
+          "hits": 70,
+          "hit_rate": 42.9,
+          "avg_n": 22.0,
+          "rand_base": 44.9,
+          "alpha": -1.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 171,
+          "hits": 49,
+          "hit_rate": 28.7,
+          "avg_n": 15.5,
+          "rand_base": 31.7,
+          "alpha": -3.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 177,
+          "hits": 68,
+          "hit_rate": 38.4,
+          "avg_n": 16.5,
+          "rand_base": 33.8,
+          "alpha": 4.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 65,
+          "hits": 21,
+          "hit_rate": 32.3,
+          "avg_n": 13.2,
+          "rand_base": 27.0,
+          "alpha": 5.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "zodiac"
+      ],
+      "dims_key": "head_number,zodiac",
+      "name": "头数+生肖",
+      "overall": {
+        "periods": 594,
+        "hits": 163,
+        "hit_rate": 27.4,
+        "avg_n": 13.1,
+        "rand_base": 26.8,
+        "alpha": 0.6,
+        "binomial_p": 0.363567,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 55,
+          "hit_rate": 30.9,
+          "avg_n": 16.7,
+          "rand_base": 34.0,
+          "alpha": -3.1,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 179,
+          "hits": 41,
+          "hit_rate": 22.9,
+          "avg_n": 11.0,
+          "rand_base": 22.5,
+          "alpha": 0.4,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 171,
+          "hits": 52,
+          "hit_rate": 30.4,
+          "avg_n": 12.8,
+          "rand_base": 26.1,
+          "alpha": 4.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 15,
+          "hit_rate": 22.7,
+          "avg_n": 10.3,
+          "rand_base": 21.0,
+          "alpha": 1.8,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "edge_color"
+      ],
+      "dims_key": "edge_color",
+      "name": "白边黑中",
+      "overall": {
+        "periods": 177,
+        "hits": 93,
+        "hit_rate": 52.5,
+        "avg_n": 25.5,
+        "rand_base": 52.0,
+        "alpha": 0.5,
+        "binomial_p": 0.477157,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 70,
+          "hits": 41,
+          "hit_rate": 58.6,
+          "avg_n": 27.0,
+          "rand_base": 55.2,
+          "alpha": 3.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 42,
+          "hits": 23,
+          "hit_rate": 54.8,
+          "avg_n": 24.4,
+          "rand_base": 49.7,
+          "alpha": 5.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 51,
+          "hits": 24,
+          "hit_rate": 47.1,
+          "avg_n": 24.6,
+          "rand_base": 50.2,
+          "alpha": -3.2,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 14,
+          "hits": 5,
+          "hit_rate": 35.7,
+          "avg_n": 24.6,
+          "rand_base": 50.1,
+          "alpha": -14.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "head_number",
+        "size_odd_even"
+      ],
+      "dims_key": "five_element,head_number,size_odd_even",
+      "name": "五行+头数+大小单双",
+      "overall": {
+        "periods": 492,
+        "hits": 178,
+        "hit_rate": 36.2,
+        "avg_n": 17.5,
+        "rand_base": 35.6,
+        "alpha": 0.5,
+        "binomial_p": 0.431584,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 145,
+          "hits": 63,
+          "hit_rate": 43.4,
+          "avg_n": 21.6,
+          "rand_base": 44.1,
+          "alpha": -0.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 134,
+          "hits": 42,
+          "hit_rate": 31.3,
+          "avg_n": 15.3,
+          "rand_base": 31.2,
+          "alpha": 0.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 161,
+          "hits": 57,
+          "hit_rate": 35.4,
+          "avg_n": 16.0,
+          "rand_base": 32.7,
+          "alpha": 2.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 52,
+          "hits": 16,
+          "hit_rate": 30.8,
+          "avg_n": 16.0,
+          "rand_base": 32.7,
+          "alpha": -1.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "size_odd_even",
+        "wave_color"
+      ],
+      "dims_key": "head_number,size_odd_even,wave_color",
+      "name": "头数+大小单双+号码波色",
+      "overall": {
+        "periods": 451,
+        "hits": 172,
+        "hit_rate": 38.1,
+        "avg_n": 18.5,
+        "rand_base": 37.7,
+        "alpha": 0.4,
+        "binomial_p": 0.451121,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 137,
+          "hits": 59,
+          "hit_rate": 43.1,
+          "avg_n": 21.8,
+          "rand_base": 44.5,
+          "alpha": -1.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 126,
+          "hits": 41,
+          "hit_rate": 32.5,
+          "avg_n": 17.2,
+          "rand_base": 35.1,
+          "alpha": -2.5,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 138,
+          "hits": 56,
+          "hit_rate": 40.6,
+          "avg_n": 17.5,
+          "rand_base": 35.7,
+          "alpha": 4.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 50,
+          "hits": 16,
+          "hit_rate": 32.0,
+          "avg_n": 15.4,
+          "rand_base": 31.4,
+          "alpha": 0.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "tail_number",
+        "zodiac"
+      ],
+      "dims_key": "five_element,tail_number,zodiac",
+      "name": "五行+尾数+生肖",
+      "overall": {
+        "periods": 614,
+        "hits": 238,
+        "hit_rate": 38.8,
+        "avg_n": 18.8,
+        "rand_base": 38.4,
+        "alpha": 0.3,
+        "binomial_p": 0.435326,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 177,
+          "hits": 78,
+          "hit_rate": 44.1,
+          "avg_n": 24.6,
+          "rand_base": 50.2,
+          "alpha": -6.1,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 184,
+          "hits": 68,
+          "hit_rate": 37.0,
+          "avg_n": 16.0,
+          "rand_base": 32.7,
+          "alpha": 4.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 181,
+          "hits": 70,
+          "hit_rate": 38.7,
+          "avg_n": 17.9,
+          "rand_base": 36.5,
+          "alpha": 2.2,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 22,
+          "hit_rate": 30.6,
+          "avg_n": 14.3,
+          "rand_base": 29.1,
+          "alpha": 1.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "wave_color",
+        "zodiac"
+      ],
+      "dims_key": "head_number,wave_color,zodiac",
+      "name": "头数+号码波色+生肖",
+      "overall": {
+        "periods": 597,
+        "hits": 208,
+        "hit_rate": 34.8,
+        "avg_n": 16.9,
+        "rand_base": 34.5,
+        "alpha": 0.3,
+        "binomial_p": 0.443634,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 68,
+          "hit_rate": 38.2,
+          "avg_n": 20.8,
+          "rand_base": 42.4,
+          "alpha": -4.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 179,
+          "hits": 51,
+          "hit_rate": 28.5,
+          "avg_n": 14.9,
+          "rand_base": 30.4,
+          "alpha": -1.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 174,
+          "hits": 69,
+          "hit_rate": 39.7,
+          "avg_n": 16.3,
+          "rand_base": 33.4,
+          "alpha": 6.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 20,
+          "hit_rate": 30.3,
+          "avg_n": 13.4,
+          "rand_base": 27.4,
+          "alpha": 2.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even",
+        "zodiac_color_type"
+      ],
+      "dims_key": "size_odd_even,zodiac_color_type",
+      "name": "大小单双+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 362,
+        "hits": 132,
+        "hit_rate": 36.5,
+        "avg_n": 17.7,
+        "rand_base": 36.1,
+        "alpha": 0.3,
+        "binomial_p": 0.465882,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 126,
+          "hits": 50,
+          "hit_rate": 39.7,
+          "avg_n": 20.5,
+          "rand_base": 41.9,
+          "alpha": -2.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 94,
+          "hits": 26,
+          "hit_rate": 27.7,
+          "avg_n": 15.8,
+          "rand_base": 32.2,
+          "alpha": -4.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 96,
+          "hits": 34,
+          "hit_rate": 35.4,
+          "avg_n": 16.1,
+          "rand_base": 32.9,
+          "alpha": 2.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 46,
+          "hits": 22,
+          "hit_rate": 47.8,
+          "avg_n": 17.2,
+          "rand_base": 35.1,
+          "alpha": 12.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "wave_color",
+        "zodiac"
+      ],
+      "dims_key": "wave_color,zodiac",
+      "name": "号码波色+生肖",
+      "overall": {
+        "periods": 581,
+        "hits": 160,
+        "hit_rate": 27.5,
+        "avg_n": 13.4,
+        "rand_base": 27.3,
+        "alpha": 0.3,
+        "binomial_p": 0.474415,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 53,
+          "hit_rate": 29.8,
+          "avg_n": 16.8,
+          "rand_base": 34.3,
+          "alpha": -4.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 172,
+          "hits": 42,
+          "hit_rate": 24.4,
+          "avg_n": 12.1,
+          "rand_base": 24.8,
+          "alpha": -0.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 165,
+          "hits": 49,
+          "hit_rate": 29.7,
+          "avg_n": 12.4,
+          "rand_base": 25.3,
+          "alpha": 4.4,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 16,
+          "hit_rate": 24.2,
+          "avg_n": 9.8,
+          "rand_base": 20.0,
+          "alpha": 4.2,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "size_odd_even"
+      ],
+      "dims_key": "head_number,size_odd_even",
+      "name": "头数+大小单双",
+      "overall": {
+        "periods": 389,
+        "hits": 121,
+        "hit_rate": 31.1,
+        "avg_n": 15.1,
+        "rand_base": 30.9,
+        "alpha": 0.2,
+        "binomial_p": 0.469887,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 128,
+          "hits": 47,
+          "hit_rate": 36.7,
+          "avg_n": 17.4,
+          "rand_base": 35.6,
+          "alpha": 1.1,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 103,
+          "hits": 27,
+          "hit_rate": 26.2,
+          "avg_n": 13.8,
+          "rand_base": 28.1,
+          "alpha": -1.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 116,
+          "hits": 37,
+          "hit_rate": 31.9,
+          "avg_n": 14.5,
+          "rand_base": 29.7,
+          "alpha": 2.2,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 42,
+          "hits": 10,
+          "hit_rate": 23.8,
+          "avg_n": 13.1,
+          "rand_base": 26.8,
+          "alpha": -3.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "tail_number",
+        "zodiac"
+      ],
+      "dims_key": "head_number,tail_number,zodiac",
+      "name": "头数+尾数+生肖",
+      "overall": {
+        "periods": 613,
+        "hits": 233,
+        "hit_rate": 38.0,
+        "avg_n": 18.5,
+        "rand_base": 37.8,
+        "alpha": 0.2,
+        "binomial_p": 0.463436,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 78,
+          "hit_rate": 43.8,
+          "avg_n": 23.4,
+          "rand_base": 47.9,
+          "alpha": -4.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 184,
+          "hits": 61,
+          "hit_rate": 33.2,
+          "avg_n": 16.2,
+          "rand_base": 33.0,
+          "alpha": 0.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 181,
+          "hits": 72,
+          "hit_rate": 39.8,
+          "avg_n": 17.8,
+          "rand_base": 36.3,
+          "alpha": 3.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 70,
+          "hits": 22,
+          "hit_rate": 31.4,
+          "avg_n": 14.0,
+          "rand_base": 28.5,
+          "alpha": 2.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "size_odd_even",
+        "zodiac"
+      ],
+      "dims_key": "head_number,size_odd_even,zodiac",
+      "name": "头数+大小单双+生肖",
+      "overall": {
+        "periods": 600,
+        "hits": 204,
+        "hit_rate": 34.0,
+        "avg_n": 16.6,
+        "rand_base": 33.9,
+        "alpha": 0.1,
+        "binomial_p": 0.490076,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 74,
+          "hit_rate": 41.6,
+          "avg_n": 21.1,
+          "rand_base": 43.1,
+          "alpha": -1.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 180,
+          "hits": 49,
+          "hit_rate": 27.2,
+          "avg_n": 14.2,
+          "rand_base": 29.1,
+          "alpha": -1.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 176,
+          "hits": 62,
+          "hit_rate": 35.2,
+          "avg_n": 15.5,
+          "rand_base": 31.7,
+          "alpha": 3.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 19,
+          "hit_rate": 28.8,
+          "avg_n": 13.8,
+          "rand_base": 28.1,
+          "alpha": 0.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even",
+        "zodiac",
+        "zodiac_color_type"
+      ],
+      "dims_key": "size_odd_even,zodiac,zodiac_color_type",
+      "name": "大小单双+生肖+红肖蓝肖绿肖",
+      "overall": {
+        "periods": 593,
+        "hits": 213,
+        "hit_rate": 35.9,
+        "avg_n": 17.5,
+        "rand_base": 35.8,
+        "alpha": 0.1,
+        "binomial_p": 0.473977,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 179,
+          "hits": 76,
+          "hit_rate": 42.5,
+          "avg_n": 22.9,
+          "rand_base": 46.7,
+          "alpha": -4.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 177,
+          "hits": 51,
+          "hit_rate": 28.8,
+          "avg_n": 15.0,
+          "rand_base": 30.7,
+          "alpha": -1.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 171,
+          "hits": 57,
+          "hit_rate": 33.3,
+          "avg_n": 14.8,
+          "rand_base": 30.3,
+          "alpha": 3.1,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 29,
+          "hit_rate": 43.9,
+          "avg_n": 16.8,
+          "rand_base": 34.2,
+          "alpha": 9.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "stroke_type"
+      ],
+      "dims_key": "stroke_type",
+      "name": "单笔双笔",
+      "overall": {
+        "periods": 237,
+        "hits": 121,
+        "hit_rate": 51.1,
+        "avg_n": 25.0,
+        "rand_base": 50.9,
+        "alpha": 0.1,
+        "binomial_p": 0.521845,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 85,
+          "hits": 45,
+          "hit_rate": 52.9,
+          "avg_n": 25.7,
+          "rand_base": 52.5,
+          "alpha": 0.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 31,
+          "hit_rate": 43.1,
+          "avg_n": 24.6,
+          "rand_base": 50.2,
+          "alpha": -7.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 59,
+          "hits": 32,
+          "hit_rate": 54.2,
+          "avg_n": 24.4,
+          "rand_base": 49.7,
+          "alpha": 4.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 21,
+          "hits": 13,
+          "hit_rate": 61.9,
+          "avg_n": 24.7,
+          "rand_base": 50.4,
+          "alpha": 11.5,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "zodiac"
+      ],
+      "dims_key": "zodiac",
+      "name": "生肖",
+      "overall": {
+        "periods": 573,
+        "hits": 106,
+        "hit_rate": 18.5,
+        "avg_n": 9.0,
+        "rand_base": 18.4,
+        "alpha": 0.1,
+        "binomial_p": 0.484486,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 177,
+          "hits": 34,
+          "hit_rate": 19.2,
+          "avg_n": 11.7,
+          "rand_base": 23.9,
+          "alpha": -4.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 168,
+          "hits": 30,
+          "hit_rate": 17.9,
+          "avg_n": 8.0,
+          "rand_base": 16.3,
+          "alpha": 1.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 162,
+          "hits": 31,
+          "hit_rate": 19.1,
+          "avg_n": 8.2,
+          "rand_base": 16.7,
+          "alpha": 2.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 11,
+          "hit_rate": 16.7,
+          "avg_n": 6.5,
+          "rand_base": 13.3,
+          "alpha": 3.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "zodiac_seq"
+      ],
+      "dims_key": "zodiac_seq",
+      "name": "前后肖",
+      "overall": {
+        "periods": 178,
+        "hits": 94,
+        "hit_rate": 52.8,
+        "avg_n": 25.8,
+        "rand_base": 52.8,
+        "alpha": 0.1,
+        "binomial_p": 0.513843,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 69,
+          "hits": 43,
+          "hit_rate": 62.3,
+          "avg_n": 28.1,
+          "rand_base": 57.3,
+          "alpha": 5.0,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 51,
+          "hits": 22,
+          "hit_rate": 43.1,
+          "avg_n": 24.5,
+          "rand_base": 49.9,
+          "alpha": -6.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 37,
+          "hits": 16,
+          "hit_rate": 43.2,
+          "avg_n": 24.3,
+          "rand_base": 49.6,
+          "alpha": -6.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 21,
+          "hits": 13,
+          "hit_rate": 61.9,
+          "avg_n": 24.6,
+          "rand_base": 50.1,
+          "alpha": 11.8,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "head_number",
+        "qqsh_type"
+      ],
+      "dims_key": "head_number,qqsh_type",
+      "name": "头数+琴棋书画",
+      "overall": {
+        "periods": 417,
+        "hits": 128,
+        "hit_rate": 30.7,
+        "avg_n": 15.0,
+        "rand_base": 30.7,
+        "alpha": -0.0,
+        "binomial_p": 0.503744,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 135,
+          "hits": 44,
+          "hit_rate": 32.6,
+          "avg_n": 16.6,
+          "rand_base": 34.0,
+          "alpha": -1.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 110,
+          "hits": 31,
+          "hit_rate": 28.2,
+          "avg_n": 13.9,
+          "rand_base": 28.3,
+          "alpha": -0.1,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 128,
+          "hits": 41,
+          "hit_rate": 32.0,
+          "avg_n": 14.8,
+          "rand_base": 30.1,
+          "alpha": 1.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 44,
+          "hits": 12,
+          "hit_rate": 27.3,
+          "avg_n": 14.0,
+          "rand_base": 28.5,
+          "alpha": -1.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "odd_even"
+      ],
+      "dims_key": "odd_even",
+      "name": "单双",
+      "overall": {
+        "periods": 184,
+        "hits": 95,
+        "hit_rate": 51.6,
+        "avg_n": 25.3,
+        "rand_base": 51.6,
+        "alpha": -0.0,
+        "binomial_p": 0.529944,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 66,
+          "hits": 35,
+          "hit_rate": 53.0,
+          "avg_n": 26.7,
+          "rand_base": 54.4,
+          "alpha": -1.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 61,
+          "hits": 33,
+          "hit_rate": 54.1,
+          "avg_n": 24.6,
+          "rand_base": 50.3,
+          "alpha": 3.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 45,
+          "hits": 22,
+          "hit_rate": 48.9,
+          "avg_n": 24.4,
+          "rand_base": 49.8,
+          "alpha": -0.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 12,
+          "hits": 5,
+          "hit_rate": 41.7,
+          "avg_n": 24.8,
+          "rand_base": 50.5,
+          "alpha": -8.8,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "season_type",
+        "size_odd_even",
+        "tail_number"
+      ],
+      "dims_key": "season_type,size_odd_even,tail_number",
+      "name": "春夏秋冬+大小单双+尾数",
+      "overall": {
+        "periods": 560,
+        "hits": 210,
+        "hit_rate": 37.5,
+        "avg_n": 18.4,
+        "rand_base": 37.5,
+        "alpha": 0.0,
+        "binomial_p": 0.525891,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 175,
+          "hits": 71,
+          "hit_rate": 40.6,
+          "avg_n": 23.4,
+          "rand_base": 47.8,
+          "alpha": -7.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 163,
+          "hits": 58,
+          "hit_rate": 35.6,
+          "avg_n": 16.1,
+          "rand_base": 32.9,
+          "alpha": 2.6,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 161,
+          "hits": 57,
+          "hit_rate": 35.4,
+          "avg_n": 16.4,
+          "rand_base": 33.5,
+          "alpha": 1.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 61,
+          "hits": 24,
+          "hit_rate": 39.3,
+          "avg_n": 14.8,
+          "rand_base": 30.2,
+          "alpha": 9.1,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "tail_number",
+        "wave_color",
+        "zodiac"
+      ],
+      "dims_key": "tail_number,wave_color,zodiac",
+      "name": "尾数+号码波色+生肖",
+      "overall": {
+        "periods": 613,
+        "hits": 231,
+        "hit_rate": 37.7,
+        "avg_n": 18.5,
+        "rand_base": 37.7,
+        "alpha": -0.0,
+        "binomial_p": 0.529822,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 76,
+          "hit_rate": 42.7,
+          "avg_n": 23.6,
+          "rand_base": 48.1,
+          "alpha": -5.4,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 184,
+          "hits": 63,
+          "hit_rate": 34.2,
+          "avg_n": 16.8,
+          "rand_base": 34.2,
+          "alpha": 0.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 181,
+          "hits": 69,
+          "hit_rate": 38.1,
+          "avg_n": 17.1,
+          "rand_base": 34.8,
+          "alpha": 3.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 70,
+          "hits": 23,
+          "hit_rate": 32.9,
+          "avg_n": 13.7,
+          "rand_base": 28.0,
+          "alpha": 4.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "size_odd_even",
+        "zodiac"
+      ],
+      "dims_key": "five_element,size_odd_even,zodiac",
+      "name": "五行+大小单双+生肖",
+      "overall": {
+        "periods": 604,
+        "hits": 213,
+        "hit_rate": 35.3,
+        "avg_n": 17.3,
+        "rand_base": 35.3,
+        "alpha": -0.1,
+        "binomial_p": 0.523763,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 74,
+          "hit_rate": 41.6,
+          "avg_n": 22.1,
+          "rand_base": 45.1,
+          "alpha": -3.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 181,
+          "hits": 55,
+          "hit_rate": 30.4,
+          "avg_n": 14.7,
+          "rand_base": 30.1,
+          "alpha": 0.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 173,
+          "hits": 61,
+          "hit_rate": 35.3,
+          "avg_n": 16.5,
+          "rand_base": 33.7,
+          "alpha": 1.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 72,
+          "hits": 23,
+          "hit_rate": 31.9,
+          "avg_n": 13.9,
+          "rand_base": 28.3,
+          "alpha": 3.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even",
+        "wave_color",
+        "zodiac"
+      ],
+      "dims_key": "size_odd_even,wave_color,zodiac",
+      "name": "大小单双+号码波色+生肖",
+      "overall": {
+        "periods": 593,
+        "hits": 202,
+        "hit_rate": 34.1,
+        "avg_n": 16.9,
+        "rand_base": 34.5,
+        "alpha": -0.4,
+        "binomial_p": 0.601444,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 68,
+          "hit_rate": 38.2,
+          "avg_n": 21.0,
+          "rand_base": 42.9,
+          "alpha": -4.7,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 176,
+          "hits": 52,
+          "hit_rate": 29.5,
+          "avg_n": 15.4,
+          "rand_base": 31.5,
+          "alpha": -1.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 173,
+          "hits": 60,
+          "hit_rate": 34.7,
+          "avg_n": 15.5,
+          "rand_base": 31.5,
+          "alpha": 3.1,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 22,
+          "hit_rate": 33.3,
+          "avg_n": 13.4,
+          "rand_base": 27.3,
+          "alpha": 6.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "tail_number"
+      ],
+      "dims_key": "tail_number",
+      "name": "尾数",
+      "overall": {
+        "periods": 520,
+        "hits": 102,
+        "hit_rate": 19.6,
+        "avg_n": 9.8,
+        "rand_base": 20.0,
+        "alpha": -0.4,
+        "binomial_p": 0.604055,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 156,
+          "hits": 36,
+          "hit_rate": 23.1,
+          "avg_n": 12.7,
+          "rand_base": 25.9,
+          "alpha": -2.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 156,
+          "hits": 25,
+          "hit_rate": 16.0,
+          "avg_n": 8.4,
+          "rand_base": 17.0,
+          "alpha": -1.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 157,
+          "hits": 28,
+          "hit_rate": 17.8,
+          "avg_n": 9.0,
+          "rand_base": 18.4,
+          "alpha": -0.6,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 51,
+          "hits": 13,
+          "hit_rate": 25.5,
+          "avg_n": 7.6,
+          "rand_base": 15.5,
+          "alpha": 10.0,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even",
+        "zodiac"
+      ],
+      "dims_key": "size_odd_even,zodiac",
+      "name": "大小单双+生肖",
+      "overall": {
+        "periods": 588,
+        "hits": 156,
+        "hit_rate": 26.5,
+        "avg_n": 13.3,
+        "rand_base": 27.2,
+        "alpha": -0.6,
+        "binomial_p": 0.645838,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 56,
+          "hit_rate": 31.5,
+          "avg_n": 17.3,
+          "rand_base": 35.3,
+          "alpha": -3.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 173,
+          "hits": 40,
+          "hit_rate": 23.1,
+          "avg_n": 12.0,
+          "rand_base": 24.4,
+          "alpha": -1.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 171,
+          "hits": 43,
+          "hit_rate": 25.1,
+          "avg_n": 11.7,
+          "rand_base": 23.9,
+          "alpha": 1.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 66,
+          "hits": 17,
+          "hit_rate": 25.8,
+          "avg_n": 10.4,
+          "rand_base": 21.2,
+          "alpha": 4.6,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "size_odd_even",
+        "tail_number"
+      ],
+      "dims_key": "five_element,size_odd_even,tail_number",
+      "name": "五行+大小单双+尾数",
+      "overall": {
+        "periods": 578,
+        "hits": 202,
+        "hit_rate": 34.9,
+        "avg_n": 17.6,
+        "rand_base": 35.9,
+        "alpha": -0.9,
+        "binomial_p": 0.700757,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 176,
+          "hits": 67,
+          "hit_rate": 38.1,
+          "avg_n": 21.5,
+          "rand_base": 43.9,
+          "alpha": -5.8,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 166,
+          "hits": 53,
+          "hit_rate": 31.9,
+          "avg_n": 15.6,
+          "rand_base": 31.7,
+          "alpha": 0.2,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 172,
+          "hits": 60,
+          "hit_rate": 34.9,
+          "avg_n": 16.7,
+          "rand_base": 34.1,
+          "alpha": 0.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 64,
+          "hits": 22,
+          "hit_rate": 34.4,
+          "avg_n": 14.2,
+          "rand_base": 29.0,
+          "alpha": 5.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "five_element",
+        "qqsh_type",
+        "size_odd_even"
+      ],
+      "dims_key": "five_element,qqsh_type,size_odd_even",
+      "name": "五行+琴棋书画+大小单双",
+      "overall": {
+        "periods": 500,
+        "hits": 177,
+        "hit_rate": 35.4,
+        "avg_n": 17.8,
+        "rand_base": 36.4,
+        "alpha": -1.0,
+        "binomial_p": 0.682225,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 151,
+          "hits": 62,
+          "hit_rate": 41.1,
+          "avg_n": 21.4,
+          "rand_base": 43.7,
+          "alpha": -2.6,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 135,
+          "hits": 47,
+          "hit_rate": 34.8,
+          "avg_n": 16.6,
+          "rand_base": 33.9,
+          "alpha": 0.9,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 156,
+          "hits": 49,
+          "hit_rate": 31.4,
+          "avg_n": 16.3,
+          "rand_base": 33.2,
+          "alpha": -1.8,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 58,
+          "hits": 19,
+          "hit_rate": 32.8,
+          "avg_n": 15.7,
+          "rand_base": 32.0,
+          "alpha": 0.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "qqsh_type",
+        "season_type",
+        "tail_number"
+      ],
+      "dims_key": "qqsh_type,season_type,tail_number",
+      "name": "琴棋书画+春夏秋冬+尾数",
+      "overall": {
+        "periods": 572,
+        "hits": 201,
+        "hit_rate": 35.1,
+        "avg_n": 17.7,
+        "rand_base": 36.1,
+        "alpha": -1.0,
+        "binomial_p": 0.701875,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 176,
+          "hits": 69,
+          "hit_rate": 39.2,
+          "avg_n": 22.4,
+          "rand_base": 45.7,
+          "alpha": -6.5,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 169,
+          "hits": 57,
+          "hit_rate": 33.7,
+          "avg_n": 15.2,
+          "rand_base": 30.9,
+          "alpha": 2.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 166,
+          "hits": 52,
+          "hit_rate": 31.3,
+          "avg_n": 16.3,
+          "rand_base": 33.3,
+          "alpha": -1.9,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 61,
+          "hits": 23,
+          "hit_rate": 37.7,
+          "avg_n": 14.9,
+          "rand_base": 30.3,
+          "alpha": 7.4,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "qqsh_type",
+        "season_type",
+        "size_odd_even"
+      ],
+      "dims_key": "qqsh_type,season_type,size_odd_even",
+      "name": "琴棋书画+春夏秋冬+大小单双",
+      "overall": {
+        "periods": 448,
+        "hits": 171,
+        "hit_rate": 38.2,
+        "avg_n": 19.3,
+        "rand_base": 39.3,
+        "alpha": -1.2,
+        "binomial_p": 0.7169,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 151,
+          "hits": 62,
+          "hit_rate": 41.1,
+          "avg_n": 22.5,
+          "rand_base": 46.0,
+          "alpha": -4.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 119,
+          "hits": 46,
+          "hit_rate": 38.7,
+          "avg_n": 18.3,
+          "rand_base": 37.3,
+          "alpha": 1.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 127,
+          "hits": 43,
+          "hit_rate": 33.9,
+          "avg_n": 17.5,
+          "rand_base": 35.7,
+          "alpha": -1.8,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 51,
+          "hits": 20,
+          "hit_rate": 39.2,
+          "avg_n": 16.4,
+          "rand_base": 33.5,
+          "alpha": 5.7,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even",
+        "tail_number",
+        "zodiac"
+      ],
+      "dims_key": "size_odd_even,tail_number,zodiac",
+      "name": "大小单双+尾数+生肖",
+      "overall": {
+        "periods": 613,
+        "hits": 222,
+        "hit_rate": 36.2,
+        "avg_n": 18.4,
+        "rand_base": 37.6,
+        "alpha": -1.4,
+        "binomial_p": 0.765135,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 178,
+          "hits": 72,
+          "hit_rate": 40.4,
+          "avg_n": 23.9,
+          "rand_base": 48.7,
+          "alpha": -8.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 184,
+          "hits": 63,
+          "hit_rate": 34.2,
+          "avg_n": 16.6,
+          "rand_base": 33.9,
+          "alpha": 0.3,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 181,
+          "hits": 63,
+          "hit_rate": 34.8,
+          "avg_n": 16.7,
+          "rand_base": 34.1,
+          "alpha": 0.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 70,
+          "hits": 24,
+          "hit_rate": 34.3,
+          "avg_n": 13.9,
+          "rand_base": 28.4,
+          "alpha": 5.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "size_odd_even"
+      ],
+      "dims_key": "size_odd_even",
+      "name": "大小单双",
+      "overall": {
+        "periods": 241,
+        "hits": 63,
+        "hit_rate": 26.1,
+        "avg_n": 13.6,
+        "rand_base": 27.8,
+        "alpha": -1.6,
+        "binomial_p": 0.733984,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 87,
+          "hits": 25,
+          "hit_rate": 28.7,
+          "avg_n": 15.1,
+          "rand_base": 30.9,
+          "alpha": -2.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 65,
+          "hits": 15,
+          "hit_rate": 23.1,
+          "avg_n": 13.0,
+          "rand_base": 26.6,
+          "alpha": -3.5,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 66,
+          "hits": 16,
+          "hit_rate": 24.2,
+          "avg_n": 12.6,
+          "rand_base": 25.7,
+          "alpha": -1.5,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 23,
+          "hits": 7,
+          "hit_rate": 30.4,
+          "avg_n": 12.3,
+          "rand_base": 25.1,
+          "alpha": 5.3,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "sky_earth"
+      ],
+      "dims_key": "sky_earth",
+      "name": "天地肖",
+      "overall": {
+        "periods": 171,
+        "hits": 84,
+        "hit_rate": 49.1,
+        "avg_n": 25.0,
+        "rand_base": 50.9,
+        "alpha": -1.8,
+        "binomial_p": 0.716691,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 77,
+          "hits": 35,
+          "hit_rate": 45.5,
+          "avg_n": 25.6,
+          "rand_base": 52.3,
+          "alpha": -6.9,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 41,
+          "hits": 22,
+          "hit_rate": 53.7,
+          "avg_n": 24.4,
+          "rand_base": 49.8,
+          "alpha": 3.8,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 40,
+          "hits": 19,
+          "hit_rate": 47.5,
+          "avg_n": 24.4,
+          "rand_base": 49.8,
+          "alpha": -2.3,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 13,
+          "hits": 8,
+          "hit_rate": 61.5,
+          "avg_n": 24.3,
+          "rand_base": 49.6,
+          "alpha": 11.9,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "animal_type"
+      ],
+      "dims_key": "animal_type",
+      "name": "家禽野兽",
+      "overall": {
+        "periods": 201,
+        "hits": 100,
+        "hit_rate": 49.8,
+        "avg_n": 25.3,
+        "rand_base": 51.7,
+        "alpha": -2.0,
+        "binomial_p": 0.727297,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 81,
+          "hits": 42,
+          "hit_rate": 51.9,
+          "avg_n": 26.5,
+          "rand_base": 54.2,
+          "alpha": -2.3,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 62,
+          "hits": 30,
+          "hit_rate": 48.4,
+          "avg_n": 24.5,
+          "rand_base": 50.1,
+          "alpha": -1.7,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 31,
+          "hits": 15,
+          "hit_rate": 48.4,
+          "avg_n": 24.5,
+          "rand_base": 50.1,
+          "alpha": -1.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 27,
+          "hits": 13,
+          "hit_rate": 48.1,
+          "avg_n": 24.5,
+          "rand_base": 50.0,
+          "alpha": -1.8,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "qqsh_type"
+      ],
+      "dims_key": "qqsh_type",
+      "name": "琴棋书画",
+      "overall": {
+        "periods": 255,
+        "hits": 62,
+        "hit_rate": 24.3,
+        "avg_n": 13.5,
+        "rand_base": 27.5,
+        "alpha": -3.2,
+        "binomial_p": 0.891227,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 90,
+          "hits": 20,
+          "hit_rate": 22.2,
+          "avg_n": 13.9,
+          "rand_base": 28.4,
+          "alpha": -6.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 64,
+          "hits": 16,
+          "hit_rate": 25.0,
+          "avg_n": 13.6,
+          "rand_base": 27.7,
+          "alpha": -2.7,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 76,
+          "hits": 19,
+          "hit_rate": 25.0,
+          "avg_n": 12.9,
+          "rand_base": 26.2,
+          "alpha": -1.2,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 25,
+          "hits": 7,
+          "hit_rate": 28.0,
+          "avg_n": 13.6,
+          "rand_base": 27.8,
+          "alpha": 0.2,
+          "label": "2026下半年至今"
+        }
+      ]
+    },
+    {
+      "dims": [
+        "beauty_type"
+      ],
+      "dims_key": "beauty_type",
+      "name": "吉美凶丑",
+      "overall": {
+        "periods": 215,
+        "hits": 107,
+        "hit_rate": 49.8,
+        "avg_n": 26.1,
+        "rand_base": 53.3,
+        "alpha": -3.5,
+        "binomial_p": 0.863483,
+        "fdr_q": 1.0
+      },
+      "half_yearly": [
+        {
+          "periods": 84,
+          "hits": 47,
+          "hit_rate": 56.0,
+          "avg_n": 28.5,
+          "rand_base": 58.1,
+          "alpha": -2.2,
+          "label": "2025上半年"
+        },
+        {
+          "periods": 59,
+          "hits": 22,
+          "hit_rate": 37.3,
+          "avg_n": 24.6,
+          "rand_base": 50.3,
+          "alpha": -13.0,
+          "label": "2025下半年"
+        },
+        {
+          "periods": 61,
+          "hits": 29,
+          "hit_rate": 47.5,
+          "avg_n": 24.6,
+          "rand_base": 50.2,
+          "alpha": -2.7,
+          "label": "2026上半年"
+        },
+        {
+          "periods": 11,
+          "hits": 9,
+          "hit_rate": 81.8,
+          "avg_n": 24.4,
+          "rand_base": 49.7,
+          "alpha": 32.1,
+          "label": "2026下半年至今"
+        }
+      ]
+    }
+  ]
+}
