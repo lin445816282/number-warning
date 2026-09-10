@@ -3189,6 +3189,17 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
         bt_avg_n = s["bt_avg_n"] or 0
         # 今日精选：精准选号 + 当前有号 + 均号≤6 + 回测超额>0
         featured = (pr in ("ge2", "ge3") and N > 0 and bt_avg_n <= 6 and bt_alpha > 0)
+        recent = []
+        recent_hit = 0
+        if featured:
+            db2 = get_db()
+            rr = db2.execute(
+                "SELECT bet_date, open_number, hit FROM dim_forward_track "
+                "WHERE dim_key=? AND hit IS NOT NULL ORDER BY bet_date DESC, id DESC LIMIT 15",
+                (f"scheme:{s['scheme_key']}",)).fetchall()
+            db2.close()
+            recent = [{"date": x["bet_date"], "open": x["open_number"], "hit": x["hit"]} for x in rr]
+            recent_hit = sum(1 for x in recent if x["hit"] == 1)
         out.append({
             "scheme_key": s["scheme_key"],
             "scheme_name": s["scheme_name"],
@@ -3206,6 +3217,8 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
             "fwd_hits": s["fwd_hits"],
             "fwd_profit": s["fwd_profit"],
             "featured": featured,
+            "recent": recent,
+            "recent_hit": recent_hit,
         })
     # 精选最前，然后精准选号(ge2/ge3)，再 union；组内按超额降序
     def _rank(x):

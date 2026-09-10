@@ -1374,6 +1374,11 @@ table.data tr.warn td{background:var(--warnbg)}
                   <span style="font-size:11px;color:var(--ink2)">买{{ p.N }}号 · 回测超额{{ p.bt_alpha>0?'+':'' }}{{ (p.bt_alpha*100).toFixed(2) }}% · 前向{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '—' }}</span>
                   <button class="btn btn-sm" @click="copySchemePicks(p)" style="padding:2px 8px;font-size:11px">📋 复制</button>
                 </div>
+                <div v-if="p.recent && p.recent.length" style="margin-top:6px">
+                  <span style="font-size:11px;color:var(--ink2)">近{{ p.recent.length }}期 </span>
+                  <span style="font-size:12px;font-family:'Roboto Mono',monospace;letter-spacing:1px;color:var(--ink2)">{{ recentSeqStr(p) }}</span>
+                  <span style="font-size:11px;font-weight:700" :style="p.recent_hit>0?'color:var(--ok)':'color:var(--warn)'">命中 {{ p.recent_hit }}/{{ p.recent.length }}</span>
+                </div>
               </div>
             </div>
             <!-- 🎯 今日可下单号码 -->
@@ -2155,6 +2160,9 @@ createApp({
     function fmtPicks(picks){
       return (picks || []).map(n => String(n).padStart(2, '0')).join('.');
     }
+    function recentSeqStr(p){
+      return (p.recent || []).map(r => r.hit === 1 ? '✓' : '✗').join('');
+    }
     async function copySchemePicks(p){
       const txt = fmtPicks(p.picks);
       if (!txt) return;
@@ -2501,7 +2509,7 @@ createApp({
       dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
-      picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, copySchemePicks, copyAllPicks, toggleSchemeDetail,
+      picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
