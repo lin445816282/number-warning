@@ -1494,7 +1494,23 @@ table.data tr.warn td{background:var(--warnbg)}
               <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
                 <span style="font-family:'Roboto Mono',monospace;font-size:24px;font-weight:800;color:#3a6ea5;letter-spacing:2px">{{ fmtPicks(consensus.consensus2) }}</span>
                 <span style="font-size:12px;color:var(--ink2)">买 {{ consensus.consensus2_count }} 号</span>
-                <span style="font-size:11px;color:var(--ok);font-weight:700">样本外命中 50% · 超额 +12.5% · 最大连空 8 期</span>
+                <span style="font-size:11px;color:var(--ok);font-weight:700">样本外命中 50% · 超额 +12.5%</span>
+              </div>
+              <!-- 🩺 信号健康度（连空降半仓闭环） -->
+              <div v-if="consensus.health" style="margin-top:8px;padding:8px 10px;border-radius:4px" :style="consensus.health.health_status==='健康'?'background:#e8f5e9':(consensus.health.health_status==='警惕'?'background:#fff8e1':'background:#ffebee')">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <span style="font-weight:800;font-size:13px" :style="consensus.health.health_status==='健康'?'color:#2e7d32':(consensus.health.health_status==='警惕'?'color:#f57f17':'color:#c62828')">
+                    ● {{ consensus.health.health_status }}
+                  </span>
+                  <span style="font-size:12px;color:var(--ink)">连空 <b>{{ consensus.health.current_streak }}</b> 期（历史最大 {{ consensus.health.max_streak }}）</span>
+                  <span style="font-size:12px;color:var(--ink)">仓位建议：<b :style="consensus.health.position_advice==='等额'?'color:#2e7d32':(consensus.health.position_advice==='半仓'?'color:#f57f17':'color:#c62828')">{{ consensus.health.position_advice }}</b></span>
+                </div>
+                <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:6px;align-items:flex-end">
+                  <span style="font-size:10px;color:var(--ink2);margin-right:3px">近6月超额：</span>
+                  <span v-for="m in consensus.health.recent_monthly" :key="m.month" :title="m.month+' 超额'+m.alpha+'% 触发'+m.periods+'期'" style="font-size:10px;padding:2px 5px;border-radius:2px;text-align:center" :style="m.alpha>0?'background:#c8e6c9;color:#2e7d32':'background:#ffcdd2;color:#c62828'">
+                    {{ m.month.slice(5) }}<br>{{ m.alpha>0?'+':'' }}{{ m.alpha }}%
+                  </span>
+                </div>
               </div>
               <div v-if="consensus.consensus4 && consensus.consensus4.length" style="margin-top:6px;font-size:11px;color:#b8b0a0">
                 ≥4票高共识：<span style="font-family:'Roboto Mono',monospace;color:#3a6ea5">{{ fmtPicks(consensus.consensus4) }}</span>

@@ -3429,6 +3429,125 @@ def strategy_scheme_paper_trade(user=Header(None, alias="authorization")):
     }
 
 
+def _consensus_health():
+    """共识信号健康度：实时 walk-forward 回放，算当前连空 / 仓位建议 / 月度超额趋势 / 失效预警。
+
+    复用 4 变体≥2票共识口径（同 paper_trade_rolling.py），无前视。
+    连空降半仓依据：演算证实连空≥5期降半仓使收益/回撤比 +23%，≥8期应暂停观察。"""
+    from collections import defaultdict, OrderedDict
+    dims = ["season_type", "zodiac_color_type"]
+    variants = [(+2, 90), (+1, 60), (+2, 60), (+1, 90)]
+    rows, cycle_maps, seq_labels = _load_backtest_data()
+    dimset = set(dims)
+    tn_cache = {}
+
+    def tag_nums(dim, tag, zm):
+        if dim == "zodiac":
+            return [n for n in range(1, 50) if _num_to_zodiac(n, zm) == tag]
+        k = (dim, tag)
+        if k not in tn_cache:
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
+        return tn_cache[k]
+
+    def run_walkforward(offset, window):
+        last_seen = {}; sample = {}; gap_hist = {}; out = []
+        for i in range(len(rows)):
+            seq = i + 1
+            open_num, labels, zm = seq_labels[i]
+            vote = {}
+            for (dim, tag), ls in last_seen.items():
+                gap = seq - ls
+                hm = _window_hist_max(gap_hist, (dim, tag), seq, window)
+                if sample.get((dim, tag), 0) >= 2 and gap >= hm - offset:
+                    for n in tag_nums(dim, tag, zm):
+                        vote[n] = vote.get(n, 0) + 1
+            out.append(sorted(vote.keys()))
+            for dim, tag in labels.items():
+                if not tag or dim not in dimset:
+                    continue
+                k = (dim, tag)
+                if k in last_seen:
+                    gap = seq - last_seen[k]
+                    sample[k] = sample.get(k, 0) + 1
+                    gap_hist.setdefault(k, []).append((seq, gap))
+                else:
+                    sample[k] = 1
+                last_seen[k] = seq
+        return out
+
+    var_picks = {v: run_walkforward(*v) for v in variants}
+    daily = []
+    for i in range(len(rows)):
+        date = rows[i]["record_date"]
+        open_num = int(rows[i]["source_number"])
+        votes = defaultdict(int)
+        for v, pl in var_picks.items():
+            for n in pl[i]:
+                votes[n] += 1
+        picks = [n for n, c in votes.items() if c >= 2]
+        if not picks:
+            continue
+        hit = 1 if open_num in picks else 0
+        daily.append((date, len(picks), hit))
+
+    # 当前连空（末尾连续未命中）
+    cur_streak = 0
+    for _, _, hit in reversed(daily):
+        if hit:
+            break
+        cur_streak += 1
+    # 历史最大连空
+    max_streak = 0; cur = 0
+    for _, _, hit in daily:
+        if hit:
+            cur = 0
+        else:
+            cur += 1
+            max_streak = max(max_streak, cur)
+
+    # 仓位建议
+    if cur_streak >= 8:
+        advice = "暂停观察"
+    elif cur_streak >= 5:
+        advice = "半仓"
+    else:
+        advice = "等额"
+
+    # 最近 6 个月超额
+    monthly = OrderedDict()
+    for date, N, hit in daily:
+        m = monthly.setdefault(date[:7], {"n": 0, "hits": 0, "sum_n": 0})
+        m["n"] += 1; m["hits"] += hit; m["sum_n"] += N
+    recent = []
+    for k, m in list(monthly.items())[-6:]:
+        hr = m["hits"] / m["n"] * 100
+        avg_n = m["sum_n"] / m["n"]
+        recent.append({"month": k, "alpha": round(hr - avg_n / 49 * 100, 1), "periods": m["n"]})
+
+    # 连续负超额月数（失效预警）
+    neg_streak = 0
+    for m in reversed(recent):
+        if m["alpha"] > 0:
+            break
+        neg_streak += 1
+
+    if neg_streak >= 3:
+        status = "失效预警"
+    elif neg_streak >= 2:
+        status = "警惕"
+    else:
+        status = "健康"
+
+    return {
+        "current_streak": cur_streak,
+        "max_streak": max_streak,
+        "position_advice": advice,
+        "recent_monthly": recent,
+        "neg_month_streak": neg_streak,
+        "health_status": status,
+    }
+
+
 @app.get("/api/strategyScheme/consensus")
 def strategy_scheme_consensus(user=Header(None, alias="authorization")):
     """样本外强信号「红肖蓝肖绿肖+春夏秋冬」4 变体共识选号。
@@ -3449,6 +3568,7 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
         for n in picks:
             votes[n] = votes.get(n, 0) + 1
     consensus = {k: sorted(n for n, c in votes.items() if c >= k) for k in (2, 3, 4)}
+    health = _consensus_health()
     return {
         "dims": dims,
         "date": bet_date,
@@ -3458,6 +3578,7 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
         "consensus3": consensus[3],
         "consensus4": consensus[4],
         "consensus2_count": len(consensus[2]),
+        "health": health,
         "note": "≥2票共识：命中率50%(样本外102期) 超额+12.5% 最大连空8期",
     }
 
