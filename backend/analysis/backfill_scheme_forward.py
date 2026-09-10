@@ -106,11 +106,11 @@ for s in fwd:
 db = main.get_db()
 before = db.execute(
     "SELECT COUNT(*) c FROM dim_forward_track WHERE dim_key LIKE 'scheme:%'").fetchone()["c"]
-db.execute("DELETE FROM dim_forward_track WHERE dim_key LIKE 'scheme:%'")
+db.execute("DELETE FROM dim_forward_track WHERE dim_key LIKE 'scheme:%' AND is_live=0")
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 for key, bd, picks, N, open_num, hit in records:
     db.execute(
-        "INSERT INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, create_time) VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, is_live, create_time) VALUES (?,?,?,?,?,?,0,?)",
         (key, bd, picks, N, open_num, hit, now))
 db.commit()
 db.close()

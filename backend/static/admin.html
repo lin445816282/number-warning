@@ -1371,12 +1371,21 @@ table.data tr.warn td{background:var(--warnbg)}
                 <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
                   <span style="font-family:'Roboto Mono',monospace;font-size:22px;font-weight:800;color:var(--warn);letter-spacing:2px">{{ fmtPicks(p.picks) }}</span>
                   <span style="font-size:13px;font-weight:700">{{ p.scheme_name }}</span>
-                  <span style="font-size:11px;color:var(--ink2)">买{{ p.N }}号 · 回测超额{{ p.bt_alpha>0?'+':'' }}{{ (p.bt_alpha*100).toFixed(2) }}% · 前向{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '—' }}</span>
+                  <span style="font-size:11px;color:var(--ink2)">买{{ p.N }}号 · 回测超额{{ p.bt_alpha>0?'+':'' }}{{ (p.bt_alpha*100).toFixed(2) }}%</span>
                   <button class="btn btn-sm" @click="copySchemePicks(p)" style="padding:2px 8px;font-size:11px">📋 复制</button>
                 </div>
-                <div v-if="p.recent && p.recent.length" style="margin-top:6px">
-                  <span style="font-size:11px;color:var(--ink2)">近{{ p.recent.length }}期 </span>
-                  <span style="font-size:12px;font-family:'Roboto Mono',monospace;letter-spacing:1px;color:var(--ink2)">{{ recentSeqStr(p) }}</span>
+                <!-- 真实样本外（cron 每日固化 + 真实开奖，真正的裁决） -->
+                <div style="margin-top:6px">
+                  <span v-if="p.live && p.live.settled" style="font-size:11px;font-weight:700;color:var(--ok)">🔴 真实样本外 {{ p.live.settled }}期 · 命中{{ (p.live.hit_rate*100).toFixed(1) }}% · {{ p.live.profit>=0?'+':'' }}{{ p.live.profit }}</span>
+                  <span v-else style="font-size:11px;color:var(--ink2)">🔴 真实样本外 <b>0期</b><span v-if="p.live && p.live.pending">（{{ p.live.pending }}期已固化待开奖）</span>· 明日开奖起自动累计</span>
+                </div>
+                <!-- 回测模拟（walk-forward 无前视回填，非真实开奖） -->
+                <div v-if="p.sim && p.sim.periods" style="margin-top:4px">
+                  <span style="font-size:11px;color:#b8b0a0">🧪 回测模拟 {{ p.sim.periods }}期 · 命中{{ (p.sim.hit_rate*100).toFixed(1) }}% · 累计{{ p.sim.profit>=0?'+':'' }}{{ p.sim.profit }}</span>
+                </div>
+                <div v-if="p.recent && p.recent.length" style="margin-top:4px">
+                  <span style="font-size:11px;color:#b8b0a0">近{{ p.recent.length }}期(模拟) </span>
+                  <span style="font-size:12px;font-family:'Roboto Mono',monospace;letter-spacing:1px;color:#b8b0a0">{{ recentSeqStr(p) }}</span>
                   <span style="font-size:11px;font-weight:700" :style="p.recent_hit>0?'color:var(--ok)':'color:var(--warn)'">命中 {{ p.recent_hit }}/{{ p.recent.length }}</span>
                 </div>
               </div>
@@ -1393,7 +1402,7 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
               <div class="table-scroll">
                 <table class="data">
-                  <thead><tr><th>方案</th><th>号码（补零）</th><th>N</th><th>回测超额</th><th>前向命中</th><th>操作</th></tr></thead>
+                  <thead><tr><th>方案</th><th>号码（补零）</th><th>N</th><th>回测超额</th><th>真实样本外</th><th>操作</th></tr></thead>
                   <tbody>
                     <tr v-for="p in filteredPicks" :key="p.scheme_key">
                       <td style="font-size:12px;font-weight:700;cursor:pointer" @click="toggleSchemeDetail(p)">
@@ -1404,7 +1413,7 @@ table.data tr.warn td{background:var(--warnbg)}
                       <td v-else style="color:#b8b0a0">空仓不下注</td>
                       <td>{{ p.N }}</td>
                       <td :style="p.bt_alpha>0?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ p.bt_alpha!=null?(p.bt_alpha>0?'+':'')+(p.bt_alpha*100).toFixed(2)+'%':'—' }}</td>
-                      <td style="font-size:11px" :style="p.fwd_periods>0 && p.fwd_hits/p.fwd_periods>=(p.bt_avg_n||1)/49?'color:var(--ok)':'color:var(--ink2)'">{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '—' }}</td>
+                      <td style="font-size:11px" :style="p.fwd_periods>0 && p.fwd_hits/p.fwd_periods>=(p.bt_avg_n||1)/49?'color:var(--ok)':'color:var(--ink2)'" :title="p.fwd_periods>0 ? '真实开奖已结算 '+p.fwd_periods+' 期' : '真实样本外待开奖（cron 每日固化）'">{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '跟踪中' }}</td>
                       <td><button v-if="p.N>0" class="btn btn-sm" @click="copySchemePicks(p)" style="padding:2px 8px;font-size:11px">📋 复制</button></td>
                     </tr>
                   </tbody>
@@ -1417,15 +1426,12 @@ table.data tr.warn td{background:var(--warnbg)}
                 </div>
                 <div v-if="schemeDetailLoading" style="color:#b8b0a0;padding:10px">加载中…</div>
                 <div v-else class="table-scroll" style="max-height:380px">
-                  <div v-if="schemeDetailSummary" style="padding:8px 12px;background:#faf6ee;border-radius:6px;margin-bottom:8px;font-size:12px;display:flex;gap:18px;flex-wrap:wrap">
-                    <span>总期数 <b>{{ schemeDetailSummary.periods }}</b></span>
-                    <span>命中 <b :style="schemeDetailSummary.hit_rate>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.hits }}/{{ schemeDetailSummary.periods }}（{{ (schemeDetailSummary.hit_rate*100).toFixed(1) }}%）</b></span>
-                    <span>均号 <b>{{ schemeDetailSummary.avg_n }}</b></span>
-                    <span>累计盈亏 <b :style="schemeDetailSummary.total_profit>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.total_profit>0?'+':'' }}{{ schemeDetailSummary.total_profit }}</b></span>
-                    <span>最大连空 <b style="color:var(--warn)">{{ schemeDetailSummary.max_consec_miss }} 期</b></span>
+                  <div v-if="schemeDetailSummary" style="padding:8px 12px;background:#faf6ee;border-radius:6px;margin-bottom:8px;font-size:12px;line-height:1.9">
+                    <div><span style="color:#b8b0a0">🧪 回测模拟</span> <b>{{ schemeDetailSummary.sim.periods }}</b> 期 · 命中 <b :style="schemeDetailSummary.hit_rate>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.sim.hits }}/{{ schemeDetailSummary.sim.periods }}（{{ (schemeDetailSummary.hit_rate*100).toFixed(1) }}%）</b> · 均号 <b>{{ schemeDetailSummary.avg_n }}</b> · 累计 <b :style="schemeDetailSummary.sim.profit>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.sim.profit>0?'+':'' }}{{ schemeDetailSummary.sim.profit }}</b> · 最大连空 <b style="color:var(--warn)">{{ schemeDetailSummary.max_consec_miss }} 期</b></div>
+                    <div><span style="color:var(--warn)">🔴 真实样本外</span> 已结算 <b>{{ schemeDetailSummary.live.settled }}</b> 期<span v-if="schemeDetailSummary.live.pending">（{{ schemeDetailSummary.live.pending }} 期待开奖）</span><span v-if="schemeDetailSummary.live.settled"> · 命中 <b>{{ (schemeDetailSummary.live.hit_rate*100).toFixed(1) }}%</b> · 累计 <b :style="schemeDetailSummary.live.profit>0?'color:var(--ok)':'color:var(--warn)'">{{ schemeDetailSummary.live.profit>0?'+':'' }}{{ schemeDetailSummary.live.profit }}</b></span><span v-else> · 明日开奖起自动累计</span></div>
                   </div>
                   <table class="data">
-                    <thead><tr><th>日期</th><th>选号</th><th>N</th><th>开奖号</th><th>命中</th><th>盈亏</th></tr></thead>
+                    <thead><tr><th>日期</th><th>选号</th><th>N</th><th>开奖号</th><th>命中</th><th>盈亏</th><th>口径</th></tr></thead>
                     <tbody>
                       <tr v-for="d in schemeDetailList" :key="d.bet_date+'-'+d.open_number">
                         <td style="font-size:11px">{{ d.bet_date }}</td>
@@ -1434,6 +1440,7 @@ table.data tr.warn td{background:var(--warnbg)}
                         <td style="font-weight:700">{{ d.open_number!=null ? String(d.open_number).padStart(2,'0') : '待' }}</td>
                         <td :style="d.hit===1?'color:var(--ok);font-weight:700':(d.hit===0?'color:var(--warn)':'color:#b8b0a0')">{{ d.hit===1?'✅中':(d.hit===0?'✗空':'待') }}</td>
                         <td :style="d.profit>0?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ d.profit>0?'+':'' }}{{ d.profit }}</td>
+                        <td style="font-size:10px" :style="d.is_live?'color:var(--warn);font-weight:700':'color:#b8b0a0'">{{ d.is_live?'🔴真实':'模拟' }}</td>
                       </tr>
                     </tbody>
                   </table>

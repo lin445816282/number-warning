@@ -2561,7 +2561,7 @@ def _generate_dim_forward(offset=0, window=60):
         if nxt.get("date") and nxt.get("N", 0) > 0:
             db = get_db()
             db.execute(
-                "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, create_time) VALUES (?,?,?,?,NULL,NULL,?)",
+                "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, is_live, create_time) VALUES (?,?,?,?,NULL,NULL,1,?)",
                 (dim, nxt["date"], json.dumps(nxt.get("picks", [])), nxt.get("N", 0), now))
             db.commit()
             db.close()
@@ -3118,7 +3118,7 @@ def _generate_scheme_forward():
         dim_key = f"scheme:{s['scheme_key']}"
         db = get_db()
         db.execute(
-            "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, create_time) VALUES (?,?,?,?,NULL,NULL,?)",
+            "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, is_live, create_time) VALUES (?,?,?,?,NULL,NULL,1,?)",
             (dim_key, bet_date, json.dumps(picks), len(picks), now))
         db.commit()
         db.close()
@@ -3130,7 +3130,7 @@ def _update_scheme_forward_stats():
     """结算后：从 dim_forward_track 读 scheme: 记录，回填 strategy_scheme_record 的 fwd_* 字段。"""
     db = get_db()
     rows = db.execute(
-        "SELECT dim_key, N, hit FROM dim_forward_track WHERE dim_key LIKE 'scheme:%' AND hit IS NOT NULL").fetchall()
+        "SELECT dim_key, N, hit FROM dim_forward_track WHERE dim_key LIKE 'scheme:%' AND is_live=1 AND hit IS NOT NULL").fetchall()
     by_key = {}
     for r in rows:
         key = r["dim_key"].replace("scheme:", "")
@@ -3191,15 +3191,43 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
         featured = (pr in ("ge2", "ge3") and N > 0 and bt_avg_n <= 6 and bt_alpha > 0)
         recent = []
         recent_hit = 0
+        sim = {"periods": 0, "hits": 0, "profit": 0.0, "hit_rate": None}
+        live = {"periods": 0, "settled": 0, "hits": 0, "profit": 0.0, "hit_rate": None, "pending": 0}
         if featured:
             db2 = get_db()
-            rr = db2.execute(
-                "SELECT bet_date, open_number, hit FROM dim_forward_track "
-                "WHERE dim_key=? AND hit IS NOT NULL ORDER BY bet_date DESC, id DESC LIMIT 15",
+            # 真实样本外（is_live=1，cron 每日固化 + 真实开奖结算）
+            for x in db2.execute(
+                "SELECT N, hit FROM dim_forward_track WHERE dim_key=? AND is_live=1",
+                (f"scheme:{s['scheme_key']}",)).fetchall():
+                live["periods"] += 1
+                if x["hit"] is None:
+                    live["pending"] += 1
+                else:
+                    live["settled"] += 1
+                    if x["hit"] == 1:
+                        live["hits"] += 1
+                        live["profit"] += (SCHEME_ODDS - (x["N"] or 0))
+                    else:
+                        live["profit"] -= (x["N"] or 0)
+            live["profit"] = round(live["profit"], 2)
+            live["hit_rate"] = round(live["hits"] / live["settled"], 4) if live["settled"] else None
+            # 回测模拟（is_live=0，walk-forward 无前视回填，非真实开奖）
+            sr = db2.execute(
+                "SELECT bet_date, N, open_number, hit FROM dim_forward_track "
+                "WHERE dim_key=? AND is_live=0 AND hit IS NOT NULL ORDER BY bet_date DESC, id DESC",
                 (f"scheme:{s['scheme_key']}",)).fetchall()
-            db2.close()
-            recent = [{"date": x["bet_date"], "open": x["open_number"], "hit": x["hit"]} for x in rr]
+            for x in sr:
+                sim["periods"] += 1
+                if x["hit"] == 1:
+                    sim["hits"] += 1
+                    sim["profit"] += (SCHEME_ODDS - (x["N"] or 0))
+                else:
+                    sim["profit"] -= (x["N"] or 0)
+            sim["profit"] = round(sim["profit"], 2)
+            sim["hit_rate"] = round(sim["hits"] / sim["periods"], 4) if sim["periods"] else None
+            recent = [{"date": x["bet_date"], "open": x["open_number"], "hit": x["hit"]} for x in sr[:15]]
             recent_hit = sum(1 for x in recent if x["hit"] == 1)
+            db2.close()
         out.append({
             "scheme_key": s["scheme_key"],
             "scheme_name": s["scheme_name"],
@@ -3219,6 +3247,8 @@ def strategy_scheme_picks(user=Header(None, alias="authorization")):
             "featured": featured,
             "recent": recent,
             "recent_hit": recent_hit,
+            "sim": sim,
+            "live": live,
         })
     # 精选最前，然后精准选号(ge2/ge3)，再 union；组内按超额降序
     def _rank(x):
@@ -3233,7 +3263,7 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
     require_user(user)
     db = get_db()
     rows = db.execute(
-        "SELECT bet_date, picks_json, N, open_number, hit FROM dim_forward_track "
+        "SELECT bet_date, picks_json, N, open_number, hit, is_live FROM dim_forward_track "
         "WHERE dim_key=? ORDER BY bet_date DESC, id DESC LIMIT ?",
         (f"scheme:{scheme_key}", limit)).fetchall()
     s = db.execute(
@@ -3246,6 +3276,9 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
     sum_n = 0
     max_consec_miss = 0
     cur_miss = 0
+    # 分口径统计：sim=回测模拟(is_live=0) / live=真实样本外(is_live=1)
+    sim_s = {"periods": 0, "hits": 0, "profit": 0.0, "sum_n": 0}
+    live_s = {"periods": 0, "hits": 0, "profit": 0.0, "sum_n": 0, "pending": 0}
     for r in rows:
         try:
             picks = json.loads(r["picks_json"]) if r["picks_json"] else []
@@ -3253,28 +3286,53 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
             picks = []
         N = r["N"] or 0
         hit = r["hit"]
+        is_live = r["is_live"] or 0
         profit = (SCHEME_ODDS - N) if hit == 1 else (-N if N > 0 else 0)
-        sum_n += N
-        if hit == 1:
-            hits += 1
-            total_profit += profit
-            cur_miss = 0
+        if is_live:
+            live_s["periods"] += 1
+            if hit is None:
+                live_s["pending"] += 1
+            else:
+                live_s["sum_n"] += N
+                if hit == 1:
+                    live_s["hits"] += 1
+                    live_s["profit"] += profit
+                else:
+                    live_s["profit"] += profit
         else:
-            total_profit += profit
-            cur_miss += 1
-            max_consec_miss = max(max_consec_miss, cur_miss)
+            sim_s["periods"] += 1
+            sum_n += N
+            if hit == 1:
+                hits += 1
+                total_profit += profit
+                sim_s["hits"] += 1
+                sim_s["profit"] += profit
+                sim_s["sum_n"] += N
+                cur_miss = 0
+            else:
+                total_profit += profit
+                sim_s["profit"] += profit
+                sim_s["sum_n"] += N
+                cur_miss += 1
+                max_consec_miss = max(max_consec_miss, cur_miss)
         detail.append({
             "bet_date": r["bet_date"], "picks": picks, "N": N,
             "open_number": r["open_number"], "hit": hit, "profit": profit,
+            "is_live": is_live,
         })
     cnt = len(detail)
+    live_settled = live_s["periods"] - live_s["pending"]
     summary = {
         "periods": cnt,
         "hits": hits,
-        "hit_rate": round(hits / cnt, 4) if cnt else 0.0,
-        "avg_n": round(sum_n / cnt, 2) if cnt else 0.0,
+        "hit_rate": round(hits / sim_s["periods"], 4) if sim_s["periods"] else 0.0,
+        "avg_n": round(sum_n / sim_s["periods"], 2) if sim_s["periods"] else 0.0,
         "total_profit": round(total_profit, 2),
         "max_consec_miss": max_consec_miss,
+        "sim": {"periods": sim_s["periods"], "hits": sim_s["hits"], "profit": round(sim_s["profit"], 2)},
+        "live": {"periods": live_s["periods"], "settled": live_settled, "pending": live_s["pending"],
+                 "hits": live_s["hits"], "profit": round(live_s["profit"], 2),
+                 "hit_rate": round(live_s["hits"] / live_settled, 4) if live_settled else None},
     }
     scheme = {}
     if s:
