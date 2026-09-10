@@ -3348,6 +3348,83 @@ def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, 
     return {"scheme": scheme, "summary": summary, "detail": detail, "count": cnt}
 
 
+@app.get("/api/strategyScheme/paper-trade")
+def strategy_scheme_paper_trade(user=Header(None, alias="authorization")):
+    """样本外验证（真实用户模拟下单，2026-06-01 起）。
+
+    读 analysis/paper_trade_0601.json（Train/Test 切分 + 无前视模拟下单的结果），
+    返回：汇总 + 核心结论 + 最强稳健家族（红肖蓝肖绿肖+春夏秋冬）+ 头数衰减对比。"""
+    require_user(user)
+    import os as _os
+    path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         "analysis", "paper_trade_0601.json")
+    if not _os.path.exists(path):
+        return {"ready": False, "message": "尚未生成样本外验证报告（运行 analysis/paper_trade_0601.py）"}
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    schemes = d.get("schemes", [])
+    test_alphas = [s["test"]["alpha"] for s in schemes]
+    pos = sum(1 for a in test_alphas if a > 0)
+    trig30 = [s for s in schemes if s["test"]["triggered"] >= 30]
+    roi30_profit = sum(s["test"]["profit"] for s in trig30)
+    roi30_invest = sum(s["test"]["avg_n"] * s["test"]["triggered"] for s in trig30)
+    # Trainα vs Testα 相关系数
+    def _pearson(x, y):
+        n = len(x)
+        if n < 2:
+            return 0.0
+        mx, my = sum(x) / n, sum(y) / n
+        num = sum((a - mx) * (b - my) for a, b in zip(x, y))
+        dx = sum((a - mx) ** 2 for a in x) ** 0.5
+        dy = sum((b - my) ** 2 for b in y) ** 0.5
+        return round(num / (dx * dy), 4) if dx * dy else 0.0
+    train_alphas = [s["train"]["alpha"] for s in schemes]
+    corr = _pearson(train_alphas, test_alphas)
+    # 最强家族：红肖蓝肖绿肖+春夏秋冬（len<=3 含这两维）
+    fam = [s for s in schemes
+           if {"season_type", "zodiac_color_type"}.issubset(set(s["dims"])) and len(s["dims"]) <= 3]
+    fam.sort(key=lambda s: -s["test"]["profit"])
+    family = [{
+        "name": "+".join(DIM_NAMES.get(d, d) for d in s["dims"]), "dims": s["dims"],
+        "offset": s["offset"], "window": s["window"], "pick_rule": s["pick_rule"],
+        "train_alpha": s["train"]["alpha"], "test_alpha": s["test"]["alpha"],
+        "triggered": s["test"]["triggered"], "hit_rate": s["test"]["hit_rate"],
+        "avg_n": s["test"]["avg_n"], "profit": s["test"]["profit"],
+        "p": s["test"]["binomial_p"],
+    } for s in fam[:6]]
+    # 头数单维衰减对比
+    head = [s for s in schemes if s["dims"] == ["head_number"] and s["pick_rule"] == "union"]
+    head.sort(key=lambda s: -s["train"]["alpha"])
+    head_decay = [{
+        "offset": s["offset"], "window": s["window"],
+        "train_alpha": s["train"]["alpha"], "test_alpha": s["test"]["alpha"],
+        "triggered": s["test"]["triggered"], "profit": s["test"]["profit"],
+    } for s in head[:6]]
+    return {
+        "ready": True,
+        "meta": {
+            "split_date": d.get("split_date"), "train_periods": d.get("train_periods"),
+            "test_periods": d.get("test_periods"), "odds": d.get("odds"),
+            "scanned": d.get("scanned"), "selected": len(schemes),
+            "generated": d.get("generated"),
+        },
+        "summary": {
+            "pos_out_of_sample": pos, "total": len(schemes),
+            "pos_ratio": round(pos / len(schemes), 4) if schemes else 0.0,
+            "alpha_mean": round(sum(test_alphas) / len(test_alphas), 4) if schemes else 0.0,
+            "profit_sum": round(sum(s["test"]["profit"] for s in schemes), 1),
+            "train_test_corr": corr,
+            "stable_n": len(trig30),
+            "stable_pos_ratio": round(sum(1 for s in trig30 if s["test"]["alpha"] > 0) / len(trig30), 4) if trig30 else 0.0,
+            "stable_profit": round(roi30_profit, 1),
+            "stable_roi": round(roi30_profit / roi30_invest * 100, 2) if roi30_invest else 0.0,
+        },
+        "family": family,
+        "head_decay": head_decay,
+        "report_md": "analysis/paper_trade_0601.md",
+    }
+
+
 # ============================================================
 # 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
 # ============================================================

@@ -301,7 +301,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
-          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks()">自主跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade()">自主跟踪</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1362,6 +1362,64 @@ table.data tr.warn td{background:var(--warnbg)}
 
           <!-- tab: 自主跟踪 -->
           <template v-if="dimTab==='autotrack'">
+            <!-- 🔬 样本外验证（真实用户模拟下单） -->
+            <div class="card" v-if="paperTrade.ready" style="border:2px solid #3a6ea5;background:linear-gradient(135deg,#eef4fb,#ffffff)">
+              <div class="card-title">🔬 样本外验证 · 真实用户模拟下单（{{ paperTrade.meta.split_date }} 起）
+                <button class="btn btn-sm" @click="loadPaperTrade()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:10px;line-height:1.7">
+                严格 <b>Train/Test 切分</b>：只用 {{ paperTrade.meta.train_periods }} 期（≤{{ paperTrade.meta.split_date }} 前）扫描 <b>{{ paperTrade.meta.scanned }}</b> 候选选方案，再用 <b>{{ paperTrade.meta.test_periods }} 期真实开奖</b>逐日无前视模拟下单，验证方案到底灵不灵。
+              </div>
+              <!-- 核心结论 -->
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div style="flex:1;min-width:180px;background:#f7fafd;border-radius:8px;padding:10px">
+                  <div style="font-size:11px;color:var(--ink2)">✅ 信号机制有效</div>
+                  <div style="font-size:18px;font-weight:800;color:var(--ok)">{{ (paperTrade.summary.pos_ratio*100).toFixed(0) }}% <span style="font-size:12px;font-weight:400">正超额</span></div>
+                  <div style="font-size:11px;color:var(--ink2)">{{ paperTrade.summary.pos_out_of_sample }}/{{ paperTrade.summary.total }} 方案 · α均值 {{ paperTrade.summary.alpha_mean>0?'+':'' }}{{ (paperTrade.summary.alpha_mean*100).toFixed(2) }}%</div>
+                </div>
+                <div style="flex:1;min-width:180px;background:#f7fafd;border-radius:8px;padding:10px">
+                  <div style="font-size:11px;color:var(--ink2)">📈 稳健层(触发≥30期) ROI</div>
+                  <div style="font-size:18px;font-weight:800;color:var(--ok)">+{{ paperTrade.summary.stable_roi.toFixed(2) }}%</div>
+                  <div style="font-size:11px;color:var(--ink2)">{{ paperTrade.summary.stable_n }} 方案 · {{ (paperTrade.summary.stable_pos_ratio*100).toFixed(0) }}% 正 · 盈亏 +{{ paperTrade.summary.stable_profit }}</div>
+                </div>
+                <div style="flex:1;min-width:180px;background:#fff5f5;border-radius:8px;padding:10px">
+                  <div style="font-size:11px;color:var(--ink2)">❌ Trainα 无预测力</div>
+                  <div style="font-size:18px;font-weight:800;color:var(--warn)">{{ paperTrade.summary.train_test_corr }}</div>
+                  <div style="font-size:11px;color:var(--ink2)">Train/Test 相关系数 ≈0 → 别按排名挑方案</div>
+                </div>
+              </div>
+              <!-- 最强家族 -->
+              <div style="font-size:13px;font-weight:700;margin-bottom:6px">🎯 样本外最强稳健信号：<span style="color:var(--warn)">红肖蓝肖绿肖 + 春夏秋冬</span></div>
+              <div class="table-scroll" style="margin-bottom:12px">
+                <table class="data">
+                  <thead><tr><th>方案</th><th>off</th><th>窗口</th><th>触发</th><th>命中率</th><th>均号</th><th>Trainα</th><th>Testα</th><th>Test盈亏</th><th>p值</th></tr></thead>
+                  <tbody>
+                    <tr v-for="f in paperTrade.family" :key="f.offset+'-'+f.window+'-'+f.pick_rule">
+                      <td style="font-size:12px;font-weight:700">{{ f.name }}</td>
+                      <td style="font-family:'Roboto Mono',monospace">{{ f.offset>0?'+':'' }}{{ f.offset }}</td>
+                      <td style="font-family:'Roboto Mono',monospace">{{ f.window }}</td>
+                      <td>{{ f.triggered }}</td>
+                      <td style="font-weight:700;color:var(--ok)">{{ (f.hit_rate*100).toFixed(1) }}%</td>
+                      <td>{{ f.avg_n }}</td>
+                      <td style="color:#b8b0a0">{{ f.train_alpha>0?'+':'' }}{{ (f.train_alpha*100).toFixed(2) }}%</td>
+                      <td style="font-weight:700;color:var(--ok)">{{ f.test_alpha>0?'+':'' }}{{ (f.test_alpha*100).toFixed(2) }}%</td>
+                      <td style="font-weight:700;color:var(--ok)">{{ f.profit>0?'+':'' }}{{ f.profit }}</td>
+                      <td :style="f.p<0.05?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ f.p.toFixed(4) }}{{ f.p<0.05?' ✅':'' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <!-- 头数衰减对比 -->
+              <div style="font-size:12px;color:var(--ink2);line-height:1.7">
+                ⚠️ 之前看好的「<b>头数</b>」单维样本外衰减：
+                <span v-for="(h,i) in paperTrade.head_decay" :key="i" style="margin-right:8px">
+                  <span style="font-family:'Roboto Mono',monospace">off{{ h.offset>0?'+':'' }}{{ h.offset }}</span>
+                  <span style="color:#b8b0a0">Train{{ h.train_alpha>0?'+':'' }}{{ (h.train_alpha*100).toFixed(1) }}%</span>→
+                  <span :style="h.test_alpha>0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">Test{{ h.test_alpha>0?'+':'' }}{{ (h.test_alpha*100).toFixed(1) }}%</span>
+                </span>
+              </div>
+              <div style="font-size:11px;color:#b8b0a0;margin-top:8px">📄 完整报告 analysis/paper_trade_0601.md · 102 期样本外仍是小样本，真正裁决靠 cron 每日真实固化持续累积。</div>
+            </div>
             <!-- 🌟 今日精选 -->
             <div class="card" v-if="featuredList.length" style="border:2px solid var(--warn);background:linear-gradient(135deg,#fff8ef,#ffffff)">
               <div class="card-title">🌟 今日精选 · 精准稳健有号
@@ -1827,6 +1885,8 @@ createApp({
     const schemeScanning = ref(false);
     const schemeScanMsg = ref('');
     const schemeTotal = ref(0);
+    // 🔬 样本外验证（真实用户模拟下单）
+    const paperTrade = ref({ ready: false, meta: {}, summary: {}, family: [], head_decay: [] });
     // 🎯 今日可下单号码 + 明细记录
     const picksList = ref([]);
     const picksDate = ref('');
@@ -2157,6 +2217,12 @@ createApp({
       }
     }
     // ====== 🎯 今日可下单号码 + 明细记录 ======
+    async function loadPaperTrade(){
+      try {
+        const d = await api('GET', '/api/strategyScheme/paper-trade');
+        paperTrade.value = d;
+      } catch(e){ paperTrade.value = { ready: false, meta: {}, summary: {}, family: [], head_decay: [] }; }
+    }
     async function loadSchemePicks(){
       try {
         const d = await api('GET', '/api/strategyScheme/picks');
@@ -2517,7 +2583,7 @@ createApp({
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
-      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured,
+      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
