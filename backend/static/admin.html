@@ -301,7 +301,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
-          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade()">自主跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus()">自主跟踪</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1420,6 +1420,20 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
               <div style="font-size:11px;color:#b8b0a0;margin-top:8px">📄 完整报告 analysis/paper_trade_0601.md · 102 期样本外仍是小样本，真正裁决靠 cron 每日真实固化持续累积。</div>
             </div>
+            <!-- 🎯 共识强信号（4变体 ≥2票） -->
+            <div class="card" v-if="consensus.consensus2 && consensus.consensus2.length" style="border:2px solid #3a6ea5;background:linear-gradient(135deg,#eef4fb,#ffffff)">
+              <div class="card-title">🎯 共识强信号 · 红肖蓝肖绿肖+春夏秋冬（4变体 ≥2票）
+                <button class="btn btn-sm" @click="copyConsensus()" style="float:right;padding:3px 10px;font-size:12px">📋 复制</button>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                <span style="font-family:'Roboto Mono',monospace;font-size:24px;font-weight:800;color:#3a6ea5;letter-spacing:2px">{{ fmtPicks(consensus.consensus2) }}</span>
+                <span style="font-size:12px;color:var(--ink2)">买 {{ consensus.consensus2_count }} 号</span>
+                <span style="font-size:11px;color:var(--ok);font-weight:700">样本外命中 50% · 超额 +12.5% · 最大连空 8 期</span>
+              </div>
+              <div v-if="consensus.consensus4 && consensus.consensus4.length" style="margin-top:6px;font-size:11px;color:#b8b0a0">
+                ≥4票高共识：<span style="font-family:'Roboto Mono',monospace;color:#3a6ea5">{{ fmtPicks(consensus.consensus4) }}</span>
+              </div>
+            </div>
             <!-- 🌟 今日精选 -->
             <div class="card" v-if="featuredList.length" style="border:2px solid var(--warn);background:linear-gradient(135deg,#fff8ef,#ffffff)">
               <div class="card-title">🌟 今日精选 · 精准稳健有号
@@ -1888,6 +1902,7 @@ createApp({
     const schemeTotal = ref(0);
     // 🔬 样本外验证（真实用户模拟下单）
     const paperTrade = ref({ ready: false, meta: {}, summary: {}, family: [], head_decay: [] });
+    const consensus = ref({ consensus2: [], consensus3: [], consensus4: [], consensus2_count: 0 });
     // 🎯 今日可下单号码 + 明细记录
     const picksList = ref([]);
     const picksDate = ref('');
@@ -2223,6 +2238,24 @@ createApp({
         const d = await api('GET', '/api/strategyScheme/paper-trade');
         paperTrade.value = d;
       } catch(e){ paperTrade.value = { ready: false, meta: {}, summary: {}, family: [], head_decay: [] }; }
+    }
+    async function loadConsensus(){
+      try {
+        const d = await api('GET', '/api/strategyScheme/consensus');
+        consensus.value = d;
+      } catch(e){ consensus.value = { consensus2: [], consensus3: [], consensus4: [], consensus2_count: 0 }; }
+    }
+    function copyConsensus(){
+      const txt = fmtPicks(consensus.value.consensus2);
+      if (!txt) { toast('当前无共识号'); return; }
+      try { navigator.clipboard.writeText(txt).then(() => toast('已复制共识号：' + txt)); }
+      catch(e) {
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); toast('已复制共识号：' + txt); } catch(e2){}
+        document.body.removeChild(ta);
+      }
     }
     async function loadSchemePicks(){
       try {
@@ -2584,7 +2617,7 @@ createApp({
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
-      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade,
+      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

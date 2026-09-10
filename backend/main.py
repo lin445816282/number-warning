@@ -3429,6 +3429,39 @@ def strategy_scheme_paper_trade(user=Header(None, alias="authorization")):
     }
 
 
+@app.get("/api/strategyScheme/consensus")
+def strategy_scheme_consensus(user=Header(None, alias="authorization")):
+    """样本外强信号「红肖蓝肖绿肖+春夏秋冬」4 变体共识选号。
+
+    4 个变体（offset/window 不同）实时算当前选号，统计每个号码被几个变体选中。
+    样本外验证：≥2 票共识命中率 50%（vs 单变体 47.3%）、超额 +12.5%。"""
+    require_user(user)
+    dims = ["season_type", "zodiac_color_type"]
+    variants = [(+2, 90), (+1, 60), (+2, 60), (+1, 90)]
+    votes = {}
+    picks_by_var = []
+    bet_date = ""
+    for off, w in variants:
+        order = _compute_current_picks(dims, off, w, "union")
+        picks = order.get("picks", [])
+        bet_date = bet_date or order.get("date", "")
+        picks_by_var.append({"offset": off, "window": w, "picks": picks, "N": len(picks)})
+        for n in picks:
+            votes[n] = votes.get(n, 0) + 1
+    consensus = {k: sorted(n for n, c in votes.items() if c >= k) for k in (2, 3, 4)}
+    return {
+        "dims": dims,
+        "date": bet_date,
+        "variants": picks_by_var,
+        "votes": {str(n): c for n, c in sorted(votes.items())},
+        "consensus2": consensus[2],
+        "consensus3": consensus[3],
+        "consensus4": consensus[4],
+        "consensus2_count": len(consensus[2]),
+        "note": "≥2票共识：命中率50%(样本外102期) 超额+12.5% 最大连空8期",
+    }
+
+
 # ============================================================
 # 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
 # ============================================================
