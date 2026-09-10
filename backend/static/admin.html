@@ -301,7 +301,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
-          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus()">自主跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling()">自主跟踪</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1418,6 +1418,26 @@ table.data tr.warn td{background:var(--warnbg)}
                   <span :style="h.test_alpha>0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">Test{{ h.test_alpha>0?'+':'' }}{{ (h.test_alpha*100).toFixed(1) }}%</span>
                 </span>
               </div>
+              <!-- 月度稳定性（滚动验证） -->
+              <div v-if="rolling.ready" style="margin-top:10px;padding-top:8px;border-top:1px dashed #ddd">
+                <div style="font-size:12px;font-weight:700;color:var(--ink);cursor:pointer" @click="showRolling=!showRolling">
+                  📅 月度稳定性（滚动验证）{{ showRolling ? '▾' : '▸' }}
+                  <span style="font-weight:400;color:var(--ink2)">全历史 {{ rolling.total_periods }} 期 · 超额 {{ rolling.overall.alpha>0?'+':'' }}{{ rolling.overall.alpha }}% · p={{ rolling.overall.binomial_p }}</span>
+                </div>
+                <div v-if="showRolling" style="margin-top:8px">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                    <span v-for="h in rolling.half_yearly" :key="h.label" style="font-size:11px;padding:4px 10px;border-radius:4px" :style="h.alpha>0?'background:#e8f5e9;color:#2e7d32':'background:#fff5f5;color:#c62828'">
+                      {{ h.label }}：{{ h.alpha>0?'+':'' }}{{ h.alpha }}%
+                    </span>
+                  </div>
+                  <div style="display:flex;gap:3px;flex-wrap:wrap">
+                    <span v-for="m in rolling.monthly" :key="m.month" :title="m.month+' 命中'+m.hit_rate+'% 超额'+m.alpha+'%'" style="font-size:10px;padding:2px 4px;border-radius:2px;text-align:center" :style="m.alpha>0?'background:#e8f5e9;color:#2e7d32':'background:#fff5f5;color:#c62828'">
+                      {{ m.month.slice(5) }}<br>{{ m.alpha>0?'+':'' }}{{ m.alpha }}
+                    </span>
+                  </div>
+                  <div style="font-size:11px;color:#b8b0a0;margin-top:6px">{{ rolling.note }}</div>
+                </div>
+              </div>
               <div style="font-size:11px;color:#b8b0a0;margin-top:8px">📄 完整报告 analysis/paper_trade_0601.md · 102 期样本外仍是小样本，真正裁决靠 cron 每日真实固化持续累积。</div>
             </div>
             <!-- 🎯 共识强信号（4变体 ≥2票） -->
@@ -1903,6 +1923,8 @@ createApp({
     // 🔬 样本外验证（真实用户模拟下单）
     const paperTrade = ref({ ready: false, meta: {}, summary: {}, family: [], head_decay: [] });
     const consensus = ref({ consensus2: [], consensus3: [], consensus4: [], consensus2_count: 0 });
+    const rolling = ref({ ready: false, monthly: [], half_yearly: [], overall: {} });
+    const showRolling = ref(false);
     // 🎯 今日可下单号码 + 明细记录
     const picksList = ref([]);
     const picksDate = ref('');
@@ -2244,6 +2266,12 @@ createApp({
         const d = await api('GET', '/api/strategyScheme/consensus');
         consensus.value = d;
       } catch(e){ consensus.value = { consensus2: [], consensus3: [], consensus4: [], consensus2_count: 0 }; }
+    }
+    async function loadRolling(){
+      try {
+        const d = await api('GET', '/api/strategyScheme/rolling');
+        rolling.value = d;
+      } catch(e){ rolling.value = { ready: false, monthly: [], half_yearly: [], overall: {} }; }
     }
     function copyConsensus(){
       const txt = fmtPicks(consensus.value.consensus2);
@@ -2617,7 +2645,7 @@ createApp({
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
-      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus,
+      featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

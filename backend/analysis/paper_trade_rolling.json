@@ -1,0 +1,223 @@
+{
+  "signal": "红肖蓝肖绿肖+春夏秋冬 4变体≥2票共识",
+  "total_periods": 362,
+  "data_range": "2025-01-01~2026-09-10",
+  "monthly": [
+    {
+      "month": "2025-01",
+      "periods": 29,
+      "hits": 19,
+      "hit_rate": 65.5,
+      "avg_n": 30.3,
+      "alpha": 3.6
+    },
+    {
+      "month": "2025-02",
+      "periods": 25,
+      "hits": 13,
+      "hit_rate": 52.0,
+      "avg_n": 23.2,
+      "alpha": 4.7
+    },
+    {
+      "month": "2025-03",
+      "periods": 28,
+      "hits": 8,
+      "hit_rate": 28.6,
+      "avg_n": 15.5,
+      "alpha": -3.0
+    },
+    {
+      "month": "2025-04",
+      "periods": 13,
+      "hits": 2,
+      "hit_rate": 15.4,
+      "avg_n": 14.8,
+      "alpha": -14.8
+    },
+    {
+      "month": "2025-05",
+      "periods": 27,
+      "hits": 6,
+      "hit_rate": 22.2,
+      "avg_n": 19.7,
+      "alpha": -18.0
+    },
+    {
+      "month": "2025-06",
+      "periods": 25,
+      "hits": 12,
+      "hit_rate": 48.0,
+      "avg_n": 16.4,
+      "alpha": 14.5
+    },
+    {
+      "month": "2025-07",
+      "periods": 21,
+      "hits": 9,
+      "hit_rate": 42.9,
+      "avg_n": 19.9,
+      "alpha": 2.2
+    },
+    {
+      "month": "2025-08",
+      "periods": 9,
+      "hits": 5,
+      "hit_rate": 55.6,
+      "avg_n": 12.6,
+      "alpha": 29.9
+    },
+    {
+      "month": "2025-09",
+      "periods": 12,
+      "hits": 5,
+      "hit_rate": 41.7,
+      "avg_n": 15.3,
+      "alpha": 10.4
+    },
+    {
+      "month": "2025-10",
+      "periods": 7,
+      "hits": 3,
+      "hit_rate": 42.9,
+      "avg_n": 17.4,
+      "alpha": 7.3
+    },
+    {
+      "month": "2025-11",
+      "periods": 17,
+      "hits": 6,
+      "hit_rate": 35.3,
+      "avg_n": 15.3,
+      "alpha": 4.1
+    },
+    {
+      "month": "2025-12",
+      "periods": 18,
+      "hits": 7,
+      "hit_rate": 38.9,
+      "avg_n": 18.6,
+      "alpha": 0.9
+    },
+    {
+      "month": "2026-01",
+      "periods": 5,
+      "hits": 4,
+      "hit_rate": 80.0,
+      "avg_n": 18.0,
+      "alpha": 43.3
+    },
+    {
+      "month": "2026-02",
+      "periods": 24,
+      "hits": 7,
+      "hit_rate": 29.2,
+      "avg_n": 15.2,
+      "alpha": -1.9
+    },
+    {
+      "month": "2026-03",
+      "periods": 18,
+      "hits": 8,
+      "hit_rate": 44.4,
+      "avg_n": 20.9,
+      "alpha": 1.8
+    },
+    {
+      "month": "2026-04",
+      "periods": 14,
+      "hits": 5,
+      "hit_rate": 35.7,
+      "avg_n": 16.9,
+      "alpha": 1.2
+    },
+    {
+      "month": "2026-05",
+      "periods": 8,
+      "hits": 5,
+      "hit_rate": 62.5,
+      "avg_n": 12.9,
+      "alpha": 36.2
+    },
+    {
+      "month": "2026-06",
+      "periods": 14,
+      "hits": 9,
+      "hit_rate": 64.3,
+      "avg_n": 20.2,
+      "alpha": 23.0
+    },
+    {
+      "month": "2026-07",
+      "periods": 21,
+      "hits": 8,
+      "hit_rate": 38.1,
+      "avg_n": 16.0,
+      "alpha": 5.5
+    },
+    {
+      "month": "2026-08",
+      "periods": 20,
+      "hits": 11,
+      "hit_rate": 55.0,
+      "avg_n": 19.4,
+      "alpha": 15.3
+    },
+    {
+      "month": "2026-09",
+      "periods": 7,
+      "hits": 3,
+      "hit_rate": 42.9,
+      "avg_n": 18.9,
+      "alpha": 4.4
+    }
+  ],
+  "half_yearly": [
+    {
+      "periods": 147,
+      "hits": 60,
+      "hit_rate": 40.8,
+      "avg_n": 20.6,
+      "rand_base": 42.0,
+      "alpha": -1.2,
+      "label": "2025上半年"
+    },
+    {
+      "periods": 84,
+      "hits": 35,
+      "hit_rate": 41.7,
+      "avg_n": 17.0,
+      "rand_base": 34.8,
+      "alpha": 6.9,
+      "label": "2025下半年"
+    },
+    {
+      "periods": 83,
+      "hits": 38,
+      "hit_rate": 45.8,
+      "avg_n": 17.5,
+      "rand_base": 35.8,
+      "alpha": 10.0,
+      "label": "2026上半年"
+    },
+    {
+      "periods": 48,
+      "hits": 22,
+      "hit_rate": 45.8,
+      "avg_n": 17.8,
+      "rand_base": 36.4,
+      "alpha": 9.4,
+      "label": "2026下半年至今"
+    }
+  ],
+  "overall": {
+    "periods": 362,
+    "hits": 155,
+    "hit_rate": 42.8,
+    "avg_n": 18.7,
+    "rand_base": 38.2,
+    "alpha": 4.7,
+    "binomial_p": 0.0391
+  },
+  "note": "2025上半年曾失效(-1.2%)，2025下半年起转正，2026年稳定+10%。连续2-3月负超额需警惕结构突变。"
+}

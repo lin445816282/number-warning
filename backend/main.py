@@ -3462,6 +3462,23 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
     }
 
 
+@app.get("/api/strategyScheme/rolling")
+def strategy_scheme_rolling(user=Header(None, alias="authorization")):
+    """滚动前向验证 · 月度稳定性序列（红肖蓝肖绿肖+春夏秋冬 ≥2票共识）。
+
+    读 analysis/paper_trade_rolling.json：按月/半年聚合超额，监控时间结构突变。"""
+    require_user(user)
+    import os as _os
+    path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         "analysis", "paper_trade_rolling.json")
+    if not _os.path.exists(path):
+        return {"ready": False, "message": "尚未生成滚动验证数据（运行 analysis/paper_trade_rolling.py）"}
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    d["ready"] = True
+    return d
+
+
 # ============================================================
 # 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
 # ============================================================
