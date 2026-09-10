@@ -1,0 +1,569 @@
+[
+  {
+    "name": "热号追涨(gap<=2,top5)",
+    "summary": {
+      "triggered": 617,
+      "hits": 575,
+      "hit_rate": 0.9319,
+      "avg_n": 45.43,
+      "alpha": 0.0048,
+      "binomial_p": 0.358745
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 286,
+      "hit_rate": 0.9286,
+      "avg_n": 45.59,
+      "alpha": -0.0019,
+      "binomial_p": 0.606475
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 289,
+      "hit_rate": 0.9353,
+      "avg_n": 45.27,
+      "alpha": 0.0114,
+      "binomial_p": 0.263612
+    }
+  },
+  {
+    "name": "热号追涨(gap<=2,top8)",
+    "summary": {
+      "triggered": 617,
+      "hits": 608,
+      "hit_rate": 0.9854,
+      "avg_n": 48.06,
+      "alpha": 0.0047,
+      "binomial_p": 0.250735
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 306,
+      "hit_rate": 0.9935,
+      "avg_n": 48.18,
+      "alpha": 0.0103,
+      "binomial_p": 0.107986
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 302,
+      "hit_rate": 0.9773,
+      "avg_n": 47.94,
+      "alpha": -0.001,
+      "binomial_p": 0.644728
+    }
+  },
+  {
+    "name": "热号追涨(gap<=2,top12)",
+    "summary": {
+      "triggered": 617,
+      "hits": 614,
+      "hit_rate": 0.9951,
+      "avg_n": 48.56,
+      "alpha": 0.004,
+      "binomial_p": 0.201593
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 308,
+      "hit_rate": 1.0,
+      "avg_n": 48.73,
+      "alpha": 0.0056,
+      "binomial_p": 0.179232
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 306,
+      "hit_rate": 0.9903,
+      "avg_n": 48.4,
+      "alpha": 0.0025,
+      "binomial_p": 0.477527
+    }
+  },
+  {
+    "name": "热号追涨(gap<=3,top5)",
+    "summary": {
+      "triggered": 617,
+      "hits": 575,
+      "hit_rate": 0.9319,
+      "avg_n": 45.43,
+      "alpha": 0.0048,
+      "binomial_p": 0.358745
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 286,
+      "hit_rate": 0.9286,
+      "avg_n": 45.59,
+      "alpha": -0.0019,
+      "binomial_p": 0.606475
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 289,
+      "hit_rate": 0.9353,
+      "avg_n": 45.27,
+      "alpha": 0.0114,
+      "binomial_p": 0.263612
+    }
+  },
+  {
+    "name": "热号追涨(gap<=3,top8)",
+    "summary": {
+      "triggered": 617,
+      "hits": 608,
+      "hit_rate": 0.9854,
+      "avg_n": 48.06,
+      "alpha": 0.0047,
+      "binomial_p": 0.250735
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 306,
+      "hit_rate": 0.9935,
+      "avg_n": 48.18,
+      "alpha": 0.0103,
+      "binomial_p": 0.107986
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 302,
+      "hit_rate": 0.9773,
+      "avg_n": 47.94,
+      "alpha": -0.001,
+      "binomial_p": 0.644728
+    }
+  },
+  {
+    "name": "热号追涨(gap<=3,top12)",
+    "summary": {
+      "triggered": 617,
+      "hits": 614,
+      "hit_rate": 0.9951,
+      "avg_n": 48.56,
+      "alpha": 0.004,
+      "binomial_p": 0.201593
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 308,
+      "hit_rate": 1.0,
+      "avg_n": 48.73,
+      "alpha": 0.0056,
+      "binomial_p": 0.179232
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 306,
+      "hit_rate": 0.9903,
+      "avg_n": 48.4,
+      "alpha": 0.0025,
+      "binomial_p": 0.477527
+    }
+  },
+  {
+    "name": "热号追涨(gap<=5,top5)",
+    "summary": {
+      "triggered": 617,
+      "hits": 575,
+      "hit_rate": 0.9319,
+      "avg_n": 45.43,
+      "alpha": 0.0048,
+      "binomial_p": 0.358745
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 286,
+      "hit_rate": 0.9286,
+      "avg_n": 45.59,
+      "alpha": -0.0019,
+      "binomial_p": 0.606475
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 289,
+      "hit_rate": 0.9353,
+      "avg_n": 45.27,
+      "alpha": 0.0114,
+      "binomial_p": 0.263612
+    }
+  },
+  {
+    "name": "热号追涨(gap<=5,top8)",
+    "summary": {
+      "triggered": 617,
+      "hits": 608,
+      "hit_rate": 0.9854,
+      "avg_n": 48.06,
+      "alpha": 0.0047,
+      "binomial_p": 0.250735
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 306,
+      "hit_rate": 0.9935,
+      "avg_n": 48.18,
+      "alpha": 0.0103,
+      "binomial_p": 0.107986
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 302,
+      "hit_rate": 0.9773,
+      "avg_n": 47.94,
+      "alpha": -0.001,
+      "binomial_p": 0.644728
+    }
+  },
+  {
+    "name": "热号追涨(gap<=5,top12)",
+    "summary": {
+      "triggered": 617,
+      "hits": 614,
+      "hit_rate": 0.9951,
+      "avg_n": 48.56,
+      "alpha": 0.004,
+      "binomial_p": 0.201593
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 308,
+      "hit_rate": 1.0,
+      "avg_n": 48.73,
+      "alpha": 0.0056,
+      "binomial_p": 0.179232
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 306,
+      "hit_rate": 0.9903,
+      "avg_n": 48.4,
+      "alpha": 0.0025,
+      "binomial_p": 0.477527
+    }
+  },
+  {
+    "name": "重号(same_num)",
+    "summary": {
+      "triggered": 617,
+      "hits": 10,
+      "hit_rate": 0.0162,
+      "avg_n": 1.0,
+      "alpha": -0.0042,
+      "binomial_p": 0.808263
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 7,
+      "hit_rate": 0.0227,
+      "avg_n": 1.0,
+      "alpha": 0.0023,
+      "binomial_p": 0.439955
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 3,
+      "hit_rate": 0.0097,
+      "avg_n": 1.0,
+      "alpha": -0.0107,
+      "binomial_p": 0.951969
+    }
+  },
+  {
+    "name": "重号(same_tail)",
+    "summary": {
+      "triggered": 617,
+      "hits": 63,
+      "hit_rate": 0.1021,
+      "avg_n": 4.92,
+      "alpha": 0.0018,
+      "binomial_p": 0.460802
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 32,
+      "hit_rate": 0.1039,
+      "avg_n": 4.89,
+      "alpha": 0.0042,
+      "binomial_p": 0.430854
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 31,
+      "hit_rate": 0.1003,
+      "avg_n": 4.94,
+      "alpha": -0.0006,
+      "binomial_p": 0.541492
+    }
+  },
+  {
+    "name": "重号(same_zodiac)",
+    "summary": {
+      "triggered": 617,
+      "hits": 42,
+      "hit_rate": 0.0681,
+      "avg_n": 4.11,
+      "alpha": -0.0159,
+      "binomial_p": 0.936112
+    },
+    "first_half": {
+      "triggered": 308,
+      "hits": 23,
+      "hit_rate": 0.0747,
+      "avg_n": 4.09,
+      "alpha": -0.0089,
+      "binomial_p": 0.742144
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 19,
+      "hit_rate": 0.0615,
+      "avg_n": 4.13,
+      "alpha": -0.0229,
+      "binomial_p": 0.944694
+    }
+  },
+  {
+    "name": "大小趋势(reverse,连2)",
+    "summary": {
+      "triggered": 286,
+      "hits": 147,
+      "hit_rate": 0.514,
+      "avg_n": 24.5,
+      "alpha": 0.014,
+      "binomial_p": 0.339504
+    },
+    "first_half": {
+      "triggered": 138,
+      "hits": 71,
+      "hit_rate": 0.5145,
+      "avg_n": 24.41,
+      "alpha": 0.0163,
+      "binomial_p": 0.383233
+    },
+    "second_half": {
+      "triggered": 148,
+      "hits": 76,
+      "hit_rate": 0.5135,
+      "avg_n": 24.58,
+      "alpha": 0.0119,
+      "binomial_p": 0.418341
+    }
+  },
+  {
+    "name": "大小趋势(reverse,连3)",
+    "summary": {
+      "triggered": 139,
+      "hits": 66,
+      "hit_rate": 0.4748,
+      "avg_n": 24.52,
+      "alpha": -0.0255,
+      "binomial_p": 0.753957
+    },
+    "first_half": {
+      "triggered": 67,
+      "hits": 34,
+      "hit_rate": 0.5075,
+      "avg_n": 24.4,
+      "alpha": 0.0094,
+      "binomial_p": 0.487023
+    },
+    "second_half": {
+      "triggered": 72,
+      "hits": 32,
+      "hit_rate": 0.4444,
+      "avg_n": 24.62,
+      "alpha": -0.0581,
+      "binomial_p": 0.865243
+    }
+  },
+  {
+    "name": "大小趋势(reverse,连4)",
+    "summary": {
+      "triggered": 73,
+      "hits": 31,
+      "hit_rate": 0.4247,
+      "avg_n": 24.51,
+      "alpha": -0.0755,
+      "binomial_p": 0.920499
+    },
+    "first_half": {
+      "triggered": 33,
+      "hits": 12,
+      "hit_rate": 0.3636,
+      "avg_n": 24.36,
+      "alpha": -0.1336,
+      "binomial_p": 0.957092
+    },
+    "second_half": {
+      "triggered": 40,
+      "hits": 19,
+      "hit_rate": 0.475,
+      "avg_n": 24.62,
+      "alpha": -0.0276,
+      "binomial_p": 0.69357
+    }
+  },
+  {
+    "name": "大小趋势(continue,连2)",
+    "summary": {
+      "triggered": 286,
+      "hits": 139,
+      "hit_rate": 0.486,
+      "avg_n": 24.5,
+      "alpha": -0.014,
+      "binomial_p": 0.702661
+    },
+    "first_half": {
+      "triggered": 138,
+      "hits": 67,
+      "hit_rate": 0.4855,
+      "avg_n": 24.59,
+      "alpha": -0.0163,
+      "binomial_p": 0.679815
+    },
+    "second_half": {
+      "triggered": 148,
+      "hits": 72,
+      "hit_rate": 0.4865,
+      "avg_n": 24.42,
+      "alpha": -0.0119,
+      "binomial_p": 0.644487
+    }
+  },
+  {
+    "name": "大小趋势(continue,连3)",
+    "summary": {
+      "triggered": 139,
+      "hits": 73,
+      "hit_rate": 0.5252,
+      "avg_n": 24.48,
+      "alpha": 0.0255,
+      "binomial_p": 0.302455
+    },
+    "first_half": {
+      "triggered": 67,
+      "hits": 33,
+      "hit_rate": 0.4925,
+      "avg_n": 24.6,
+      "alpha": -0.0094,
+      "binomial_p": 0.608948
+    },
+    "second_half": {
+      "triggered": 72,
+      "hits": 40,
+      "hit_rate": 0.5556,
+      "avg_n": 24.38,
+      "alpha": 0.0581,
+      "binomial_p": 0.192685
+    }
+  },
+  {
+    "name": "大小趋势(continue,连4)",
+    "summary": {
+      "triggered": 73,
+      "hits": 42,
+      "hit_rate": 0.5753,
+      "avg_n": 24.49,
+      "alpha": 0.0755,
+      "binomial_p": 0.120342
+    },
+    "first_half": {
+      "triggered": 33,
+      "hits": 21,
+      "hit_rate": 0.6364,
+      "avg_n": 24.64,
+      "alpha": 0.1336,
+      "binomial_p": 0.086314
+    },
+    "second_half": {
+      "triggered": 40,
+      "hits": 21,
+      "hit_rate": 0.525,
+      "avg_n": 24.38,
+      "alpha": 0.0276,
+      "binomial_p": 0.424556
+    }
+  },
+  {
+    "name": "生肖转移(top1)",
+    "summary": {
+      "triggered": 605,
+      "hits": 45,
+      "hit_rate": 0.0744,
+      "avg_n": 4.09,
+      "alpha": -0.0092,
+      "binomial_p": 0.811935
+    },
+    "first_half": {
+      "triggered": 296,
+      "hits": 31,
+      "hit_rate": 0.1047,
+      "avg_n": 4.11,
+      "alpha": 0.0208,
+      "binomial_p": 0.12032
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 14,
+      "hit_rate": 0.0453,
+      "avg_n": 4.07,
+      "alpha": -0.0378,
+      "binomial_p": 0.996651
+    }
+  },
+  {
+    "name": "生肖转移(top2)",
+    "summary": {
+      "triggered": 605,
+      "hits": 92,
+      "hit_rate": 0.1521,
+      "avg_n": 8.07,
+      "alpha": -0.0126,
+      "binomial_p": 0.813012
+    },
+    "first_half": {
+      "triggered": 296,
+      "hits": 50,
+      "hit_rate": 0.1689,
+      "avg_n": 8.01,
+      "alpha": 0.0055,
+      "binomial_p": 0.422662
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 42,
+      "hit_rate": 0.1359,
+      "avg_n": 8.13,
+      "alpha": -0.03,
+      "binomial_p": 0.935374
+    }
+  },
+  {
+    "name": "生肖转移(top3)",
+    "summary": {
+      "triggered": 605,
+      "hits": 143,
+      "hit_rate": 0.2364,
+      "avg_n": 12.01,
+      "alpha": -0.0087,
+      "binomial_p": 0.70447
+    },
+    "first_half": {
+      "triggered": 296,
+      "hits": 68,
+      "hit_rate": 0.2297,
+      "avg_n": 11.71,
+      "alpha": -0.0092,
+      "binomial_p": 0.665817
+    },
+    "second_half": {
+      "triggered": 309,
+      "hits": 75,
+      "hit_rate": 0.2427,
+      "avg_n": 12.29,
+      "alpha": -0.0082,
+      "binomial_p": 0.651124
+    }
+  }
+]
