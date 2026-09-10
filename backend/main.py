@@ -3161,6 +3161,92 @@ def strategy_scheme_forward(body: dict, user=Header(None, alias="authorization")
             "generated": gen.get("generated", 0), "date": gen.get("date", "")}
 
 
+@app.get("/api/strategyScheme/picks")
+def strategy_scheme_picks(user=Header(None, alias="authorization")):
+    """自主跟踪·今日可下单号码：对每个 forwarding 方案实时算下一期选号（无前视偏差）。
+
+    返回：精准选号(ge2/ge3)置顶，union 大并集在后，组内按回测超额降序。
+    号码为 int 列表，前端 pad 补零 + 句点分隔后复制下单。"""
+    require_user(user)
+    db = get_db()
+    fwd = db.execute("SELECT * FROM strategy_scheme_record WHERE status='forwarding'").fetchall()
+    db.close()
+    out = []
+    for s in fwd:
+        try:
+            dims = json.loads(s["dims_json"]) if s["dims_json"] else []
+        except Exception:
+            dims = []
+        if not dims:
+            continue
+        srule = s["signal_rule"] or "high_gap"
+        pr = "union" if srule == "high_gap" else srule.replace("high_gap_", "")
+        order = _compute_current_picks(dims, s["offset"], s["window"] or get_strategy_window(), pr)
+        picks = order.get("picks", [])
+        out.append({
+            "scheme_key": s["scheme_key"],
+            "scheme_name": s["scheme_name"],
+            "dims": dims,
+            "signal_rule": pr,
+            "offset": s["offset"],
+            "window": s["window"],
+            "bet_date": order.get("date", ""),
+            "picks": picks,
+            "N": len(picks),
+            "bt_alpha": s["bt_alpha"],
+            "bt_hit_rate": s["bt_hit_rate"],
+            "bt_avg_n": s["bt_avg_n"],
+            "fwd_periods": s["fwd_periods"],
+            "fwd_hits": s["fwd_hits"],
+            "fwd_profit": s["fwd_profit"],
+        })
+    # 精准选号(ge2/ge3)置顶（买号少、可操作性强、时间分段最稳健），组内按超额降序
+    def _rank(x):
+        return (0 if x["signal_rule"] in ("ge2", "ge3") else 1, -(x["bt_alpha"] or 0))
+    out.sort(key=_rank)
+    return {"picks": out, "count": len(out), "date": out[0]["bet_date"] if out else ""}
+
+
+@app.get("/api/strategyScheme/detail")
+def strategy_scheme_detail(scheme_key: str, limit: int = 100, user=Header(None, alias="authorization")):
+    """单方案前向明细：每天选号 + 开奖 + 命中 + 盈亏（倒序，最新在前）。"""
+    require_user(user)
+    db = get_db()
+    rows = db.execute(
+        "SELECT bet_date, picks_json, N, open_number, hit FROM dim_forward_track "
+        "WHERE dim_key=? ORDER BY bet_date DESC, id DESC LIMIT ?",
+        (f"scheme:{scheme_key}", limit)).fetchall()
+    s = db.execute(
+        "SELECT scheme_name, dims_json, signal_rule, offset, window, bt_alpha, bt_hit_rate "
+        "FROM strategy_scheme_record WHERE scheme_key=?", (scheme_key,)).fetchone()
+    db.close()
+    detail = []
+    for r in rows:
+        try:
+            picks = json.loads(r["picks_json"]) if r["picks_json"] else []
+        except Exception:
+            picks = []
+        N = r["N"] or 0
+        hit = r["hit"]
+        profit = (SCHEME_ODDS - N) if hit == 1 else (-N if N > 0 else 0)
+        detail.append({
+            "bet_date": r["bet_date"], "picks": picks, "N": N,
+            "open_number": r["open_number"], "hit": hit, "profit": profit,
+        })
+    scheme = {}
+    if s:
+        try:
+            dims = json.loads(s["dims_json"]) if s["dims_json"] else []
+        except Exception:
+            dims = []
+        scheme = {
+            "scheme_name": s["scheme_name"], "dims": dims, "signal_rule": s["signal_rule"],
+            "offset": s["offset"], "window": s["window"],
+            "bt_alpha": s["bt_alpha"], "bt_hit_rate": s["bt_hit_rate"],
+        }
+    return {"scheme": scheme, "detail": detail, "count": len(detail)}
+
+
 # ============================================================
 # 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
 # ============================================================

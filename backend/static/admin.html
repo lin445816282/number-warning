@@ -301,7 +301,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
-          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList()">自主跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks()">自主跟踪</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1362,6 +1362,57 @@ table.data tr.warn td{background:var(--warnbg)}
 
           <!-- tab: 自主跟踪 -->
           <template v-if="dimTab==='autotrack'">
+            <!-- 🎯 今日可下单号码 -->
+            <div class="card">
+              <div class="card-title">🎯 今日可下单号码
+                <button class="btn btn-sm" @click="copyAllPicks()" style="float:right;padding:3px 10px;font-size:12px">📋 复制全部</button>
+                <button class="btn btn-sm" @click="loadSchemePicks()" style="float:right;padding:3px 10px;font-size:12px;margin-right:6px">🔄 刷新号码</button>
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:10px;line-height:1.7">
+                下一期 <b>{{ picksDate }}</b> 共 <b>{{ picksList.length }}</b> 个跟踪方案。号码<b>两位补零·句点分隔</b>，点「📋 复制」即可下单。<span style="color:var(--warn)">🎯 精准选号</span>（ge2/ge3，买号少）置顶，适合小仓位试；<b>点方案名看每日明细记录</b>。
+              </div>
+              <div class="table-scroll">
+                <table class="data">
+                  <thead><tr><th>方案</th><th>号码（补零）</th><th>N</th><th>回测超额</th><th>前向命中</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr v-for="p in picksList" :key="p.scheme_key">
+                      <td style="font-size:12px;font-weight:700;cursor:pointer" @click="toggleSchemeDetail(p)">
+                        {{ p.scheme_name }}
+                        <span v-if="p.signal_rule!=='union'" style="color:var(--warn);font-size:11px">🎯{{p.signal_rule}}</span>
+                      </td>
+                      <td v-if="p.N>0" style="font-family:'Roboto Mono',monospace;font-size:13px;color:var(--warn);font-weight:700">{{ fmtPicks(p.picks) }}</td>
+                      <td v-else style="color:#b8b0a0">空仓不下注</td>
+                      <td>{{ p.N }}</td>
+                      <td :style="p.bt_alpha>0?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ p.bt_alpha!=null?(p.bt_alpha>0?'+':'')+(p.bt_alpha*100).toFixed(2)+'%':'—' }}</td>
+                      <td style="font-size:11px" :style="p.fwd_periods>0 && p.fwd_hits/p.fwd_periods>=(p.bt_avg_n||1)/49?'color:var(--ok)':'color:var(--ink2)'">{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '—' }}</td>
+                      <td><button v-if="p.N>0" class="btn btn-sm" @click="copySchemePicks(p)" style="padding:2px 8px;font-size:11px">📋 复制</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <!-- 明细记录展开 -->
+              <div v-if="schemeDetailOpen" class="card" style="margin-top:10px;border:1px solid #e5dfd0">
+                <div class="card-title" style="font-size:13px">📅 明细记录 · {{ schemeDetailName }}
+                  <button class="btn btn-sm" @click="schemeDetailOpen=false" style="float:right;padding:2px 8px;font-size:11px">✕ 收起</button>
+                </div>
+                <div v-if="schemeDetailLoading" style="color:#b8b0a0;padding:10px">加载中…</div>
+                <div v-else class="table-scroll" style="max-height:380px">
+                  <table class="data">
+                    <thead><tr><th>日期</th><th>选号</th><th>N</th><th>开奖号</th><th>命中</th><th>盈亏</th></tr></thead>
+                    <tbody>
+                      <tr v-for="d in schemeDetailList" :key="d.bet_date+'-'+d.open_number">
+                        <td style="font-size:11px">{{ d.bet_date }}</td>
+                        <td style="font-family:'Roboto Mono',monospace;font-size:11px">{{ fmtPicks(d.picks) }}</td>
+                        <td>{{ d.N }}</td>
+                        <td style="font-weight:700">{{ d.open_number!=null ? String(d.open_number).padStart(2,'0') : '待' }}</td>
+                        <td :style="d.hit===1?'color:var(--ok);font-weight:700':(d.hit===0?'color:var(--warn)':'color:#b8b0a0')">{{ d.hit===1?'✅中':(d.hit===0?'✗空':'待') }}</td>
+                        <td :style="d.profit>0?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ d.profit>0?'+':'' }}{{ d.profit }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
             <div class="card">
               <div class="card-title">🤖 自主跟踪 · 方案论证记录库
                 <button class="btn btn-sm" @click="runSchemeScan()" :disabled="schemeScanning" style="float:right;padding:3px 10px;font-size:12px">{{ schemeScanning ? '扫描中…' : '🔍 AI 寻优扫描' }}</button>
@@ -1742,6 +1793,14 @@ createApp({
     const schemeScanning = ref(false);
     const schemeScanMsg = ref('');
     const schemeTotal = ref(0);
+    // 🎯 今日可下单号码 + 明细记录
+    const picksList = ref([]);
+    const picksDate = ref('');
+    const schemeDetailOpen = ref(false);
+    const schemeDetailKey = ref('');
+    const schemeDetailName = ref('');
+    const schemeDetailList = ref([]);
+    const schemeDetailLoading = ref(false);
     const schemeCards = computed(() => {
       const rows = (strategyScan.value.scheme_rows || []);
       const map = {};
@@ -2059,6 +2118,59 @@ createApp({
         schemeScanMsg.value = '前向固化失败：' + e.message;
       }
     }
+    // ====== 🎯 今日可下单号码 + 明细记录 ======
+    async function loadSchemePicks(){
+      try {
+        const d = await api('GET', '/api/strategyScheme/picks');
+        picksList.value = d.picks || [];
+        picksDate.value = d.date || '';
+      } catch(e){ picksList.value = []; picksDate.value = ''; }
+    }
+    function fmtPicks(picks){
+      return (picks || []).map(n => String(n).padStart(2, '0')).join('.');
+    }
+    async function copySchemePicks(p){
+      const txt = fmtPicks(p.picks);
+      if (!txt) return;
+      try { await navigator.clipboard.writeText(txt); toast('已复制 ' + p.scheme_name + '：' + txt); }
+      catch(e) {
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); toast('已复制 ' + p.scheme_name + '：' + txt); } catch(e2){}
+        document.body.removeChild(ta);
+      }
+    }
+    async function copyAllPicks(){
+      const lines = picksList.value.filter(p => p.N > 0)
+        .map(p => p.scheme_name + '：' + fmtPicks(p.picks));
+      if (!lines.length) { toast('当前无号码可复制'); return; }
+      const txt = lines.join('\n');
+      try { await navigator.clipboard.writeText(txt); toast('已复制 ' + lines.length + ' 个方案号码'); }
+      catch(e) {
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); toast('已复制 ' + lines.length + ' 个方案号码'); } catch(e2){}
+        document.body.removeChild(ta);
+      }
+    }
+    async function toggleSchemeDetail(p){
+      if (schemeDetailOpen.value && schemeDetailKey.value === p.scheme_key) {
+        schemeDetailOpen.value = false;
+        return;
+      }
+      schemeDetailKey.value = p.scheme_key;
+      schemeDetailName.value = p.scheme_name;
+      schemeDetailOpen.value = true;
+      schemeDetailLoading.value = true;
+      schemeDetailList.value = [];
+      try {
+        const d = await api('GET', '/api/strategyScheme/detail?scheme_key=' + p.scheme_key + '&limit=100');
+        schemeDetailList.value = d.detail || [];
+      } catch(e) { schemeDetailList.value = []; }
+      finally { schemeDetailLoading.value = false; }
+    }
     function schemeStatusText(s){
       const m = { forwarding: '转前向候选', backtested: '已回测', promoted: '已转正', rejected: '已淘汰', historical: '历史已论证' };
       return m[s] || s;
@@ -2348,6 +2460,7 @@ createApp({
       dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
       suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
+      picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
