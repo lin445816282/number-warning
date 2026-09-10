@@ -25,26 +25,30 @@ CORE_DIMS = list(M.CORE_DIMS)
 MULTI_DIMS = [d for d, t in DIM_TAGS.items() if t >= 3]
 
 db = M.get_db()
-cycle = db.execute(
-    "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-zodiac_map = M.DEFAULT_ZODIAC
-if cycle:
+# 按周期加载生肖映射：每条记录用其 cycle_id 对应映射，避免跨年错位（2026-09 修复生肖维度低命中）
+cycle_maps = {}
+for c in db.execute("SELECT id, zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1").fetchall():
     try:
-        zm = json.loads(cycle["zodiac_mapping"])
-        if zm:
-            zodiac_map = zm
+        m = json.loads(c["zodiac_mapping"])
+        cycle_maps[c["id"]] = m if m else M.DEFAULT_ZODIAC
     except Exception:
-        pass
+        cycle_maps[c["id"]] = M.DEFAULT_ZODIAC
 rows = db.execute(
     "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
 db.close()
 N_ROWS = len(rows)
 
+def map_for(rec):
+    return cycle_maps.get(rec["cycle_id"], M.DEFAULT_ZODIAC)
+
 _tagnum_cache = {}
-def tag_numbers(dim, tag):
+def tag_numbers(dim, tag, zm):
+    if dim == "zodiac":
+        # 生肖维度：号码覆盖随周期变化，按当期映射计算
+        return [n for n in range(1, 50) if M._num_to_zodiac(n, zm) == tag]
     k = (dim, tag)
     if k not in _tagnum_cache:
-        _tagnum_cache[k] = [n for n in range(1, 50) if M.match_labels(n, zodiac_map).get(dim) == tag]
+        _tagnum_cache[k] = [n for n in range(1, 50) if M.match_labels(n, M.DEFAULT_ZODIAC).get(dim) == tag]
     return _tagnum_cache[k]
 
 def run(dims, offset):
@@ -56,8 +60,9 @@ def run(dims, offset):
     total_profit = 0.0
     for i, r in enumerate(rows):
         seq = i + 1
+        zm = map_for(r)
         open_num = int(r["source_number"])
-        open_labels = M.match_labels(open_num, zodiac_map)
+        open_labels = M.match_labels(open_num, zm)
         # 1. 检测高位开出事件（当期开出的标签）
         events_now = []
         for d, t in open_labels.items():
@@ -67,12 +72,12 @@ def run(dims, offset):
             if k in ls:
                 gap = seq - ls[k]
                 if sm.get(k, 0) >= 2 and gap >= hm.get(k, 0) - offset:
-                    events_now.append((d, t, len(tag_numbers(d, t))))
+                    events_now.append((d, t, len(tag_numbers(d, t, zm))))
         # 2. 结算（开完后 i+1 .. i+5 共5期）
         for d, t, N in events_now:
             hit = False
             for j in range(i + 1, min(i + 6, N_ROWS)):
-                if M.match_labels(rows[j]["source_number"], zodiac_map).get(d) == t:
+                if M.match_labels(rows[j]["source_number"], map_for(rows[j])).get(d) == t:
                     hit = True
                     break
             total_events += 1

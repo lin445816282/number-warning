@@ -51,6 +51,18 @@ DIM_TAGS = {
 }
 ALL_DIMS = list(DIM_NAMES.keys())
 
+# 前向验证可跟踪维度分级（2026-09-01 演算：window=60 近2月约束下触发率，见 analysis/trackability_scan.py）
+# 高频7 + 中频2 = 可跟踪9维（前向引擎每日固化，能攒够样本做统计判定）
+# 低频11维 = 二元维度（触发率<7%，攒400期需4~22年，前向验证不可行 → 靠回测+事件级跟踪判定，不占前向判定名额）
+TRACKABLE_DIMS = [
+    "zodiac", "tail_number", "five_element", "head_number", "season_type",
+    "size_odd_even", "qqsh_type", "wave_color", "zodiac_color_type",
+]
+LOW_FREQ_DIMS = [
+    "animal_type", "edge_color", "he_sum", "zodiac_seq", "big_small",
+    "gender_zodiac", "yin_yang", "sky_earth", "odd_even", "beauty_type", "stroke_type",
+]
+
 # 策略演算方案的维度集合（下单卡片对应的方案）
 STRATEGY_SCHEMES = {
     "全维度19": ALL_DIMS,
@@ -189,12 +201,56 @@ CREATE TABLE IF NOT EXISTS algo_forward_track (
   create_time TEXT,
   UNIQUE(algo_key, bet_date)
 );
+CREATE TABLE IF NOT EXISTS dim_forward_track (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, dim_key TEXT, bet_date TEXT,
+  picks_json TEXT, N INTEGER DEFAULT 0,
+  open_number INTEGER, hit INTEGER,
+  create_time TEXT,
+  UNIQUE(dim_key, bet_date)
+);
 CREATE TABLE IF NOT EXISTS strategy_order (
   id INTEGER PRIMARY KEY AUTOINCREMENT, scheme TEXT, offset INTEGER DEFAULT 0,
   dims_json TEXT, bet_date TEXT, picks_json TEXT, N INTEGER DEFAULT 0,
   per REAL DEFAULT 1, amount REAL DEFAULT 0, signals_json TEXT,
   open_number INTEGER, hit INTEGER, profit REAL,
   create_time TEXT
+);
+CREATE TABLE IF NOT EXISTS strategy_scheme_record (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scheme_key TEXT UNIQUE,           -- 去重键：维度集合+信号口径+offset 规范化哈希
+  scheme_name TEXT,                 -- 人类可读名称
+  dims_json TEXT,                   -- 维度集合
+  signal_rule TEXT DEFAULT 'high_gap',  -- 信号口径（high_gap=高位触发）
+  offset INTEGER DEFAULT 0,         -- 高位触发 offset
+  window INTEGER DEFAULT 60,        -- 历史最高遗漏滚动窗口
+  bet_mode TEXT DEFAULT 'single',   -- single=单次买 / martingale=倍投
+  bet_ratio REAL DEFAULT 0.5,       -- 仓位（仅仓位模拟口径用，等额回测固定每号1元）
+  -- 回测指标（等额口径：每号1元，赔率47）
+  bt_periods INTEGER DEFAULT 0,     -- 回测总期数
+  bt_triggered INTEGER DEFAULT 0,   -- 触发期数（N>0）
+  bt_hits INTEGER DEFAULT 0,        -- 命中次数
+  bt_hit_rate REAL,                 -- 命中率
+  bt_avg_n REAL,                    -- 平均选号数
+  bt_rand_base REAL,                -- 随机基准 = avg_n/49
+  bt_alpha REAL,                    -- 超额命中 = hit_rate - rand_base
+  bt_net_profit REAL,               -- 净收益（每号1元累计）
+  bt_ev REAL,                       -- 每期期望 = net/periods
+  bt_front_alpha REAL,              -- 前半段超额
+  bt_back_alpha REAL,               -- 后半段超额
+  bt_front_ev REAL,                 -- 前半段 EV
+  bt_back_ev REAL,                  -- 后半段 EV
+  bt_stable INTEGER DEFAULT 0,      -- 时间分段稳健（4段≥3段EV正）
+  bt_max_dd REAL,                   -- 最大回撤（净收益曲线，%）
+  seg_evs_json TEXT,                -- 4 段 EV 明细（JSON 数组）
+  -- 前向指标（样本外，每日固化结算累计）
+  fwd_periods INTEGER DEFAULT 0,
+  fwd_hits INTEGER DEFAULT 0,
+  fwd_profit REAL DEFAULT 0,
+  -- 状态与来源
+  status TEXT DEFAULT 'backtested', -- backtested/forwarding/promoted/rejected/historical
+  conclusion TEXT,                  -- 结论备注
+  source TEXT DEFAULT 'auto',       -- auto=AI寻优 / manual=手工登记 / historical=历史已论证
+  create_time TEXT, update_time TEXT
 );
 """
 
@@ -206,9 +262,65 @@ DEFAULT_ZODIAC = {
     "鸡": [10,22,34,46], "猴": [11,23,35,47], "羊": [12,24,36,48],
 }
 
-# 4维稳定正信号（单期买回测验证：前后半增量均>+3%，全量增量+5~+10%，非过拟合）
+# 生肖倒序序列（六合彩规则：1号=当年生肖，此后按倒序排列；马年1-12号对应此序）
+_ZODIAC_SEQ = ["马", "蛇", "龙", "兔", "虎", "牛", "鼠", "猪", "狗", "鸡", "猴", "羊"]
+
+
+def _build_zodiac_mapping(seq):
+    """由 1-12 号生肖序列生成完整生肖映射（首位生肖含49共5号，其余各4号）。"""
+    m = {}
+    for i, z in enumerate(seq):
+        nums = [i + 1, i + 13, i + 25, i + 37]
+        if i == 0:
+            nums.append(49)
+        m[z] = nums
+    return m
+
+
+def _load_cycle_maps(db):
+    """加载 cycle_id → zodiac_mapping（is_enable=1），用于按记录周期匹配生肖，避免跨年错位。"""
+    cycle_maps = {}
+    for c in db.execute("SELECT id, zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1").fetchall():
+        try:
+            m = json.loads(c["zodiac_mapping"])
+            cycle_maps[c["id"]] = m if m else DEFAULT_ZODIAC
+        except Exception:
+            cycle_maps[c["id"]] = DEFAULT_ZODIAC
+    return cycle_maps
+
+
+def _map_for(rec, cycle_maps):
+    """按记录的 cycle_id 取对应周期生肖映射，缺省回落 DEFAULT_ZODIAC。"""
+    return cycle_maps.get(rec["cycle_id"], DEFAULT_ZODIAC)
+
+
 # season_type=春夏秋冬 / size_odd_even=大小单双 / wave_color=号码波色 / edge_color=白边黑中
 POS_DIMS = ["season_type", "size_odd_even", "wave_color", "edge_color"]
+
+# 高位跟踪（2026-09-07 新增）：高位触发（遗漏≥近2月hist_max−offset）→ 倍投10-20-40三期 / 单次买
+HIGH_TRACK_BETS = [10, 20, 40]  # 倍投三期每号金额
+HIGH_TRACK_CORE = ["qqsh_type", "yin_yang"]  # 稳定核心池：琴棋书画/阴阳（2026-09-07 从3维瘦身，生肖踢出进观察池待前向考核）
+
+# 维度考核准入线（2026-09-07）：三关——①历史初筛 ②前向验证(20~30期) ③滚动复考(近3月连续2月负降级)
+DIM_ASSESS_MIN_EV = 20      # 第1关：最小事件数（排除小样本运气）
+DIM_ASSESS_MIN_HIT = 0.60   # 第1关：最小命中率（排除靠N小硬撑的低命中维度）
+DIM_ASSESS_MIN_PER = 0.0    # 第1关：每事件盈利须为正（正期望）
+
+# 第2关·前向验证（观察池维度，2026-09-07）：
+# 每日固化「憋到高位」标签号码并集 → 开奖单次结算 → 攒够期数后按「超额命中」判定转正/淘汰
+DIM_ASSESS_WATCH = ["big_small", "edge_color", "zodiac_color_type", "sky_earth", "odd_even",
+                    "wave_color", "he_sum", "stroke_type", "size_odd_even", "zodiac_seq"]  # 当前观察池（转正/淘汰时手动更新）
+DIM_ASSESS_FWD_MIN_PERIODS = 100  # 前向最小期数（够100期才判定：20期标准差11%无法识别5%超额，100期降至5%假阳性率16%）
+DIM_ASSESS_FWD_MIN_ALPHA = 0.05   # 前向超额命中及格线：命中率须 ≥ 随机基准(N/49) + 5%（过滤纯随机维度）
+HIGH_TRACK_POS15 = ["zodiac", "odd_even", "big_small", "size_odd_even", "wave_color", "he_sum",
+                    "zodiac_seq", "beauty_type", "yin_yang", "stroke_type", "sky_earth",
+                    "edge_color", "qqsh_type", "zodiac_color_type", "tail_number"]  # 15正盈利维度
+HIGH_TRACK_SCHEMES = [
+    {"key": "A", "name": "全维度 · 倍投10-20-40", "dims": "all", "bet": "martingale"},
+    {"key": "B", "name": "15正盈利 · 倍投10-20-40", "dims": "pos15", "bet": "martingale"},
+    {"key": "C", "name": "稳定核心2维 · 倍投10-20-40", "dims": "core", "bet": "martingale"},
+    {"key": "D", "name": "全维度 · 单次买", "dims": "all", "bet": "single"},
+]
 
 # 演算跟踪算法清单（「后续演算跟踪」的跟踪对象，参数与 order-track 一致）
 TRACK_ALGOS = [
@@ -257,6 +369,10 @@ def init_db():
         db.execute("ALTER TABLE number_knowledge_record ADD COLUMN tail_number TEXT DEFAULT ''")
     if "size_odd_even" not in ncols:
         db.execute("ALTER TABLE number_knowledge_record ADD COLUMN size_odd_even TEXT DEFAULT ''")
+    # 迁移：strategy_scheme_record 补 seg_evs_json 列（4 段 EV 明细）
+    sscols = [r[1] for r in db.execute("PRAGMA table_info(strategy_scheme_record)").fetchall()]
+    if sscols and "seg_evs_json" not in sscols:
+        db.execute("ALTER TABLE strategy_scheme_record ADD COLUMN seg_evs_json TEXT")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 角色
@@ -310,7 +426,22 @@ def init_db():
     db.execute("INSERT OR IGNORE INTO sys_config (config_key, config_value, remark) VALUES (?,?,?)",
                ("engine_hit_floor", "70", "投入引擎命中率红线(%)，低于此维度的信号不投"))
 
-    # 丙午马年周期配置
+    # 生肖周期配置：辛丑牛年(2021) / 壬寅虎年(2022) / 癸卯兔年(2023) / 甲辰龙年(2024) / 乙巳蛇年(2025) / 丙午马年(2026)
+    ox_map = _build_zodiac_mapping(_ZODIAC_SEQ[5:] + _ZODIAC_SEQ[:5])      # 牛年：1号=牛
+    tiger_map = _build_zodiac_mapping(_ZODIAC_SEQ[4:] + _ZODIAC_SEQ[:4])   # 虎年：1号=虎
+    rabbit_map = _build_zodiac_mapping(_ZODIAC_SEQ[3:] + _ZODIAC_SEQ[:3])  # 兔年：1号=兔
+    dragon_map = _build_zodiac_mapping(_ZODIAC_SEQ[2:] + _ZODIAC_SEQ[:2])  # 龙年：1号=龙
+    snake_map = _build_zodiac_mapping(_ZODIAC_SEQ[1:] + _ZODIAC_SEQ[:1])   # 蛇年：1号=蛇
+    db.execute("INSERT OR IGNORE INTO zodiac_number_cycle_config (cycle_name, start_date, zodiac_mapping, is_enable, create_time) VALUES (?,?,?,?,?)",
+               ("辛丑牛年", "2021-02-12", json.dumps(ox_map, ensure_ascii=False), 1, now))
+    db.execute("INSERT OR IGNORE INTO zodiac_number_cycle_config (cycle_name, start_date, zodiac_mapping, is_enable, create_time) VALUES (?,?,?,?,?)",
+               ("壬寅虎年", "2022-02-01", json.dumps(tiger_map, ensure_ascii=False), 1, now))
+    db.execute("INSERT OR IGNORE INTO zodiac_number_cycle_config (cycle_name, start_date, zodiac_mapping, is_enable, create_time) VALUES (?,?,?,?,?)",
+               ("癸卯兔年", "2023-01-22", json.dumps(rabbit_map, ensure_ascii=False), 1, now))
+    db.execute("INSERT OR IGNORE INTO zodiac_number_cycle_config (cycle_name, start_date, zodiac_mapping, is_enable, create_time) VALUES (?,?,?,?,?)",
+               ("甲辰龙年", "2024-02-10", json.dumps(dragon_map, ensure_ascii=False), 1, now))
+    db.execute("INSERT OR IGNORE INTO zodiac_number_cycle_config (cycle_name, start_date, zodiac_mapping, is_enable, create_time) VALUES (?,?,?,?,?)",
+               ("乙巳蛇年", "2025-01-29", json.dumps(snake_map, ensure_ascii=False), 1, now))
     db.execute("INSERT OR IGNORE INTO zodiac_number_cycle_config (cycle_name, start_date, zodiac_mapping, is_enable, create_time) VALUES (?,?,?,?,?)",
                ("丙午马年", "2026-02-17", json.dumps(DEFAULT_ZODIAC, ensure_ascii=False), 1, now))
 
@@ -449,6 +580,43 @@ def _get_config_int(key, default):
         return int(row["config_value"]) if row else default
     except Exception:
         return default
+
+
+def _get_config_json(key, default):
+    """通用 JSON 配置读取（sys_config）。"""
+    db = get_db()
+    row = db.execute("SELECT config_value FROM sys_config WHERE config_key=?", (key,)).fetchone()
+    db.close()
+    try:
+        return json.loads(row["config_value"]) if row else default
+    except Exception:
+        return default
+
+
+def _set_config(key, value, remark=""):
+    """通用配置写入（sys_config，JSON 自动序列化，UPSERT 保持 id 稳定）。"""
+    db = get_db()
+    if isinstance(value, (list, dict)):
+        value = json.dumps(value, ensure_ascii=False)
+    val = str(value)
+    db.execute("UPDATE sys_config SET config_value=?, remark=? WHERE config_key=?", (val, remark, key))
+    if db.execute("SELECT changes()").fetchone()[0] == 0:
+        db.execute("INSERT INTO sys_config (config_key, config_value, remark) VALUES (?,?,?)",
+                   (key, val, remark))
+    db.commit()
+    db.close()
+
+
+def _get_high_track_core():
+    """稳定核心池维度（配置化：sys_config high_track_core，默认常量 HIGH_TRACK_CORE）。"""
+    return _get_config_json("high_track_core", HIGH_TRACK_CORE)
+
+
+def _set_high_track_core(dims):
+    """写入核心池维度（去重、过滤非法维度、保持顺序）。"""
+    dims = [d for d in dims if d in DIM_NAMES]
+    _set_config("high_track_core", dims, "稳定核心池维度（方案C）")
+    return dims
 
 
 def front_token_valid(token: str) -> bool:
@@ -818,9 +986,10 @@ def batch_match(body: dict, authorization=Header(None)):
     payload = require_user(authorization)
     ids = body.get("recordIdList", [])
     if not ids:
-        # 一键匹配：recordIdList 为空时匹配所有待匹配(status=0)记录
+        # 一键匹配：recordIdList 为空时匹配所有待匹配(status=0)+失败(status=2)记录
+        # 失败记录纳入重试范围，解决「补周期后旧数据仍卡在失败态」的问题（2026-09 蛇年周期补齐后）
         db = get_db()
-        rows = db.execute("SELECT id FROM number_knowledge_record WHERE status=0 ORDER BY id").fetchall()
+        rows = db.execute("SELECT id FROM number_knowledge_record WHERE status IN (0,2) ORDER BY id").fetchall()
         db.close()
         ids = [r["id"] for r in rows]
     ok_cnt, fail_cnt, errors = 0, 0, []
@@ -1027,12 +1196,13 @@ def suggest_number_votes(date: str = "", user=Header(None, alias="authorization"
 def _compute_votes_until(db, end_date, zodiac_map):
     """截至 end_date 之前（不含当天）时点重算建议号码投票：逐期回放算每标签遗漏，取每维度遗漏最久标签作信号。
     返回 (votes, signals)：votes=[{number, vote, hit_dims}], signals=[{dim_key, dim_name, tag_value, current_rank}]"""
+    cycle_maps = _load_cycle_maps(db)
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 AND record_date < ? ORDER BY record_date, id",
         (end_date,)).fetchall()
     last_seen = {}
     for idx, r in enumerate(rows):
-        labels = match_labels(r["source_number"], zodiac_map)
+        labels = match_labels(r["source_number"], _map_for(r, cycle_maps))
         for dim, tag in labels.items():
             if tag:
                 last_seen[(dim, tag)] = idx + 1
@@ -1075,16 +1245,7 @@ def suggest_number_backtest(start_date: str = "2026-01-01", user=Header(None, al
     按月聚合票数 0-5 各档位的命中率（下期开出率）+ 最长不出期数（最大遗漏）。纯只读。"""
     require_user(user)
     db = get_db()
-    cycle = db.execute(
-        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-    zodiac_map = DEFAULT_ZODIAC
-    if cycle:
-        try:
-            zm = json.loads(cycle["zodiac_mapping"])
-            if zm:
-                zodiac_map = zm
-        except Exception:
-            pass
+    cycle_maps = _load_cycle_maps(db)
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
@@ -1102,7 +1263,7 @@ def suggest_number_backtest(start_date: str = "2026-01-01", user=Header(None, al
     num_last_open = {}
     for idx in range(start_idx):
         r = rows[idx]
-        labels = match_labels(r["source_number"], zodiac_map)
+        labels = match_labels(r["source_number"], _map_for(r, cycle_maps))
         for dim, tag in labels.items():
             if tag:
                 last_seen[(dim, tag)] = idx + 1
@@ -1130,7 +1291,7 @@ def suggest_number_backtest(start_date: str = "2026-01-01", user=Header(None, al
         # 1-49 号码票数
         vote_by_num = {}
         for n in range(1, 50):
-            labels = match_labels(n, zodiac_map)
+            labels = match_labels(n, _map_for(r, cycle_maps))
             cnt = sum(1 for dk, tv in labels.items() if tv and (dk, tv) in signal_set)
             vote_by_num[n] = cnt
 
@@ -1154,7 +1315,7 @@ def suggest_number_backtest(start_date: str = "2026-01-01", user=Header(None, al
                 b["hit"] += 1
 
         # 更新 last_seen / num_last_open（本期开出）
-        labels = match_labels(open_num, zodiac_map)
+        labels = match_labels(open_num, _map_for(r, cycle_maps))
         for dim, tag in labels.items():
             if tag:
                 last_seen[(dim, tag)] = seq
@@ -1188,19 +1349,11 @@ def suggest_number_order_track(start_date: str = "2026-05-01", odds: int = 47,
     纯只读。"""
     require_user(user)
     db = get_db()
-    cycle = db.execute(
-        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-    zodiac_map = DEFAULT_ZODIAC
-    if cycle:
-        try:
-            zm = json.loads(cycle["zodiac_mapping"])
-            if zm:
-                zodiac_map = zm
-        except Exception:
-            pass
+    cycle_maps = _load_cycle_maps(db)
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
+    latest_map = _map_for(rows[-1], cycle_maps) if rows else DEFAULT_ZODIAC  # 下一期选号用当前周期
 
     START = 3000
     cash = float(START)
@@ -1263,7 +1416,7 @@ def suggest_number_order_track(start_date: str = "2026-05-01", odds: int = 47,
     last_seen = {}
     for idx in range(start_idx):
         r = rows[idx]
-        labels = match_labels(r["source_number"], zodiac_map)
+        labels = match_labels(r["source_number"], _map_for(r, cycle_maps))
         for dim, tag in labels.items():
             if tag:
                 k = (dim, tag)
@@ -1285,7 +1438,7 @@ def suggest_number_order_track(start_date: str = "2026-05-01", odds: int = 47,
         signal_set = set(top_signals)
         vote_by_num = {}
         for n in range(1, 50):
-            labels = match_labels(n, zodiac_map)
+            labels = match_labels(n, _map_for(r, cycle_maps))
             cnt = sum(1 for dk, tv in labels.items() if tv and (dk, tv) in signal_set)
             vote_by_num[n] = cnt
         picks = sorted([n for n, v in vote_by_num.items() if pick_cond(v)])
@@ -1357,7 +1510,7 @@ def suggest_number_order_track(start_date: str = "2026-05-01", odds: int = 47,
             "cash": round(cash, 2), "event": event,
         })
 
-        labels = match_labels(open_num, zodiac_map)
+        labels = match_labels(open_num, _map_for(r, cycle_maps))
         for dim, tag in labels.items():
             if tag:
                 k = (dim, tag)
@@ -1374,7 +1527,7 @@ def suggest_number_order_track(start_date: str = "2026-05-01", odds: int = 47,
     signal_set = set(top_signals)
     next_picks = []
     for n in range(1, 50):
-        labels = match_labels(n, zodiac_map)
+        labels = match_labels(n, latest_map)
         cnt = sum(1 for dk, tv in labels.items() if tv and (dk, tv) in signal_set)
         if pick_cond(cnt):
             next_picks.append(n)
@@ -1457,24 +1610,16 @@ MULTI_BETS = [10, 20, 40, 80, 160]   # 连续买：5期每号金额（倍投）�
 def _compute_strategy_preview():
     """批量预演算所有方案×offset 的当前「对应号码数」+ 选号（下单预览，一次加载数据）。"""
     db = get_db()
-    cycle = db.execute(
-        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-    zodiac_map = DEFAULT_ZODIAC
-    if cycle:
-        try:
-            zm = json.loads(cycle["zodiac_mapping"])
-            if zm:
-                zodiac_map = zm
-        except Exception:
-            pass
+    cycle_maps = _load_cycle_maps(db)
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
+    latest_map = _map_for(rows[-1], cycle_maps) if rows else DEFAULT_ZODIAC  # 当前信号号码用当前周期
 
     last_seen = {}; hist_max = {}; sample = {}
     for i, r in enumerate(rows):
         seq = i + 1
-        for dim, tag in match_labels(r["source_number"], zodiac_map).items():
+        for dim, tag in match_labels(r["source_number"], _map_for(r, cycle_maps)).items():
             if not tag:
                 continue
             k = (dim, tag)
@@ -1489,9 +1634,11 @@ def _compute_strategy_preview():
 
     tn_cache = {}
     def tag_nums(dim, tag):
+        if dim == "zodiac":
+            return [n for n in range(1, 50) if _num_to_zodiac(n, latest_map) == tag]
         k = (dim, tag)
         if k not in tn_cache:
-            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, zodiac_map).get(dim) == tag]
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
         return tn_cache[k]
 
     preview = {}
@@ -1525,29 +1672,23 @@ def _compute_strategy_order(dims, offset, window=None):
     """基于方案维度 + offset，演算当前应买入的号码。
     口径：标签当前遗漏 gap >= 历史最高 hist_max - offset（憋到高位）→ 买入该标签覆盖的号码并集。"""
     db = get_db()
-    cycle = db.execute(
-        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-    zodiac_map = DEFAULT_ZODIAC
-    if cycle:
-        try:
-            zm = json.loads(cycle["zodiac_mapping"])
-            if zm:
-                zodiac_map = zm
-        except Exception:
-            pass
+    cycle_maps = _load_cycle_maps(db)
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
+    latest_map = _map_for(rows[-1], cycle_maps) if rows else DEFAULT_ZODIAC  # 当前信号号码用当前周期
 
     dimset = set(dims)
 
     def tag_nums(dim, tag):
-        return [n for n in range(1, 50) if match_labels(n, zodiac_map).get(dim) == tag]
+        if dim == "zodiac":
+            return [n for n in range(1, 50) if _num_to_zodiac(n, latest_map) == tag]
+        return [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
 
     last_seen = {}; sample = {}; gap_hist = {}
     for i, r in enumerate(rows):
         seq = i + 1
-        for dim, tag in match_labels(r["source_number"], zodiac_map).items():
+        for dim, tag in match_labels(r["source_number"], _map_for(r, cycle_maps)).items():
             if not tag:
                 continue
             k = (dim, tag)
@@ -1631,26 +1772,19 @@ def _compute_rule_records(dims, offset, window=None):
     口径：标签遗漏 gap >= 历史最高 hist_max - offset 时开出（高位开出）→ 下一期买入该标签号码（唯一买入点）→ 单期结算（下一期开出命中赚 47−N、未中亏 N）。
     window：历史最高遗漏滚动窗口（期），0/None=全量历史。"""
     db = get_db()
-    cycle = db.execute(
-        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-    zodiac_map = DEFAULT_ZODIAC
-    if cycle:
-        try:
-            zm = json.loads(cycle["zodiac_mapping"])
-            if zm:
-                zodiac_map = zm
-        except Exception:
-            pass
+    cycle_maps = _load_cycle_maps(db)
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
 
     dimset = set(dims)
     tn_cache = {}
-    def tag_nums(dim, tag):
+    def tag_nums(dim, tag, zm):
+        if dim == "zodiac":
+            return [n for n in range(1, 50) if _num_to_zodiac(n, zm) == tag]
         k = (dim, tag)
         if k not in tn_cache:
-            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, zodiac_map).get(dim) == tag]
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
         return tn_cache[k]
 
     last_seen = {}; sample = {}; gap_hist = {}
@@ -1659,8 +1793,9 @@ def _compute_rule_records(dims, offset, window=None):
     cumulative_multi = 0.0
     for i, r in enumerate(rows):
         seq = i + 1
+        zm = _map_for(r, cycle_maps)
         open_num = int(r["source_number"])
-        open_labels = match_labels(open_num, zodiac_map)
+        open_labels = match_labels(open_num, zm)
         # 1. 检测高位开出事件
         events_now = []
         for dim, tag in open_labels.items():
@@ -1671,13 +1806,13 @@ def _compute_rule_records(dims, offset, window=None):
                 gap = seq - last_seen[k]
                 hm = _window_hist_max(gap_hist, k, seq, window)
                 if sample.get(k, 0) >= 2 and gap >= hm - offset:
-                    events_now.append((dim, tag, len(tag_nums(dim, tag))))
+                    events_now.append((dim, tag, len(tag_nums(dim, tag, zm))))
         # 2. 结算 + 逐条记录（单次买 + 连续买两种模式）
         for dim, tag, N in events_now:
             # 单次买：每号 SINGLE_BET 元，下一期买入（唯一买入点），单期结算
             hit = False
             if i + 1 < len(rows):
-                hit = match_labels(rows[i + 1]["source_number"], zodiac_map).get(dim) == tag
+                hit = match_labels(rows[i + 1]["source_number"], _map_for(rows[i + 1], cycle_maps)).get(dim) == tag
             profit_single = SINGLE_BET * (STRATEGY_ODDS - N) if hit else -SINGLE_BET * N
             cumulative_single += profit_single
             # 连续买：命中就停（马丁格尔），从高位开出下一期开始，五期固定结束
@@ -1689,7 +1824,7 @@ def _compute_rule_records(dims, offset, window=None):
                 if j >= len(rows):
                     break
                 bet = MULTI_BETS[k]
-                is_hit = match_labels(rows[j]["source_number"], zodiac_map).get(dim) == tag
+                is_hit = match_labels(rows[j]["source_number"], _map_for(rows[j], cycle_maps)).get(dim) == tag
                 if is_hit:
                     # 命中：本期中奖 bet*47，扣掉累计投入 N*sum(bets[0..k])，停止
                     total_invest = N * sum(MULTI_BETS[0:k + 1])
@@ -1708,7 +1843,7 @@ def _compute_rule_records(dims, offset, window=None):
             records.append({
                 "date": r["record_date"],
                 "dim": dim, "dim_name": DIM_NAMES.get(dim, dim), "tag": tag,
-                "picks": tag_nums(dim, tag), "N": N,
+                "picks": tag_nums(dim, tag, zm), "N": N,
                 "hit": 1 if hit else 0,
                 "profit": round(profit_single, 2),
                 "cumulative": round(cumulative_single, 2),
@@ -1825,24 +1960,26 @@ def _compute_current_signals(offset, window=None):
     口径：① 预警=遗漏≥历史最高−offset；② 高位开出；③ 开出后下一期买入。
     window：历史最高遗漏滚动窗口（期），0/None=全量历史。"""
     db = get_db()
-    cycle = db.execute(
-        "SELECT zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1 ORDER BY start_date DESC LIMIT 1").fetchone()
-    zodiac_map = DEFAULT_ZODIAC
-    if cycle:
+    # 按周期加载生肖映射：历史遍历用各记录 cycle_id 映射；当前信号号码用最新周期映射（2026-09 修复）
+    cycle_maps = {}
+    for c in db.execute("SELECT id, zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1").fetchall():
         try:
-            zm = json.loads(cycle["zodiac_mapping"])
-            if zm:
-                zodiac_map = zm
+            m = json.loads(c["zodiac_mapping"])
+            cycle_maps[c["id"]] = m if m else DEFAULT_ZODIAC
         except Exception:
-            pass
+            cycle_maps[c["id"]] = DEFAULT_ZODIAC
     rows = db.execute(
         "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
 
+    def map_for(rec):
+        return cycle_maps.get(rec["cycle_id"], DEFAULT_ZODIAC)
+    latest_map = map_for(rows[-1]) if rows else DEFAULT_ZODIAC  # 当前周期映射（生成当前信号号码用）
+
     last_seen = {}; sample = {}; last_gap = {}; gap_hist = {}
     for i, r in enumerate(rows):
         seq = i + 1
-        for dim, tag in match_labels(r["source_number"], zodiac_map).items():
+        for dim, tag in match_labels(r["source_number"], map_for(r)).items():
             if not tag:
                 continue
             k = (dim, tag)
@@ -1858,9 +1995,12 @@ def _compute_current_signals(offset, window=None):
 
     tn_cache = {}
     def tag_nums(dim, tag):
+        if dim == "zodiac":
+            # 生肖维度：当前信号号码用最新周期映射
+            return [n for n in range(1, 50) if _num_to_zodiac(n, latest_map) == tag]
         k = (dim, tag)
         if k not in tn_cache:
-            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, zodiac_map).get(dim) == tag]
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
         return tn_cache[k]
 
     warning = []   # 预警中：憋到高位，还没开出
@@ -1912,7 +2052,9 @@ def _compute_posdim_single_next(offset=2, window=None):
 
 def _compute_engine():
     """投入引擎：基于本金 + 当前待买入信号 + 历史命中率，输出每日下单资金指南。
-    原则：① 安全垫永不投入；② 只投正期望且高命中(≥红线)的信号；③ 进取仓位按本金比例；④ 单号金额动态摊薄。"""
+    原则：① 安全垫永不投入；② 只投正期望(ev_per>0)的信号（对齐维度考核 per_event>0 口径，
+    固定命中率红线 hit_floor 已废弃——不同N盈亏平衡命中率不同，正期望已综合N与命中率）；
+    ③ 进取仓位按本金比例；④ 单号金额动态摊薄。"""
     capital = _get_config_int('engine_capital', 3000)
     position_pct = _get_config_int('engine_position_pct', 20)
     safety_pct = _get_config_int('engine_safety_pct', 30)
@@ -1954,6 +2096,8 @@ def _compute_engine():
         p = st['hit'] / st['ev']
         N = s['N']
         ev_per = p * (STRATEGY_ODDS - N) - (1 - p) * N
+        if ev_per <= 0:
+            continue  # 负期望信号不投（正期望是硬门槛，避免劣质维度冒头）
         candidates.append({
             'dim': s['dim'], 'dim_name': s['dim_name'], 'tag': s['tag'],
             'picks': s['picks'], 'N': N,
@@ -1992,7 +2136,11 @@ def _compute_engine():
     # 7. 风险等级（按总投入占可用资金比例）
     ratio = total_amount / available if available else 0
     if not candidates:
-        risk, risk_note = 'gray', f'当前无近3月逐月全正的待买入信号，{bet_date} 建议观望'
+        if pending:
+            risk_note = f'{bet_date} 有 {len(pending)} 个待买入信号，但均为负期望或近3月非全正，建议观望'
+        else:
+            risk_note = f'{bet_date} 无待买入信号，建议观望'
+        risk = 'gray'
     elif ratio > 1:
         risk, risk_note = 'red', f'信号过多，总投入 {total_amount} 元已超可用资金 {available} 元，建议提高安全垫或降低单号金额'
     elif ratio >= 0.7:
@@ -2013,6 +2161,111 @@ def _compute_engine():
     }
 
 
+def _compute_high_track(window=60, offset=0, dims=None, bet_mode="martingale"):
+    """高位跟踪回测：标签遗漏 gap ≥ 近window期hist_max − offset（高位）→ 买入该标签号码。
+    bet_mode: martingale=倍投10-20-40三期(命中即停) / single=单次买一期(10元/号)。"""
+    db = get_db()
+    # 按周期加载生肖映射：每条记录用其 cycle_id 对应映射，避免跨年错位（2026-09 修复高位跟踪生肖维度）
+    cycle_maps = {}
+    for c in db.execute("SELECT id, zodiac_mapping FROM zodiac_number_cycle_config WHERE is_enable=1").fetchall():
+        try:
+            m = json.loads(c["zodiac_mapping"])
+            cycle_maps[c["id"]] = m if m else DEFAULT_ZODIAC
+        except Exception:
+            cycle_maps[c["id"]] = DEFAULT_ZODIAC
+    rows = db.execute("SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
+    db.close()
+
+    def map_for(rec):
+        return cycle_maps.get(rec["cycle_id"], DEFAULT_ZODIAC)
+
+    dimset = set(dims) if dims else set(DIM_NAMES.keys())
+    tn_cache = {}
+    def tag_nums(dim, tag, zm):
+        if dim == "zodiac":
+            # 生肖维度：号码覆盖随周期变化，按当期映射计算
+            return [n for n in range(1, 50) if _num_to_zodiac(n, zm) == tag]
+        k = (dim, tag)
+        if k not in tn_cache:
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
+        return tn_cache[k]
+
+    last_seen = {}; sample = {}; gap_hist = {}
+    dim_stats = {}; tag_stats = {}; monthly = {}
+    total_profit = 0.0; events = 0; hits = 0
+    period_hit = {1: 0, 2: 0, 3: 0}; period_miss = 0
+
+    for i, r in enumerate(rows):
+        seq = i + 1
+        d = r["record_date"]
+        zm = map_for(r)
+        open_labels = match_labels(r["source_number"], zm)
+        # 1. 检测高位触发（基于当前期之前的遗漏状态）
+        for k, ls in list(last_seen.items()):
+            dim, tag = k
+            if dim not in dimset:
+                continue
+            if sample.get(k, 0) < 2:
+                continue
+            gap = seq - ls
+            hm = _window_hist_max(gap_hist, k, seq, window)
+            if gap >= hm - offset:
+                N = len(tag_nums(dim, tag, zm))
+                profit = None; hit_period = None; invested = 0
+                if bet_mode == "single":
+                    jj = i + 1
+                    if jj < len(rows):
+                        h = match_labels(rows[jj]["source_number"], map_for(rows[jj])).get(dim) == tag
+                        profit = HIGH_TRACK_BETS[0] * (STRATEGY_ODDS - N) if h else -HIGH_TRACK_BETS[0] * N
+                        hit_period = 1 if h else None
+                    else:
+                        profit = 0.0
+                else:
+                    for pi in range(3):
+                        jj = i + 1 + pi
+                        if jj >= len(rows):
+                            break
+                        bet = HIGH_TRACK_BETS[pi]
+                        invested += bet * N
+                        if match_labels(rows[jj]["source_number"], map_for(rows[jj])).get(dim) == tag:
+                            profit = bet * STRATEGY_ODDS - invested
+                            hit_period = pi + 1
+                            break
+                    if profit is None:
+                        profit = -invested if invested else -sum(HIGH_TRACK_BETS) * N
+                total_profit += profit; events += 1
+                if hit_period:
+                    hits += 1; period_hit[hit_period] += 1
+                else:
+                    period_miss += 1
+                ds = dim_stats.setdefault(dim, {"dim": dim, "dim_name": DIM_NAMES.get(dim, dim), "ev": 0, "hit": 0, "profit": 0.0})
+                ds["ev"] += 1; ds["hit"] += (1 if hit_period else 0); ds["profit"] += profit
+                ts = tag_stats.setdefault(f"{dim}:{tag}", {"dim": dim, "dim_name": DIM_NAMES.get(dim, dim), "tag": tag, "N": N, "ev": 0, "hit": 0, "profit": 0.0})
+                ts["ev"] += 1; ts["hit"] += (1 if hit_period else 0); ts["profit"] += profit
+                mo = monthly.setdefault(d[:7], {"month": d[:7], "ev": 0, "hit": 0, "profit": 0.0})
+                mo["ev"] += 1; mo["hit"] += (1 if hit_period else 0); mo["profit"] += profit
+        # 2. 更新状态
+        for dim, tag in open_labels.items():
+            if not tag or dim not in dimset:
+                continue
+            k = (dim, tag)
+            if k in last_seen:
+                gap = seq - last_seen[k]
+                gap_hist.setdefault(k, []).append((seq, gap))
+                sample[k] = sample.get(k, 0) + 1
+            else:
+                sample[k] = 1
+            last_seen[k] = seq
+
+    return {
+        "events": events, "hits": hits,
+        "hit_rate": round(hits / events, 4) if events else 0.0,
+        "period_hit": period_hit, "period_miss": period_miss,
+        "total_profit": round(total_profit, 2),
+        "dim_stats": dim_stats, "tag_stats": tag_stats, "monthly": monthly,
+    }
+
+
 @app.get("/api/strategyOrder/signals")
 def strategy_order_signals(offset: int = 2, user=Header(None, alias="authorization")):
     require_user(user)
@@ -2024,6 +2277,1215 @@ def strategy_order_engine(user=Header(None, alias="authorization")):
     """投入引擎：每日下单资金指南。"""
     require_user(user)
     return _compute_engine()
+
+
+@app.get("/api/highTrack/backtest")
+def high_track_backtest(window: int = 60, offset: int = 0, user=Header(None, alias="authorization")):
+    """高位跟踪回测：四套方案 × 逐月 + 维度级 + 标签级 + 当前高位信号。"""
+    require_user(user)
+    out = {"window": window, "offset": offset, "schemes": [], "current_signals": []}
+    for scheme in HIGH_TRACK_SCHEMES:
+        dims = None
+        if scheme["dims"] == "pos15":
+            dims = HIGH_TRACK_POS15
+        elif scheme["dims"] == "core":
+            dims = _get_high_track_core()
+        r = _compute_high_track(window, offset, dims, scheme["bet"])
+        dim_list = sorted(r["dim_stats"].values(), key=lambda x: -x["profit"])
+        for x in dim_list:
+            x["profit"] = round(x["profit"], 2)
+        tag_list = sorted(r["tag_stats"].values(), key=lambda x: -x["profit"])
+        for x in tag_list:
+            x["profit"] = round(x["profit"], 2)
+        monthly_list = [r["monthly"][m] for m in sorted(r["monthly"])]
+        for x in monthly_list:
+            x["profit"] = round(x["profit"], 2)
+        out["schemes"].append({
+            "key": scheme["key"], "name": scheme["name"], "bet": scheme["bet"],
+            "dims_count": len(dims) if dims is not None else len(DIM_NAMES),
+            "total_profit": r["total_profit"], "events": r["events"], "hits": r["hits"],
+            "hit_rate": r["hit_rate"], "period_hit": r["period_hit"], "period_miss": r["period_miss"],
+            "dim_stats": dim_list, "tag_stats": tag_list, "monthly": monthly_list,
+        })
+    # 优秀方案上移：按累计盈亏降序（盈利方案置顶，亏损方案沉底），前端用 key 索引不受顺序影响
+    out["schemes"].sort(key=lambda x: -x["total_profit"])
+    sig = _compute_current_signals(offset, window)
+    out["current_signals"] = sig.get("warning", [])
+    # 稳定核心池（方案C）专属下单信号：仅琴棋书画/阴阳，憋到高位即买（与高位跟踪回测同口径）
+    out["core_signals"] = [s for s in sig.get("warning", []) if s["dim"] in _get_high_track_core()]
+    return out
+
+
+def _compute_dim_assess(window=60, offset=0):
+    """维度考核·第1关初筛：对每个维度单独跑倍投回测，按准入线分档（核心池/观察池/排除）。
+    第2关前向验证、第3关滚动复考依赖样本外数据积累，此处返回 recent_neg_months 供复考参考。"""
+    order_tier = {"core": 0, "watch": 1, "reject": 2}
+    core_dims = _get_high_track_core()  # 提循环外，避免 19 次重复读 DB
+    rows = []
+    for dim in ALL_DIMS:
+        r = _compute_high_track(window, offset, [dim], "martingale")
+        ev = r["events"]
+        per = r["total_profit"] / ev if ev else 0.0
+        monthly = [x["profit"] for m, x in sorted(r["monthly"].items())]
+        recent_neg = sum(1 for p in monthly[-3:] if p < 0)  # 近3月负月数（复考参考）
+        in_core = dim in core_dims
+        # 准入核心 = 正期望（每事件盈利>0）+ 样本足够。
+        # 不再用固定命中率红线（0.60）：不同标签覆盖数N的盈亏平衡命中率不同——
+        # 头数N=10命中率56%仍盈利（原被误杀），大小N=25命中率85%却亏（原被放过）。per_event 已综合N/命中率/倍投节奏。
+        passed = (not in_core) and ev >= DIM_ASSESS_MIN_EV and per > DIM_ASSESS_MIN_PER
+        tier = "core" if in_core else ("watch" if passed else "reject")
+        ph = r.get("period_hit", {})
+        # 尾部风险：三连miss数 + 最坏单次亏损（=倍投三期总额×该维度最大标签覆盖数）
+        max_n = max((t["N"] for t in r.get("tag_stats", {}).values()), default=0)
+        worst_loss = -sum(HIGH_TRACK_BETS) * max_n
+        rows.append({
+            "dim": dim, "dim_name": DIM_NAMES.get(dim, dim),
+            "events": ev, "hit_rate": round(r["hit_rate"], 4),
+            "profit": round(r["total_profit"], 2), "per_event": round(per, 2),
+            "period_hit": {"p1": ph.get(1, 0), "p2": ph.get(2, 0), "p3": ph.get(3, 0)},
+            "period_miss": r.get("period_miss", 0),
+            "worst_loss": worst_loss,
+            "monthly": [round(p, 2) for p in monthly],
+            "recent_neg_months": recent_neg, "tier": tier,
+        })
+    # 统一按每事件期望值排名（tier 仅作标注，不再分组排序）
+    rows.sort(key=lambda x: -x["per_event"])
+    for i, x in enumerate(rows):
+        x["rank"] = i + 1
+    return {
+        "rules": {"min_events": DIM_ASSESS_MIN_EV, "min_per_event": DIM_ASSESS_MIN_PER,
+                  "min_hit_rate_deprecated": DIM_ASSESS_MIN_HIT,
+                  "note": "准入以每事件期望利润>0为核心；固定命中率红线已废弃（不同N盈亏平衡命中率不同）"},
+        "dims": rows,
+        "core": [x for x in rows if x["tier"] == "core"],
+        "watch": [x for x in rows if x["tier"] == "watch"],
+        "reject": [x for x in rows if x["tier"] == "reject"],
+    }
+
+
+@app.get("/api/highTrack/dimAssess")
+def high_track_dim_assess(window: int = 60, offset: int = 0, user=Header(None, alias="authorization")):
+    """维度考核面板：三关准入初筛分档（核心池/观察池/排除）。"""
+    require_user(user)
+    return _compute_dim_assess(window, offset)
+
+
+def _compute_dim_forward_next(dim, offset=0, window=60):
+    """单维度前向验证选号：该维度当前「憋到高位」标签（warning）号码并集，下一期买入（单次买口径）。
+    与方案C回测同触发口径（gap >= 近window期hist_max - offset），仅把倍投3期简化为单次买1期，便于前向结算命中率。"""
+    from datetime import timedelta
+    sig = _compute_current_signals(offset, window)
+    db = get_db()
+    last_date = db.execute(
+        "SELECT MAX(record_date) d FROM number_knowledge_record WHERE status=1").fetchone()["d"]
+    db.close()
+    picks = set()
+    detail = []
+    for s in sig.get("warning", []):
+        if s["dim"] != dim:
+            continue
+        picks.update(s["picks"])
+        detail.append({"tag": s["tag"], "N": s["N"], "gap": s["gap"]})
+    picks = sorted(picks)
+    next_date = ""
+    if last_date:
+        next_date = (datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    return {"date": next_date, "picks": picks, "N": len(picks), "detail": detail}
+
+
+def _compute_dim_forward_status():
+    """观察池各维度前向验证状态：已结算期数、前向命中率、随机基准(N/49)、超额命中(alpha)、达标判定。
+    达标 = 期数≥阈值 且 超额命中 ≥ 及格线（命中率须显著高于随机基准，过滤纯随机维度）。"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT algo_key, N, hit FROM algo_forward_track WHERE algo_key LIKE 'dim_fwd_%' ORDER BY id").fetchall()
+    db.close()
+    by_dim = {}
+    for r in rows:
+        dim = r["algo_key"].replace("dim_fwd_", "")
+        by_dim.setdefault(dim, []).append(r)
+    result = []
+    for dim in DIM_ASSESS_WATCH:
+        recs = by_dim.get(dim, [])
+        settled = [r for r in recs if r["hit"] is not None]
+        # 滚动窗口：只统计最近 min_periods 期已结算记录（新增一期自动剔除最老一期，窗口恒定不累计）
+        recent = settled[-DIM_ASSESS_FWD_MIN_PERIODS:]
+        periods = len(recent)
+        hits = sum(1 for r in recent if r["hit"] == 1)
+        sum_n = sum((r["N"] or 0) for r in recent)
+        hit_rate = round(hits / periods, 4) if periods else None
+        avg_n = round(sum_n / periods, 2) if periods else 0.0
+        rand_base = round(avg_n / 49, 4) if avg_n else None  # 随机基准 = 平均N/49
+        alpha = round(hit_rate - rand_base, 4) if (hit_rate is not None and rand_base is not None) else None
+        passed = (periods >= DIM_ASSESS_FWD_MIN_PERIODS and alpha is not None
+                  and alpha >= DIM_ASSESS_FWD_MIN_ALPHA)
+        result.append({
+            "dim": dim, "dim_name": DIM_NAMES.get(dim, dim),
+            "periods": periods, "hits": hits,
+            "hit_rate": hit_rate, "avg_n": avg_n, "rand_base": rand_base, "alpha": alpha,
+            "passed": passed,
+            "min_periods": DIM_ASSESS_FWD_MIN_PERIODS, "min_alpha": DIM_ASSESS_FWD_MIN_ALPHA,
+        })
+    result.sort(key=lambda x: -(x["alpha"] if x["alpha"] is not None else -999))
+    return {"watch": result,
+            "rules": {"min_periods": DIM_ASSESS_FWD_MIN_PERIODS, "min_alpha": DIM_ASSESS_FWD_MIN_ALPHA}}
+
+
+@app.get("/api/dimAssess/forward")
+def dim_assess_forward(user=Header(None, alias="authorization")):
+    """维度考核·第2关前向验证状态。"""
+    require_user(user)
+    return _compute_dim_forward_status()
+
+
+@app.post("/api/dimAssess/promote")
+def dim_assess_promote(body: dict, user=Header(None, alias="authorization")):
+    """转正：观察池前向达标维度加入核心池（写入 sys_config，方案C下单自动生效）。"""
+    require_user(user)
+    dim = body.get("dim", "")
+    if dim not in DIM_NAMES:
+        raise HTTPException(400, "非法维度: " + dim)
+    core = _get_high_track_core()
+    if dim in core:
+        return {"ok": True, "core": core, "note": "已在核心池"}
+    st = _compute_dim_forward_status()
+    fwd = next((w for w in st["watch"] if w["dim"] == dim), None)
+    if not fwd or not fwd.get("passed"):
+        raise HTTPException(400, f"「{DIM_NAMES[dim]}」前向验证未达标（需≥{DIM_ASSESS_FWD_MIN_PERIODS}期且超额命中≥{DIM_ASSESS_FWD_MIN_ALPHA:.0%}），不能转正")
+    core = _set_high_track_core(core + [dim])
+    return {"ok": True, "core": core, "note": f"「{DIM_NAMES[dim]}」已转正入核心池"}
+
+
+@app.post("/api/dimAssess/demote")
+def dim_assess_demote(body: dict, user=Header(None, alias="authorization")):
+    """降级：核心池维度移除（写入 sys_config，方案C下单自动生效）。"""
+    require_user(user)
+    dim = body.get("dim", "")
+    core = _get_high_track_core()
+    if dim not in core:
+        return {"ok": True, "core": core, "note": "不在核心池"}
+    core = _set_high_track_core([d for d in core if d != dim])
+    return {"ok": True, "core": core, "note": f"「{DIM_NAMES[dim]}」已移出核心池"}
+
+
+# ============================================================
+# 维度考核·真实前向验证引擎（2026-09-08 新增）
+# 全 19 维度逐一样本外跟踪：每日固化选号→开奖结算→二项检验+FDR 论证
+# ============================================================
+def _dim_forward_binomial_sf(k, n, p):
+    """精确二项上尾概率 P(X ≥ k)，X ~ Binomial(n, p)。用 log-gamma 避免溢出。"""
+    import math
+    if n <= 0:
+        return 1.0
+    if k <= 0:
+        return 1.0
+    if k > n:
+        return 0.0
+    if p <= 0:
+        return 0.0
+    if p >= 1:
+        return 1.0 if k <= n else 0.0
+    q = 1 - p
+    log_p, log_q = math.log(p), math.log(q)
+    total = 0.0
+    for i in range(k, n + 1):
+        log_term = math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) \
+                   + i * log_p + (n - i) * log_q
+        total += math.exp(log_term)
+    return min(total, 1.0)
+
+
+def _dim_forward_bh_fdr(p_values, alpha=0.05):
+    """Benjamini-Hochberg FDR 校正：返回每个 p 值是否拒绝 H0（显著）。"""
+    m = len(p_values)
+    if m == 0:
+        return []
+    order = sorted(range(m), key=lambda i: p_values[i])
+    reject = [False] * m
+    cutoff = None
+    for rank, idx in enumerate(order, start=1):
+        if p_values[idx] <= rank / m * alpha:
+            cutoff = p_values[idx]
+    if cutoff is not None:
+        for i in range(m):
+            if p_values[i] <= cutoff:
+                reject[i] = True
+    return reject
+
+
+def _settle_dim_forward():
+    """结算 dim_forward_track 中 pending（open_number IS NULL）且 bet_date <= 最新数据日的记录。"""
+    db = get_db()
+    last_row = db.execute(
+        "SELECT MAX(record_date) d FROM number_knowledge_record WHERE status=1").fetchone()
+    last_date = last_row["d"] if last_row else None
+    if not last_date:
+        db.close()
+        return 0
+    pending = db.execute(
+        "SELECT id, bet_date, picks_json FROM dim_forward_track WHERE open_number IS NULL AND bet_date <= ?",
+        (last_date,)).fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute(
+            "SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1",
+            (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        picks = json.loads(p["picks_json"]) if p["picks_json"] else []
+        hit = 1 if open_num in picks else 0
+        db.execute("UPDATE dim_forward_track SET open_number=?, hit=? WHERE id=?",
+                   (open_num, hit, p["id"]))
+        settled += 1
+    db.commit()
+    db.close()
+    return settled
+
+
+def _generate_dim_forward(offset=0, window=60):
+    """为可跟踪 9 维度生成下一期选号并固化（低频 11 维不参与前向验证，见 LOW_FREQ_DIMS）。铁律：只用 bet_date 之前的数据。"""
+    from datetime import timedelta
+    db = get_db()
+    last_row = db.execute(
+        "SELECT MAX(record_date) d FROM number_knowledge_record WHERE status=1").fetchone()
+    db.close()
+    if not last_row or not last_row["d"]:
+        return {"generated": 0, "date": ""}
+    last_date = last_row["d"]
+    next_date = (datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    generated = 0
+    for dim in TRACKABLE_DIMS:
+        nxt = _compute_dim_forward_next(dim, offset=offset, window=window)
+        if nxt.get("date") and nxt.get("N", 0) > 0:
+            db = get_db()
+            db.execute(
+                "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, create_time) VALUES (?,?,?,?,NULL,NULL,?)",
+                (dim, nxt["date"], json.dumps(nxt.get("picks", [])), nxt.get("N", 0), now))
+            db.commit()
+            db.close()
+            generated += 1
+    return {"generated": generated, "date": next_date}
+
+
+def _compute_dim_forward_report():
+    """前向验证报告：全 19 维度前向命中率 + 超额 + 二项检验 p 值 + FDR 校正 + 结论。"""
+    db = get_db()
+    rows = db.execute("SELECT dim_key, N, hit FROM dim_forward_track WHERE hit IS NOT NULL").fetchall()
+    db.close()
+    by_dim = {}
+    for r in rows:
+        d = by_dim.setdefault(r["dim_key"], {"periods": 0, "hits": 0, "sum_n": 0})
+        d["periods"] += 1
+        d["sum_n"] += (r["N"] or 0)
+        if r["hit"] == 1:
+            d["hits"] += 1
+    result = []
+    p_vals = []
+    for dim in ALL_DIMS:
+        d = by_dim.get(dim, {"periods": 0, "hits": 0, "sum_n": 0})
+        periods = d["periods"]
+        hits = d["hits"]
+        avg_n = round(d["sum_n"] / periods, 2) if periods else 0.0
+        hit_rate = round(hits / periods, 4) if periods else None
+        rand_base = round(avg_n / 49, 4) if avg_n else None
+        alpha = round(hit_rate - rand_base, 4) if (hit_rate is not None and rand_base is not None) else None
+        p_val = None
+        if periods >= 30 and rand_base:
+            p_val = round(_dim_forward_binomial_sf(hits, periods, rand_base), 6)
+        p_vals.append(p_val if p_val is not None else 1.0)
+        result.append({
+            "dim": dim, "dim_name": DIM_NAMES.get(dim, dim),
+            "periods": periods, "hits": hits,
+            "hit_rate": hit_rate, "avg_n": avg_n, "rand_base": rand_base,
+            "alpha": alpha, "p_value": p_val,
+        })
+    rejects = _dim_forward_bh_fdr(p_vals, 0.05)
+    for i, x in enumerate(result):
+        if x["dim"] in LOW_FREQ_DIMS:
+            x["significant"] = False
+            x["verdict"] = "低频观察(前向验证不可行)"
+            continue
+        x["significant"] = bool(rejects[i]) if x["periods"] >= 30 else False
+        if x["periods"] < 30:
+            x["verdict"] = "观察中(样本不足)"
+        elif x["significant"] and (x["alpha"] or 0) > 0:
+            x["verdict"] = "显著·转正候选"
+        elif x["periods"] >= 400:
+            x["verdict"] = "淘汰(无预测力)"
+        else:
+            x["verdict"] = "继续观察"
+    result.sort(key=lambda x: -(x["alpha"] if x["alpha"] is not None else -999))
+    return {
+        "rules": {"alpha": 0.05, "fdr": "benjamini-hochberg",
+                  "min_periods_signal": 30, "min_periods_verdict": 400,
+                  "trackable_dims": TRACKABLE_DIMS, "low_freq_dims": LOW_FREQ_DIMS},
+        "dims": result,
+    }
+
+
+@app.get("/api/dimForward/report")
+def dim_forward_report(user=Header(None, alias="authorization")):
+    """前向验证报告（真实引擎统计论证）。"""
+    require_user(user)
+    return _compute_dim_forward_report()
+
+
+@app.post("/api/dimForward/run")
+def dim_forward_run(body: dict, user=Header(None, alias="authorization")):
+    """手动触发：结算 + 固化（真实引擎每日 cron 调用的核心，测试也可手动跑）。"""
+    require_user(user)
+    settled = _settle_dim_forward()
+    gen = _generate_dim_forward()
+    return {"ok": True, "settled": settled, "generated": gen.get("generated", 0),
+            "date": gen.get("date", "")}
+
+
+# ============================================================
+# 自主跟踪：方案论证记录库 + AI 寻优（2026-09-10 新增）
+# 思路：AI 根据维度子集 × 高位触发 offset 枚举方案空间 → 统一回测（等额每号1元）
+#       → 时间分段稳健性判定 → 记录入库（scheme_key 去重，避免重复论证）→ 稳定方案转前向跟踪
+# ============================================================
+SCHEME_ODDS = 47          # 赔率
+SCHEME_OFFSETS = [-2, -1, 0, 1, 2]   # 高位触发 offset 扫描范围
+SCHEME_WINDOWS = [60, 90, 120]       # 历史最高遗漏滚动窗口扫描范围（头数深挖发现 window=90/120 更强）
+
+
+def _scheme_dim_candidates():
+    """寻优维度子集候选：20 单维 + TRACKABLE_DIMS 9维的 2 维组合 + 3 维组合 + 5 现有 scheme。
+
+    三维组合：时间分段审计发现二维组合（生肖+头数）比单维（头数）跨时间更稳健，
+    三维是自然延伸（高共识号 ge2/ge3 需要 >=3 维才有意义）。"""
+    cands = []
+    seen = set()
+    for d in ALL_DIMS:
+        cands.append([d])
+    td = list(TRACKABLE_DIMS)
+    for i in range(len(td)):
+        for j in range(i + 1, len(td)):
+            cands.append([td[i], td[j]])
+    # 三维组合（C(9,3)=84）
+    for i in range(len(td)):
+        for j in range(i + 1, len(td)):
+            for k in range(j + 1, len(td)):
+                cands.append([td[i], td[j], td[k]])
+    for _name, dims in STRATEGY_SCHEMES.items():
+        cands.append(list(dims))
+    out = []
+    for c in cands:
+        k = ",".join(sorted(c))
+        if k not in seen:
+            seen.add(k)
+            out.append(c)
+    return out
+
+
+def _scheme_key(dims, signal_rule, offset, window=60):
+    """去重键：维度集合 + 信号口径 + offset 规范化哈希。仓位/倍投属资金管理参数，不参与去重。"""
+    dims_norm = ",".join(sorted(dims))
+    raw = f"{dims_norm}|{signal_rule}|{offset}|{window}"
+    return hashlib.md5(raw.encode()).hexdigest()[:16]
+
+
+def _scheme_name(dims, offset, signal_rule="high_gap"):
+    if len(dims) == 1:
+        base = DIM_NAMES.get(dims[0], dims[0])
+    elif len(dims) >= 18:
+        base = f"全维度{len(dims)}"
+    elif set(dims) == set(CORE_DIMS):
+        base = "核心6维"
+    else:
+        base = "+".join(DIM_NAMES.get(d, d) for d in dims[:4])
+        if len(dims) > 4:
+            base += f"等{len(dims)}维"
+    return f"{base}·高位触发(off{offset:+d})"
+
+
+def _load_backtest_data():
+    """加载回测数据 + 预计算每期标签（避免重复 match_labels）。返回 (rows, cycle_maps, seq_labels)。"""
+    db = get_db()
+    cycle_maps = _load_cycle_maps(db)
+    rows = db.execute(
+        "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
+    db.close()
+    seq_labels = []
+    for r in rows:
+        zm = _map_for(r, cycle_maps)
+        num = int(r["source_number"])
+        seq_labels.append((num, match_labels(num, zm), zm))
+    return rows, cycle_maps, seq_labels
+
+
+def _backtest_scheme(dims, offset=0, window=60, odds=SCHEME_ODDS, data=None, pick_rule="union"):
+    """统一回测引擎（等额口径：每号1元，赔率47）。无前视偏差：用截至上一期数据选号，当期开奖结算。
+
+    口径与 _compute_strategy_order 一致：标签当前遗漏 gap >= 近 window 期历史最高 - offset（憋到高位）
+    → 按 pick_rule 选号（union=憋高位标签号码并集 / geN=只买被≥N个维度同时憋高位覆盖的高共识号）
+    → 单期单次买。输出命中率/超额/净收益/时间分段前后半 EV/最大回撤。"""
+    if data is None:
+        rows, cycle_maps, seq_labels = _load_backtest_data()
+    else:
+        rows, cycle_maps, seq_labels = data
+    if len(rows) < 100:
+        return {"error": "数据不足", "periods": len(rows)}
+    dimset = set(dims)
+    tn_cache = {}
+
+    def tag_nums(dim, tag, zm):
+        if dim == "zodiac":
+            return [n for n in range(1, 50) if _num_to_zodiac(n, zm) == tag]
+        k = (dim, tag)
+        if k not in tn_cache:
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
+        return tn_cache[k]
+
+    last_seen = {}; sample = {}; gap_hist = {}
+    daily = []  # 每期 {N, hit, profit}
+    for i in range(len(rows)):
+        seq = i + 1
+        open_num, labels, zm = seq_labels[i]
+        # 1. 选号（基于截至上一期的 last_seen/gap_hist，无前视）
+        vote = {}
+        for (dim, tag), ls in last_seen.items():
+            gap = seq - ls
+            hm = _window_hist_max(gap_hist, (dim, tag), seq, window)
+            if sample.get((dim, tag), 0) >= 2 and gap >= hm - offset:
+                for n in tag_nums(dim, tag, zm):
+                    vote[n] = vote.get(n, 0) + 1
+        if pick_rule == "union":
+            picks = sorted(vote.keys())
+        else:
+            try:
+                th = int(pick_rule.replace("ge", ""))
+            except Exception:
+                th = 1
+            picks = sorted(n for n, c in vote.items() if c >= th)
+        N = len(picks)
+        # 2. 结算（当期开奖验证）
+        hit = (N > 0) and (open_num in picks)
+        profit = (odds - N) if hit else (-N if N > 0 else 0)
+        daily.append({"N": N, "hit": hit, "profit": profit})
+        # 3. 更新 last_seen（把当前期算进去，仅保留 dimset 内维度）
+        for dim, tag in labels.items():
+            if not tag or dim not in dimset:
+                continue
+            k = (dim, tag)
+            if k in last_seen:
+                gap = seq - last_seen[k]
+                sample[k] = sample.get(k, 0) + 1
+                gap_hist.setdefault(k, []).append((seq, gap))
+            else:
+                sample[k] = 1
+            last_seen[k] = seq
+
+    periods = len(daily)
+    triggered = [x for x in daily if x["N"] > 0]
+    t_cnt = len(triggered)
+    hits = sum(1 for x in triggered if x["hit"])
+    hit_rate = round(hits / t_cnt, 4) if t_cnt else 0.0
+    avg_n = round(sum(x["N"] for x in triggered) / t_cnt, 2) if t_cnt else 0.0
+    rand_base = round(avg_n / 49, 4) if avg_n else 0.0
+    alpha = round(hit_rate - rand_base, 4) if t_cnt else 0.0
+    net = round(sum(x["profit"] for x in daily), 2)
+    ev = round(net / periods, 4) if periods else 0.0
+
+    mid = periods // 2
+    front = daily[:mid]
+    back = daily[mid:]
+
+    def seg_ev(seg):
+        return round(sum(x["profit"] for x in seg) / len(seg), 4) if seg else 0.0
+
+    def seg_alpha(seg):
+        sg = [x for x in seg if x["N"] > 0]
+        if not sg:
+            return 0.0
+        h = sum(1 for x in sg if x["hit"])
+        n = sum(x["N"] for x in sg) / len(sg)
+        return round(h / len(sg) - n / 49, 4)
+
+    front_ev = seg_ev(front)
+    back_ev = seg_ev(back)
+    front_alpha = seg_alpha(front)
+    back_alpha = seg_alpha(back)
+
+    # 4 段稳健性：4 段中 EV>0 的段数 >= 3 才算稳定（比 2 段更严格，抗单段波动/结构突变）
+    q = periods // 4
+    segs = [daily[i * q:(i + 1) * q] for i in range(4)]
+    if periods % 4:
+        segs[-1] = daily[3 * q:]
+    seg_evs = [seg_ev(s) for s in segs]
+    pos_segs = sum(1 for e in seg_evs if e > 0)
+
+    # 最大回撤（累计净收益曲线）
+    cum = 0.0; peak = 0.0; max_dd = 0.0
+    for x in daily:
+        cum += x["profit"]
+        peak = max(peak, cum)
+        if peak > 0:
+            max_dd = max(max_dd, (peak - cum) / peak * 100)
+    stable = 1 if pos_segs >= 3 else 0
+
+    return {
+        "periods": periods, "triggered": t_cnt, "hits": hits,
+        "hit_rate": hit_rate, "avg_n": avg_n, "rand_base": rand_base, "alpha": alpha,
+        "net_profit": net, "ev": ev,
+        "front_ev": front_ev, "back_ev": back_ev,
+        "front_alpha": front_alpha, "back_alpha": back_alpha,
+        "seg_evs": seg_evs, "pos_segs": pos_segs,
+        "stable": stable, "max_dd": round(max_dd, 2),
+    }
+
+
+def _register_scheme(dims, offset, signal_rule="high_gap", window=60, source="auto",
+                     bt=None, conclusion="", status="backtested"):
+    """登记方案到记录库（scheme_key 去重，已存在返回 skipped=True）。"""
+    key = _scheme_key(dims, signal_rule, offset, window)
+    db = get_db()
+    exists = db.execute("SELECT 1 FROM strategy_scheme_record WHERE scheme_key=?", (key,)).fetchone()
+    if exists:
+        db.close()
+        return {"key": key, "exists": True, "skipped": True}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    name = _scheme_name(dims, offset)
+    bt = bt or {}
+    db.execute(
+        "INSERT INTO strategy_scheme_record (scheme_key, scheme_name, dims_json, signal_rule, offset, window, "
+        "bet_mode, bt_periods, bt_triggered, bt_hits, bt_hit_rate, bt_avg_n, bt_rand_base, bt_alpha, "
+        "bt_net_profit, bt_ev, bt_front_alpha, bt_back_alpha, bt_front_ev, bt_back_ev, bt_stable, bt_max_dd, seg_evs_json, "
+        "status, conclusion, source, create_time, update_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (key, name, json.dumps(dims, ensure_ascii=False), signal_rule, offset, window,
+         "single", bt.get("periods", 0), bt.get("triggered", 0), bt.get("hits", 0),
+         bt.get("hit_rate"), bt.get("avg_n"), bt.get("rand_base"), bt.get("alpha"),
+         bt.get("net_profit"), bt.get("ev"), bt.get("front_alpha"), bt.get("back_alpha"),
+         bt.get("front_ev"), bt.get("back_ev"), bt.get("stable", 0), bt.get("max_dd"),
+         json.dumps(bt.get("seg_evs", [])),
+         status, conclusion, source, now, now))
+    db.commit()
+    db.close()
+    return {"key": key, "exists": False, "skipped": False}
+
+
+def _scan_schemes(windows=None, odds=SCHEME_ODDS):
+    """AI 寻优：枚举维度子集 × window × offset × 选号规则 → 去重 → 回测 → 二项检验+FDR 校正 → 记录。
+
+    选号规则：union（憋高位标签号码并集，所有维度都扫）+ ge2（只买被≥2维同时憋高位覆盖的高共识号，仅多维度组合扫）。
+    两阶段：① 全量回测收集结果 ② 对「4段稳健且触发≥100期」的方案做二项检验 + BH-FDR 校正，弱信号分级。"""
+    data = _load_backtest_data()
+    cands = _scheme_dim_candidates()
+    offsets = SCHEME_OFFSETS
+    windows = windows or SCHEME_WINDOWS
+    scanned = 0
+    skipped = 0
+    results = []
+    for dims in cands:
+        pick_rules = ["union"]
+        if len(dims) >= 2:
+            pick_rules.append("ge2")
+        if len(dims) >= 3:
+            pick_rules.append("ge3")
+        for w in windows:
+            for off in offsets:
+                for pr in pick_rules:
+                    srule = "high_gap" if pr == "union" else f"high_gap_{pr}"
+                    key = _scheme_key(dims, srule, off, w)
+                    db = get_db()
+                    exists = db.execute("SELECT 1 FROM strategy_scheme_record WHERE scheme_key=?", (key,)).fetchone()
+                    db.close()
+                    if exists:
+                        skipped += 1
+                        continue
+                    bt = _backtest_scheme(dims, off, w, odds, data, pick_rule=pr)
+                    if bt.get("error"):
+                        continue
+                    scanned += 1
+                    results.append({"dims": dims, "offset": off, "window": w, "pick_rule": pr, "bt": bt})
+
+    # 二项检验 + FDR 校正（对象：4段稳健 且 触发期数>=100 的方案——样本少的高 alpha 是波动假象）
+    tested = [r for r in results if r["bt"].get("stable") and r["bt"].get("triggered", 0) >= 100]
+    # 后半段独立回测（正确的时间稳健性口径：fresh start 无前半热身，最接近真实前向）
+    rows_data, cycle_maps_data, seq_labels_data = data
+    half2_data = (rows_data[len(rows_data) // 2:], cycle_maps_data, seq_labels_data[len(rows_data) // 2:])
+    p_vals = []
+    h2_alphas = {}
+    for r in tested:
+        bt = r["bt"]
+        p = _dim_forward_binomial_sf(bt["hits"], bt["triggered"], bt["rand_base"]) if bt.get("rand_base") else 1.0
+        p_vals.append(round(p, 6))
+        key = _scheme_key(r["dims"], "high_gap" if r["pick_rule"] == "union" else f"high_gap_{r['pick_rule']}",
+                          r["offset"], r["window"])
+        h2 = _backtest_scheme(r["dims"], r["offset"], r["window"], odds, half2_data, pick_rule=r["pick_rule"])
+        h2_alphas[key] = (h2.get("alpha", 0) or 0) if not h2.get("error") else 0.0
+    rejects = _dim_forward_bh_fdr(p_vals, 0.05) if p_vals else []
+    idx_map = {_scheme_key(r["dims"], "high_gap" if r["pick_rule"] == "union" else f"high_gap_{r['pick_rule']}",
+                           r["offset"], r["window"]): i for i, r in enumerate(tested)}
+
+    stable_list = []
+    for r in results:
+        dims, off, w, pr, bt = r["dims"], r["offset"], r["window"], r["pick_rule"], r["bt"]
+        stable = bt.get("stable", 0)
+        alpha = bt.get("alpha", 0) or 0
+        srule = "high_gap" if pr == "union" else f"high_gap_{pr}"
+        key = _scheme_key(dims, srule, off, w)
+        ti = idx_map.get(key)
+        if ti is not None:
+            p = p_vals[ti]
+            sig = bool(rejects[ti])
+            avg_n = bt.get("avg_n", 0) or 0
+            h2_alpha = h2_alphas.get(key, 0.0)
+            # 时间分段门槛：后半段独立回测 alpha<=0 的一律淘汰（前半段伪信号，如头数单维单调衰竭）
+            if h2_alpha <= 0:
+                status = "backtested"
+                conclusion = f"后半段独立回测alpha={h2_alpha:.4f}<=0，前半伪信号，淘汰"
+            elif sig and alpha > 0 and avg_n < 20:
+                status = "forwarding"
+                conclusion = f"FDR显著(p={p})，转前向跟踪候选"
+                stable_list.append({"name": _scheme_name(dims, off), "dims": dims,
+                                    "offset": off, "window": w, "pick_rule": pr, **bt})
+            elif p < 0.1 and alpha > 0 and avg_n < 20:
+                status = "forwarding"
+                conclusion = f"弱信号(未校正p={p}<0.1)，前向观察"
+                stable_list.append({"name": _scheme_name(dims, off), "dims": dims,
+                                    "offset": off, "window": w, "pick_rule": pr, **bt})
+            else:
+                status = "backtested"
+                conclusion = f"4段稳健但未显著或均号过大(p={p})，观察"
+        elif stable:
+            status = "backtested"
+            conclusion = "4段稳健但样本不足100期，观察"
+        else:
+            status = "backtested"
+            conclusion = "4段EV未达≥3正，暂不转前向"
+        _register_scheme(dims, off, srule, w, "auto", bt, conclusion, status)
+
+    stable_list.sort(key=lambda x: -(x.get("ev", 0) or 0))
+    return {
+        "scanned": scanned, "skipped": skipped,
+        "total_candidates": len(cands) * len(windows) * len(offsets),
+        "stable": stable_list,
+        "fdr_tested": len(tested),
+        "fdr_significant": sum(1 for x in rejects if x) if rejects else 0,
+    }
+
+
+@app.get("/api/strategyScheme/list")
+def strategy_scheme_list(status: str = "", user=Header(None, alias="authorization")):
+    """方案论证记录库列表（自主跟踪面板）。含过拟合识别（前向超额 vs 回测 alpha）。"""
+    require_user(user)
+    db = get_db()
+    q = "SELECT * FROM strategy_scheme_record"
+    args = []
+    if status:
+        q += " WHERE status=?"
+        args.append(status)
+    q += " ORDER BY bt_stable DESC, bt_ev DESC, id"
+    rows = db.execute(q, args).fetchall()
+    # 前向均号（dim_forward_track scheme: 记录）
+    fwd_n = {}; fwd_cnt = {}
+    for fr in db.execute(
+            "SELECT dim_key, N FROM dim_forward_track WHERE dim_key LIKE 'scheme:%' AND hit IS NOT NULL").fetchall():
+        key = fr["dim_key"].replace("scheme:", "")
+        fwd_n[key] = fwd_n.get(key, 0) + (fr["N"] or 0)
+        fwd_cnt[key] = fwd_cnt.get(key, 0) + 1
+    db.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["dims"] = json.loads(r["dims_json"]) if r["dims_json"] else []
+        except Exception:
+            d["dims"] = []
+        try:
+            d["seg_evs"] = json.loads(r["seg_evs_json"]) if r["seg_evs_json"] else []
+        except Exception:
+            d["seg_evs"] = []
+        # 过拟合识别：前向超额 vs 回测 alpha
+        key = d["scheme_key"]
+        cnt = fwd_cnt.get(key, 0)
+        d["fwd_avg_n"] = round(fwd_n.get(key, 0) / cnt, 2) if cnt else 0.0
+        fp = d["fwd_periods"] or 0
+        fh = d["fwd_hits"] or 0
+        fwd_alpha = None
+        if fp >= 30 and d["fwd_avg_n"]:
+            fwd_alpha = round(fh / fp - d["fwd_avg_n"] / 49, 4)
+        bt_alpha = d["bt_alpha"] or 0
+        d["fwd_alpha"] = fwd_alpha
+        if fwd_alpha is not None:
+            if fwd_alpha >= bt_alpha * 0.6:
+                d["overfit"] = "ok"       # 前向≈回测（或更高）= 真信号
+            elif fwd_alpha > 0:
+                d["overfit"] = "partial"  # 前向正但明显缩水 = 部分过拟合
+            else:
+                d["overfit"] = "overfit"  # 前向翻负 = 严重过拟合
+        else:
+            d["overfit"] = "insufficient"  # 前向样本不足
+        result.append(d)
+    return {"schemes": result, "count": len(result)}
+
+
+@app.post("/api/strategyScheme/scan")
+def strategy_scheme_scan(body: dict, user=Header(None, alias="authorization")):
+    """手动触发 AI 寻优：扫描方案空间 → 去重 → 回测 → 记录。"""
+    require_user(user)
+    windows = body.get("windows") or SCHEME_WINDOWS
+    res = _scan_schemes(windows)
+    return {"ok": True, **res}
+
+
+def _compute_current_picks(dims, offset=0, window=60, pick_rule="union"):
+    """基于当前全部数据算下一期选号（支持 union/ge2 选号规则）。与 _backtest_scheme 口径一致。"""
+    db = get_db()
+    cycle_maps = _load_cycle_maps(db)
+    rows = db.execute(
+        "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
+    db.close()
+    if not rows:
+        return {"date": "", "picks": [], "N": 0}
+    dimset = set(dims)
+    tn_cache = {}
+
+    def tag_nums(dim, tag, zm):
+        if dim == "zodiac":
+            return [n for n in range(1, 50) if _num_to_zodiac(n, zm) == tag]
+        k = (dim, tag)
+        if k not in tn_cache:
+            tn_cache[k] = [n for n in range(1, 50) if match_labels(n, DEFAULT_ZODIAC).get(dim) == tag]
+        return tn_cache[k]
+
+    last_seen = {}; sample = {}; gap_hist = {}
+    for i, r in enumerate(rows):
+        seq = i + 1
+        zm = _map_for(r, cycle_maps)
+        for dim, tag in match_labels(int(r["source_number"]), zm).items():
+            if not tag or dim not in dimset:
+                continue
+            k = (dim, tag)
+            if k in last_seen:
+                gap = seq - last_seen[k]
+                sample[k] = sample.get(k, 0) + 1
+                gap_hist.setdefault(k, []).append((seq, gap))
+            else:
+                sample[k] = 1
+            last_seen[k] = seq
+    total_seq = len(rows)
+    latest_map = _map_for(rows[-1], cycle_maps)
+    vote = {}
+    for (dim, tag), ls in last_seen.items():
+        gap = total_seq - ls
+        hm = _window_hist_max(gap_hist, (dim, tag), total_seq, window)
+        if sample.get((dim, tag), 0) >= 2 and gap >= hm - offset:
+            for n in tag_nums(dim, tag, latest_map):
+                vote[n] = vote.get(n, 0) + 1
+    if pick_rule == "union":
+        picks = sorted(vote.keys())
+    else:
+        try:
+            th = int(pick_rule.replace("ge", ""))
+        except Exception:
+            th = 1
+        picks = sorted(n for n, c in vote.items() if c >= th)
+    from datetime import timedelta
+    last_date = rows[-1]["record_date"]
+    next_date = (datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    return {"date": next_date, "picks": picks, "N": len(picks)}
+
+
+def _generate_scheme_forward():
+    """对 status='forwarding' 方案固化下一期选号到 dim_forward_track（dim_key='scheme:<key>'）。"""
+    db = get_db()
+    fwd = db.execute("SELECT * FROM strategy_scheme_record WHERE status='forwarding'").fetchall()
+    db.close()
+    if not fwd:
+        return {"generated": 0, "date": ""}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    generated = 0
+    bet_date = ""
+    for s in fwd:
+        try:
+            dims = json.loads(s["dims_json"]) if s["dims_json"] else []
+        except Exception:
+            dims = []
+        if not dims:
+            continue
+        srule = s["signal_rule"] or "high_gap"
+        pr = "union" if srule == "high_gap" else srule.replace("high_gap_", "")
+        order = _compute_current_picks(dims, s["offset"], s["window"] or get_strategy_window(), pr)
+        picks = order.get("picks", [])
+        bet_date = order.get("date", "")
+        if not picks or not bet_date:
+            continue
+        dim_key = f"scheme:{s['scheme_key']}"
+        db = get_db()
+        db.execute(
+            "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, create_time) VALUES (?,?,?,?,NULL,NULL,?)",
+            (dim_key, bet_date, json.dumps(picks), len(picks), now))
+        db.commit()
+        db.close()
+        generated += 1
+    return {"generated": generated, "date": bet_date}
+
+
+def _update_scheme_forward_stats():
+    """结算后：从 dim_forward_track 读 scheme: 记录，回填 strategy_scheme_record 的 fwd_* 字段。"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT dim_key, N, hit FROM dim_forward_track WHERE dim_key LIKE 'scheme:%' AND hit IS NOT NULL").fetchall()
+    by_key = {}
+    for r in rows:
+        key = r["dim_key"].replace("scheme:", "")
+        d = by_key.setdefault(key, {"periods": 0, "hits": 0, "profit": 0.0})
+        d["periods"] += 1
+        if r["hit"] == 1:
+            d["hits"] += 1
+            d["profit"] += (SCHEME_ODDS - (r["N"] or 0))
+        else:
+            d["profit"] -= (r["N"] or 0)
+    for key, d in by_key.items():
+        db.execute(
+            "UPDATE strategy_scheme_record SET fwd_periods=?, fwd_hits=?, fwd_profit=? WHERE scheme_key=?",
+            (d["periods"], d["hits"], round(d["profit"], 2), key))
+    db.commit()
+    db.close()
+    return len(by_key)
+
+
+@app.post("/api/strategyScheme/forward")
+def strategy_scheme_forward(body: dict, user=Header(None, alias="authorization")):
+    """前向跟踪：结算昨日 scheme 选号 + 为 forwarding 方案固化下一期选号。"""
+    require_user(user)
+    settled = _settle_dim_forward()
+    updated = _update_scheme_forward_stats()
+    gen = _generate_scheme_forward()
+    return {"ok": True, "settled": settled, "updated": updated,
+            "generated": gen.get("generated", 0), "date": gen.get("date", "")}
+
+
+# ============================================================
+# 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
+# ============================================================
+def _compute_tail_track(start_date="2025-01-01", odds=47, base=5, step=5, chip_cap=70):
+    """尾数跟踪：两种策略达朗贝尔±5 演算。
+    组1=5-9尾(25号，随机基线51%)；组2=买同上期尾数(4-5号，随机基线10%)。
+    达朗贝尔：命中筹码-5(不低于base)、未中筹码+5；筹码封顶 chip_cap，超过即重置回 base。赔率47倍。纯只读。"""
+    from datetime import timedelta
+    db = get_db()
+    rows = db.execute(
+        "SELECT record_date, source_number FROM number_knowledge_record "
+        "WHERE status=1 AND record_date >= ? ORDER BY record_date, id",
+        (start_date,)
+    ).fetchall()
+    db.close()
+
+    def tail_nums(t):
+        return [n for n in range(1, 50) if n % 10 == t]
+    tail_map = {t: tail_nums(t) for t in range(10)}
+
+    g1_nums = set()
+    for t in range(5, 10):
+        g1_nums.update(tail_map[t])
+
+    def run(strategy):
+        chip = base
+        daily = []
+        for i, r in enumerate(rows):
+            d = r["record_date"]
+            open_num = int(r["source_number"])
+            open_tail = open_num % 10
+            if strategy == "g1":
+                nums = g1_nums
+            else:
+                if i == 0:
+                    daily.append({"date": d, "open": open_num, "tail": open_tail, "N": 0,
+                                  "hit": False, "chip": chip, "chip_after": chip, "profit": 0.0})
+                    continue
+                prev_tail = int(rows[i - 1]["source_number"]) % 10
+                nums = set(tail_map[prev_tail])
+            N = len(nums)
+            hit = open_num in nums
+            chip_before = chip
+            profit = (odds * chip - N * chip) if hit else (-N * chip)
+            reset = False
+            if hit:
+                chip = max(base, chip - step)
+            else:
+                chip += step
+                if chip > chip_cap:
+                    chip = base
+                    reset = True
+            daily.append({"date": d, "open": open_num, "tail": open_tail, "N": N,
+                          "hit": hit, "chip": chip_before, "chip_after": chip,
+                          "profit": round(profit, 2), "reset": reset})
+        return daily
+
+    def aggregate(daily):
+        total_profit = round(sum(x["profit"] for x in daily), 2)
+        hits = sum(1 for x in daily if x["hit"] and x["N"] > 0)
+        periods = sum(1 for x in daily if x["N"] > 0)
+        max_chip = max(x["chip"] for x in daily) if daily else base
+        cur_chip = daily[-1]["chip_after"] if daily else base
+        reset_count = sum(1 for x in daily if x.get("reset"))
+        total_bet = round(sum(x["chip"] * x["N"] for x in daily), 2)
+        _cum = 0.0
+        _peak = 0.0
+        max_drawdown = 0.0
+        for x in daily:
+            _cum += x["profit"]
+            if _cum > _peak:
+                _peak = _cum
+            if _peak - _cum > max_drawdown:
+                max_drawdown = _peak - _cum
+        max_drawdown = round(max_drawdown, 2)
+        roi = round(total_profit / total_bet * 100, 2) if total_bet else 0.0
+        rrr = round(total_profit / max_drawdown, 2) if max_drawdown else 0.0
+        monthly = {}
+        for x in daily:
+            m = x["date"][:7]
+            monthly.setdefault(m, {"month": m, "profit": 0.0, "hits": 0, "periods": 0})
+            monthly[m]["profit"] += x["profit"]
+            monthly[m]["hits"] += 1 if x["hit"] else 0
+            monthly[m]["periods"] += 1
+        monthly = [monthly[m] for m in sorted(monthly)]
+        for m in monthly:
+            m["profit"] = round(m["profit"], 2)
+            m["hit_rate"] = round(m["hits"] / m["periods"] * 100, 1) if m["periods"] else 0.0
+        weekly = {}
+        for x in daily:
+            dt = datetime.strptime(x["date"], "%Y-%m-%d")
+            wk = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            weekly.setdefault(wk, {"week": wk, "profit": 0.0, "hits": 0, "periods": 0})
+            weekly[wk]["profit"] += x["profit"]
+            weekly[wk]["hits"] += 1 if x["hit"] else 0
+            weekly[wk]["periods"] += 1
+        weekly = [weekly[w] for w in sorted(weekly)]
+        for w in weekly:
+            w["profit"] = round(w["profit"], 2)
+            w["hit_rate"] = round(w["hits"] / w["periods"] * 100, 1) if w["periods"] else 0.0
+        return {"total_profit": total_profit, "hits": hits, "periods": periods,
+                "hit_rate": round(hits / periods * 100, 1) if periods else 0.0,
+                "max_chip": max_chip, "cur_chip": cur_chip, "reset_count": reset_count,
+                "total_bet": total_bet, "max_drawdown": max_drawdown,
+                "roi": roi, "rrr": rrr,
+                "monthly": monthly, "weekly": weekly}
+
+    def guide(daily, agg, rand_base):
+        loss_streak = 0
+        for x in reversed(daily):
+            if x["N"] > 0 and x["profit"] < 0:
+                loss_streak += 1
+            elif x["N"] > 0:
+                break
+        recent4 = [m["profit"] for m in agg["monthly"][-4:]]
+        recent_total = round(sum(recent4), 2)
+        cur_chip = agg["cur_chip"]
+        if loss_streak >= 5:
+            advice, level = "回避", "avoid"
+            reason = f"连续亏损 {loss_streak} 天，达朗贝尔筹码已加至 {cur_chip}"
+        elif recent_total > 0:
+            advice, level = "可买入", "buy"
+            reason = f"近4月累计 {recent_total:+.0f}，趋势走强"
+        elif recent_total < 0:
+            advice, level = "观望", "watch"
+            reason = f"近4月累计 {recent_total:+.0f}，趋势走弱"
+        else:
+            advice, level = "观望", "watch"
+            reason = "近4月盈亏平衡，方向不明"
+        return {"advice": advice, "reason": reason, "level": level,
+                "loss_streak": loss_streak, "cur_chip": cur_chip,
+                "recent4_total": recent_total, "rand_base": rand_base}
+
+    g1_daily = run("g1")
+    g2_daily = run("g2")
+    g1_agg = aggregate(g1_daily)
+    g2_agg = aggregate(g2_daily)
+
+    return {
+        "start_date": rows[0]["record_date"] if rows else "",
+        "end_date": rows[-1]["record_date"] if rows else "",
+        "odds": odds, "base": base, "step": step, "cap": chip_cap,
+        "g1": {"name": "5-9尾", "nums": sorted(g1_nums), "N": len(g1_nums),
+               "summary": g1_agg, "daily": g1_daily,
+               "guide": guide(g1_daily, g1_agg, round(25 / 49 * 100, 1))},
+        "g2": {"name": "买同上期尾数", "nums": [], "N": 0,
+               "summary": g2_agg, "daily": g2_daily,
+               "guide": guide(g2_daily, g2_agg, round(5 / 49 * 100, 1))},
+    }
+
+
+@app.get("/api/tailTrack/calc")
+def tail_track_calc(start_date: str = "2025-01-01", user=Header(None, alias="authorization")):
+    """尾数跟踪演算：两种策略达朗贝尔±5，返回逐期列表 + 按月/按周汇总 + 是否购买指南。"""
+    require_user(user)
+    return _compute_tail_track(start_date)
+
+
+# ============================================================
+# 尾数跟踪·智能（连续失败 fail_stop 次停手 → 等待命中再恢复，依次循环）
+# ============================================================
+def _compute_tail_track_smart(start_date="2025-01-01", odds=47, base=5, step=5, chip_cap=70, fail_stop=3):
+    """尾数跟踪·智能：两种策略各自独立，连续失败(未命中)fail_stop次就停手下注，
+    等待命中(赢)后再恢复下注，依次循环。达朗贝尔±5 筹码，封顶 chip_cap，恢复时筹码重置回 base。
+    纯只读，零影响现有功能。"""
+    from datetime import timedelta
+    db = get_db()
+    rows = db.execute(
+        "SELECT record_date, source_number FROM number_knowledge_record "
+        "WHERE status=1 AND record_date >= ? ORDER BY record_date, id",
+        (start_date,)
+    ).fetchall()
+    db.close()
+
+    def tail_nums(t):
+        return [n for n in range(1, 50) if n % 10 == t]
+    tail_map = {t: tail_nums(t) for t in range(10)}
+
+    g1_nums = set()
+    for t in range(5, 10):
+        g1_nums.update(tail_map[t])
+
+    g_small_nums = set()
+    for t in range(5):
+        g_small_nums.update(tail_map[t])
+
+    def run(strategy):
+        chip = base
+        loss_streak = 0
+        paused = False
+        daily = []
+        for i, r in enumerate(rows):
+            d = r["record_date"]
+            open_num = int(r["source_number"])
+            open_tail = open_num % 10
+            if strategy == "g1":
+                nums = g1_nums
+            else:
+                if i == 0:
+                    daily.append({"date": d, "open": open_num, "tail": open_tail, "N": 0,
+                                  "hit": False, "chip": 0, "chip_after": chip,
+                                  "profit": 0.0, "paused": False, "resume": False,
+                                  "state": "betting", "loss_streak": 0})
+                    continue
+                prev_tail = int(rows[i - 1]["source_number"]) % 10
+                # 跟随大小尾：上期小尾(0-4)→买0-4尾(24号)；上期大尾(5-9)→买5-9尾(25号)
+                nums = g_small_nums if prev_tail <= 4 else g1_nums
+            N = len(nums)
+            hit = open_num in nums
+
+            if paused:
+                # 停手观察：不下注，盈亏为 0；命中即"赢"，下一期恢复下注
+                resume = hit
+                daily.append({"date": d, "open": open_num, "tail": open_tail, "N": N,
+                              "hit": hit, "chip": 0, "chip_after": chip,
+                              "profit": 0.0, "paused": True, "resume": resume,
+                              "state": "paused", "loss_streak": loss_streak})
+                if resume:
+                    paused = False
+                    loss_streak = 0
+                    chip = base
+                continue
+
+            # 正常下注
+            chip_before = chip
+            profit = (odds * chip - N * chip) if hit else (-N * chip)
+            if hit:
+                chip = max(base, chip - step)
+                loss_streak = 0
+            else:
+                chip += step
+                loss_streak += 1
+                if chip > chip_cap:
+                    chip = base
+            pause_now = (not hit) and loss_streak >= fail_stop
+            daily.append({"date": d, "open": open_num, "tail": open_tail, "N": N,
+                          "hit": hit, "chip": chip_before, "chip_after": chip,
+                          "profit": round(profit, 2), "paused": False,
+                          "pause_now": pause_now, "resume": False,
+                          "state": "betting", "loss_streak": loss_streak})
+            if pause_now:
+                paused = True
+        return daily
+
+    def aggregate(daily):
+        total_profit = round(sum(x["profit"] for x in daily), 2)
+        bets = [x for x in daily if x["state"] == "betting" and x["N"] > 0]
+        hits = sum(1 for x in bets if x["hit"])
+        periods = len(bets)
+        pause_count = sum(1 for x in daily if x.get("pause_now"))
+        pause_periods = sum(1 for x in daily if x["state"] == "paused")
+        missed_hits = sum(1 for x in daily if x["state"] == "paused" and x["hit"])
+        max_chip = max(x["chip"] for x in bets) if bets else base
+        cur_chip = daily[-1]["chip_after"] if daily else base
+        cur_state = daily[-1]["state"] if daily else "betting"
+        cur_loss_streak = daily[-1]["loss_streak"] if daily else 0
+        total_bet = round(sum(x["chip"] * x["N"] for x in daily), 2)
+        _cum = 0.0
+        _peak = 0.0
+        max_drawdown = 0.0
+        for x in daily:
+            _cum += x["profit"]
+            if _cum > _peak:
+                _peak = _cum
+            if _peak - _cum > max_drawdown:
+                max_drawdown = _peak - _cum
+        max_drawdown = round(max_drawdown, 2)
+        roi = round(total_profit / total_bet * 100, 2) if total_bet else 0.0
+        rrr = round(total_profit / max_drawdown, 2) if max_drawdown else 0.0
+        monthly = {}
+        for x in daily:
+            m = x["date"][:7]
+            monthly.setdefault(m, {"month": m, "profit": 0.0, "hits": 0, "periods": 0})
+            monthly[m]["profit"] += x["profit"]
+            if x["state"] == "betting" and x["N"] > 0:
+                monthly[m]["hits"] += 1 if x["hit"] else 0
+                monthly[m]["periods"] += 1
+        monthly = [monthly[m] for m in sorted(monthly)]
+        for m in monthly:
+            m["profit"] = round(m["profit"], 2)
+            m["hit_rate"] = round(m["hits"] / m["periods"] * 100, 1) if m["periods"] else 0.0
+        weekly = {}
+        for x in daily:
+            dt = datetime.strptime(x["date"], "%Y-%m-%d")
+            wk = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            weekly.setdefault(wk, {"week": wk, "profit": 0.0, "hits": 0, "periods": 0})
+            weekly[wk]["profit"] += x["profit"]
+            if x["state"] == "betting" and x["N"] > 0:
+                weekly[wk]["hits"] += 1 if x["hit"] else 0
+                weekly[wk]["periods"] += 1
+        weekly = [weekly[w] for w in sorted(weekly)]
+        for w in weekly:
+            w["profit"] = round(w["profit"], 2)
+            w["hit_rate"] = round(w["hits"] / w["periods"] * 100, 1) if w["periods"] else 0.0
+        return {"total_profit": total_profit, "hits": hits, "periods": periods,
+                "hit_rate": round(hits / periods * 100, 1) if periods else 0.0,
+                "max_chip": max_chip, "cur_chip": cur_chip,
+                "pause_count": pause_count, "pause_periods": pause_periods,
+                "missed_hits": missed_hits, "cur_state": cur_state,
+                "cur_loss_streak": cur_loss_streak,
+                "total_bet": total_bet, "max_drawdown": max_drawdown,
+                "roi": roi, "rrr": rrr,
+                "monthly": monthly, "weekly": weekly}
+
+    g1_daily = run("g1")
+    g2_daily = run("g2")
+    g1_agg = aggregate(g1_daily)
+    g2_agg = aggregate(g2_daily)
+
+    return {
+        "start_date": rows[0]["record_date"] if rows else "",
+        "end_date": rows[-1]["record_date"] if rows else "",
+        "odds": odds, "base": base, "step": step, "cap": chip_cap, "fail_stop": fail_stop,
+        "g1": {"name": "5-9尾", "nums": sorted(g1_nums), "N": len(g1_nums),
+               "summary": g1_agg, "daily": g1_daily},
+        "g2": {"name": "跟随大小尾", "nums": [], "N": 0,
+               "summary": g2_agg, "daily": g2_daily},
+    }
+
+
+@app.get("/api/tailTrack/smart")
+def tail_track_smart(start_date: str = "2025-01-01", user=Header(None, alias="authorization")):
+    """尾数跟踪·智能演算：两种策略独立，连续失败3次停手、等待命中再恢复，依次循环。"""
+    require_user(user)
+    return _compute_tail_track_smart(start_date)
 
 
 @app.post("/api/strategyOrder/place")
@@ -2141,6 +3603,20 @@ def _algo_track_settle_and_generate():
             if nxt.get("date"):
                 next_rows.append((algo["key"], nxt["date"],
                                   json.dumps(nxt.get("picks", [])), nxt.get("N", 0)))
+        # 观察池维度前向验证：独立 try（失败不影响演算跟踪），仅 N>0 固化，跳过已转正维度
+        # offset 从 sys_config 读（默认0，对齐方案C下单口径）；空仓不计入前向样本
+        try:
+            fwd_offset = _get_config_int('high_track_fwd_offset', 0)
+            core = _get_high_track_core()
+            for wdim in DIM_ASSESS_WATCH:
+                if wdim in core:
+                    continue  # 已转正入核心池，无需再前向验证
+                nxt = _compute_dim_forward_next(wdim, offset=fwd_offset, window=60)
+                if nxt.get("date") and nxt.get("N", 0) > 0:
+                    next_rows.append(("dim_fwd_" + wdim, nxt["date"],
+                                      json.dumps(nxt.get("picks", [])), nxt.get("N", 0)))
+        except Exception as e:
+            print(f"[dim_fwd] 观察池前向固化失败: {e}")
         db = get_db()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for key, bd, picks, N in next_rows:
@@ -2311,7 +3787,7 @@ def record_page(page: int = 1, page_size: int = 20, record_date: str = "", sourc
     sql = "SELECT * FROM number_knowledge_record"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY id DESC"
+    sql += " ORDER BY record_date DESC, id DESC"
     rows = db.execute(sql, params).fetchall()
     total = len(rows)
     total_pages = max(1, (total + page_size - 1) // page_size)

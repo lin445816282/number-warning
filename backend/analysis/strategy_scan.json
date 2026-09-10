@@ -1,380 +1,419 @@
 {
- "generated": "2026-09-06 07:43:36",
+ "generated": "2026-09-07 23:29:15",
  "signal": "接近样本·高位开出后起算：标签遗漏≥历史最高−offset 时开出（高位开完）→ 买入该标签号码 → 从开完后5期内再开结算",
- "periods": 201,
+ "periods": 615,
  "odds": 47,
  "excluded_low_hit_dims": [
-  "生肖",
-  "尾数"
+  "生肖"
  ],
  "hit_rate_floor": 0.55,
  "scheme_rows": [
   {
    "scheme": "全维度19",
    "offset": -2,
-   "profit": 2452.0,
-   "events": 139,
-   "hits": 89,
-   "hit_rate": 0.6403,
-   "per_event": 17.64
+   "profit": 4033.0,
+   "events": 177,
+   "hits": 132,
+   "hit_rate": 0.7458,
+   "per_event": 22.79
   },
   {
    "scheme": "全维度19",
    "offset": -1,
-   "profit": 3870.0,
-   "events": 196,
-   "hits": 141,
-   "hit_rate": 0.7194,
-   "per_event": 19.74
+   "profit": 5421.0,
+   "events": 246,
+   "hits": 187,
+   "hit_rate": 0.7602,
+   "per_event": 22.04
   },
   {
    "scheme": "全维度19",
    "offset": 0,
-   "profit": 6071.0,
-   "events": 304,
-   "hits": 232,
-   "hit_rate": 0.7632,
-   "per_event": 19.97
+   "profit": 8021.0,
+   "events": 371,
+   "hits": 297,
+   "hit_rate": 0.8005,
+   "per_event": 21.62
   },
   {
    "scheme": "全维度19",
    "offset": 1,
-   "profit": 8787.0,
-   "events": 446,
-   "hits": 354,
-   "hit_rate": 0.7937,
-   "per_event": 19.7
+   "profit": 12019.0,
+   "events": 567,
+   "hits": 469,
+   "hit_rate": 0.8272,
+   "per_event": 21.2
   },
   {
    "scheme": "全维度19",
    "offset": 2,
-   "profit": 13176.0,
-   "events": 641,
-   "hits": 537,
-   "hit_rate": 0.8378,
-   "per_event": 20.56
+   "profit": 19807.0,
+   "events": 917,
+   "hits": 798,
+   "hit_rate": 0.8702,
+   "per_event": 21.6
   },
   {
    "scheme": "排除尾数18",
    "offset": -2,
-   "profit": 2328.0,
-   "events": 116,
-   "hits": 84,
-   "hit_rate": 0.7241,
-   "per_event": 20.07
+   "profit": 3370.0,
+   "events": 149,
+   "hits": 115,
+   "hit_rate": 0.7718,
+   "per_event": 22.62
   },
   {
    "scheme": "排除尾数18",
    "offset": -1,
-   "profit": 3751.0,
+   "profit": 4687.0,
+   "events": 213,
+   "hits": 168,
+   "hit_rate": 0.7887,
+   "per_event": 22.0
+  },
+  {
+   "scheme": "排除尾数18",
+   "offset": 0,
+   "profit": 7255.0,
+   "events": 335,
+   "hits": 277,
+   "hit_rate": 0.8269,
+   "per_event": 21.66
+  },
+  {
+   "scheme": "排除尾数18",
+   "offset": 1,
+   "profit": 11173.0,
+   "events": 528,
+   "hits": 447,
+   "hit_rate": 0.8466,
+   "per_event": 21.16
+  },
+  {
+   "scheme": "排除尾数18",
+   "offset": 2,
+   "profit": 18806.0,
+   "events": 871,
+   "hits": 772,
+   "hit_rate": 0.8863,
+   "per_event": 21.59
+  },
+  {
+   "scheme": "排除低命中19",
+   "offset": -2,
+   "profit": 3609.0,
+   "events": 143,
+   "hits": 120,
+   "hit_rate": 0.8392,
+   "per_event": 25.24
+  },
+  {
+   "scheme": "排除低命中19",
+   "offset": -1,
+   "profit": 5010.0,
+   "events": 209,
+   "hits": 175,
+   "hit_rate": 0.8373,
+   "per_event": 23.97
+  },
+  {
+   "scheme": "排除低命中19",
+   "offset": 0,
+   "profit": 7571.0,
+   "events": 332,
+   "hits": 284,
+   "hit_rate": 0.8554,
+   "per_event": 22.8
+  },
+  {
+   "scheme": "排除低命中19",
+   "offset": 1,
+   "profit": 11491.0,
+   "events": 524,
+   "hits": 454,
+   "hit_rate": 0.8664,
+   "per_event": 21.93
+  },
+  {
+   "scheme": "排除低命中19",
+   "offset": 2,
+   "profit": 19291.0,
+   "events": 871,
+   "hits": 783,
+   "hit_rate": 0.899,
+   "per_event": 22.15
+  },
+  {
+   "scheme": "多标签维度",
+   "offset": -2,
+   "profit": 3103.0,
+   "events": 136,
+   "hits": 91,
+   "hit_rate": 0.6691,
+   "per_event": 22.82
+  },
+  {
+   "scheme": "多标签维度",
+   "offset": -1,
+   "profit": 3807.0,
    "events": 172,
-   "hits": 136,
-   "hit_rate": 0.7907,
-   "per_event": 21.81
-  },
-  {
-   "scheme": "排除尾数18",
-   "offset": 0,
-   "profit": 5888.0,
-   "events": 274,
-   "hits": 225,
-   "hit_rate": 0.8212,
-   "per_event": 21.49
-  },
-  {
-   "scheme": "排除尾数18",
-   "offset": 1,
-   "profit": 8566.0,
-   "events": 414,
-   "hits": 346,
-   "hit_rate": 0.8357,
-   "per_event": 20.69
-  },
-  {
-   "scheme": "排除尾数18",
-   "offset": 2,
-   "profit": 12965.0,
-   "events": 607,
-   "hits": 529,
-   "hit_rate": 0.8715,
-   "per_event": 21.36
-  },
-  {
-   "scheme": "排除低命中18",
-   "offset": -2,
-   "profit": 2004.0,
-   "events": 92,
-   "hits": 75,
-   "hit_rate": 0.8152,
-   "per_event": 21.78
-  },
-  {
-   "scheme": "排除低命中18",
-   "offset": -1,
-   "profit": 3345.0,
-   "events": 145,
-   "hits": 125,
-   "hit_rate": 0.8621,
-   "per_event": 23.07
-  },
-  {
-   "scheme": "排除低命中18",
-   "offset": 0,
-   "profit": 5490.0,
-   "events": 245,
-   "hits": 214,
-   "hit_rate": 0.8735,
-   "per_event": 22.41
-  },
-  {
-   "scheme": "排除低命中18",
-   "offset": 1,
-   "profit": 8168.0,
-   "events": 385,
-   "hits": 335,
-   "hit_rate": 0.8701,
-   "per_event": 21.22
-  },
-  {
-   "scheme": "排除低命中18",
-   "offset": 2,
-   "profit": 12579.0,
-   "events": 575,
-   "hits": 518,
-   "hit_rate": 0.9009,
-   "per_event": 21.88
-  },
-  {
-   "scheme": "多标签维度",
-   "offset": -2,
-   "profit": 1706.0,
-   "events": 104,
-   "hits": 55,
-   "hit_rate": 0.5288,
-   "per_event": 16.4
-  },
-  {
-   "scheme": "多标签维度",
-   "offset": -1,
-   "profit": 2530.0,
-   "events": 134,
-   "hits": 80,
-   "hit_rate": 0.597,
-   "per_event": 18.88
+   "hits": 114,
+   "hit_rate": 0.6628,
+   "per_event": 22.13
   },
   {
    "scheme": "多标签维度",
    "offset": 0,
-   "profit": 3340.0,
-   "events": 178,
-   "hits": 108,
-   "hit_rate": 0.6067,
-   "per_event": 18.76
-  },
-  {
-   "scheme": "多标签维度",
-   "offset": 1,
-   "profit": 4201.0,
-   "events": 220,
+   "profit": 4534.0,
+   "events": 208,
    "hits": 138,
-   "hit_rate": 0.6273,
-   "per_event": 19.1
+   "hit_rate": 0.6635,
+   "per_event": 21.8
+  },
+  {
+   "scheme": "多标签维度",
+   "offset": 1,
+   "profit": 5858.0,
+   "events": 271,
+   "hits": 183,
+   "hit_rate": 0.6753,
+   "per_event": 21.62
   },
   {
    "scheme": "多标签维度",
    "offset": 2,
-   "profit": 5480.0,
-   "events": 269,
-   "hits": 178,
-   "hit_rate": 0.6617,
-   "per_event": 20.37
+   "profit": 7939.0,
+   "events": 347,
+   "hits": 247,
+   "hit_rate": 0.7118,
+   "per_event": 22.88
   },
   {
    "scheme": "核心6维",
    "offset": -2,
-   "profit": 993.0,
-   "events": 71,
-   "hits": 32,
-   "hit_rate": 0.4507,
-   "per_event": 13.99
+   "profit": 2100.0,
+   "events": 100,
+   "hits": 61,
+   "hit_rate": 0.61,
+   "per_event": 21.0
   },
   {
    "scheme": "核心6维",
    "offset": -1,
-   "profit": 1450.0,
-   "events": 88,
-   "hits": 46,
-   "hit_rate": 0.5227,
-   "per_event": 16.48
+   "profit": 2523.0,
+   "events": 127,
+   "hits": 76,
+   "hit_rate": 0.5984,
+   "per_event": 19.87
   },
   {
    "scheme": "核心6维",
    "offset": 0,
-   "profit": 2000.0,
-   "events": 118,
-   "hits": 65,
-   "hit_rate": 0.5508,
-   "per_event": 16.95
+   "profit": 3026.0,
+   "events": 150,
+   "hits": 92,
+   "hit_rate": 0.6133,
+   "per_event": 20.17
   },
   {
    "scheme": "核心6维",
    "offset": 1,
-   "profit": 2602.0,
-   "events": 146,
-   "hits": 86,
-   "hit_rate": 0.589,
-   "per_event": 17.82
+   "profit": 3838.0,
+   "events": 188,
+   "hits": 120,
+   "hit_rate": 0.6383,
+   "per_event": 20.41
   },
   {
    "scheme": "核心6维",
    "offset": 2,
-   "profit": 3566.0,
-   "events": 182,
-   "hits": 116,
-   "hit_rate": 0.6374,
-   "per_event": 19.59
+   "profit": 5291.0,
+   "events": 244,
+   "hits": 166,
+   "hit_rate": 0.6803,
+   "per_event": 21.68
   }
  ],
  "dim_rows": [
   {
-   "dim": "大小单双",
-   "dim_key": "size_odd_even",
-   "tags": 4,
-   "events": 18,
-   "hits": 16,
-   "profit": 531.0,
-   "hit_rate": 0.8889,
-   "per_event": 29.5
-  },
-  {
-   "dim": "五行",
-   "dim_key": "five_element",
-   "tags": 5,
-   "events": 24,
-   "hits": 15,
-   "profit": 464.0,
-   "hit_rate": 0.625,
-   "per_event": 19.33
-  },
-  {
-   "dim": "红肖蓝肖绿肖",
-   "dim_key": "zodiac_color_type",
-   "tags": 3,
-   "events": 15,
-   "hits": 15,
-   "profit": 462.0,
-   "hit_rate": 1.0,
-   "per_event": 30.8
-  },
-  {
-   "dim": "大小",
-   "dim_key": "big_small",
-   "tags": 2,
-   "events": 20,
+   "dim": "尾数",
+   "dim_key": "tail_number",
+   "tags": 10,
+   "events": 36,
    "hits": 20,
-   "profit": 452.0,
-   "hit_rate": 1.0,
-   "per_event": 22.6
+   "profit": 766.0,
+   "hit_rate": 0.5556,
+   "per_event": 21.28
   },
   {
    "dim": "头数",
    "dim_key": "head_number",
    "tags": 5,
+   "events": 27,
+   "hits": 21,
+   "profit": 722.0,
+   "hit_rate": 0.7778,
+   "per_event": 26.74
+  },
+  {
+   "dim": "大小单双",
+   "dim_key": "size_odd_even",
+   "tags": 4,
+   "events": 20,
+   "hits": 16,
+   "profit": 506.0,
+   "hit_rate": 0.8,
+   "per_event": 25.3
+  },
+  {
+   "dim": "五行",
+   "dim_key": "five_element",
+   "tags": 5,
    "events": 21,
-   "hits": 13,
-   "profit": 406.0,
-   "hit_rate": 0.619,
-   "per_event": 19.33
-  },
-  {
-   "dim": "白边黑中",
-   "dim_key": "edge_color",
-   "tags": 2,
-   "events": 18,
-   "hits": 18,
-   "profit": 402.0,
-   "hit_rate": 1.0,
-   "per_event": 22.33
-  },
-  {
-   "dim": "生肖",
-   "dim_key": "zodiac",
-   "tags": 12,
-   "events": 29,
-   "hits": 11,
-   "profit": 398.0,
-   "hit_rate": 0.3793,
-   "per_event": 13.72
+   "hits": 15,
+   "profit": 504.0,
+   "hit_rate": 0.7143,
+   "per_event": 24.0
   },
   {
    "dim": "琴棋书画",
    "dim_key": "qqsh_type",
    "tags": 4,
-   "events": 18,
-   "hits": 12,
-   "profit": 345.0,
-   "hit_rate": 0.6667,
-   "per_event": 19.17
-  },
-  {
-   "dim": "号码波色",
-   "dim_key": "wave_color",
-   "tags": 3,
-   "events": 14,
-   "hits": 11,
-   "profit": 287.0,
-   "hit_rate": 0.7857,
-   "per_event": 20.5
-  },
-  {
-   "dim": "合数单双",
-   "dim_key": "he_sum",
-   "tags": 2,
-   "events": 12,
-   "hits": 12,
-   "profit": 269.0,
-   "hit_rate": 1.0,
-   "per_event": 22.42
-  },
-  {
-   "dim": "春夏秋冬",
-   "dim_key": "season_type",
-   "tags": 4,
-   "events": 9,
-   "hits": 8,
-   "profit": 264.0,
-   "hit_rate": 0.8889,
-   "per_event": 29.33
-  },
-  {
-   "dim": "单双",
-   "dim_key": "odd_even",
-   "tags": 2,
-   "events": 11,
-   "hits": 11,
-   "profit": 247.0,
-   "hit_rate": 1.0,
-   "per_event": 22.45
+   "events": 17,
+   "hits": 15,
+   "profit": 498.0,
+   "hit_rate": 0.8824,
+   "per_event": 29.29
   },
   {
    "dim": "吉美凶丑",
    "dim_key": "beauty_type",
    "tags": 2,
-   "events": 11,
-   "hits": 11,
-   "profit": 244.0,
-   "hit_rate": 1.0,
-   "per_event": 22.18
+   "events": 22,
+   "hits": 21,
+   "profit": 451.0,
+   "hit_rate": 0.9545,
+   "per_event": 20.5
   },
   {
-   "dim": "阴阳",
-   "dim_key": "yin_yang",
+   "dim": "生肖",
+   "dim_key": "zodiac",
+   "tags": 12,
+   "events": 39,
+   "hits": 13,
+   "profit": 450.0,
+   "hit_rate": 0.3333,
+   "per_event": 11.54
+  },
+  {
+   "dim": "红肖蓝肖绿肖",
+   "dim_key": "zodiac_color_type",
+   "tags": 3,
+   "events": 16,
+   "hits": 15,
+   "profit": 447.0,
+   "hit_rate": 0.9375,
+   "per_event": 27.94
+  },
+  {
+   "dim": "单笔双笔",
+   "dim_key": "stroke_type",
    "tags": 2,
-   "events": 10,
-   "hits": 10,
-   "profit": 227.0,
+   "events": 20,
+   "hits": 20,
+   "profit": 444.0,
    "hit_rate": 1.0,
-   "per_event": 22.7
+   "per_event": 22.2
+  },
+  {
+   "dim": "春夏秋冬",
+   "dim_key": "season_type",
+   "tags": 4,
+   "events": 20,
+   "hits": 13,
+   "profit": 367.0,
+   "hit_rate": 0.65,
+   "per_event": 18.35
+  },
+  {
+   "dim": "白边黑中",
+   "dim_key": "edge_color",
+   "tags": 2,
+   "events": 16,
+   "hits": 16,
+   "profit": 359.0,
+   "hit_rate": 1.0,
+   "per_event": 22.44
+  },
+  {
+   "dim": "合数单双",
+   "dim_key": "he_sum",
+   "tags": 2,
+   "events": 15,
+   "hits": 15,
+   "profit": 339.0,
+   "hit_rate": 1.0,
+   "per_event": 22.6
+  },
+  {
+   "dim": "天地肖",
+   "dim_key": "sky_earth",
+   "tags": 2,
+   "events": 15,
+   "hits": 15,
+   "profit": 338.0,
+   "hit_rate": 1.0,
+   "per_event": 22.53
+  },
+  {
+   "dim": "男女肖",
+   "dim_key": "gender_zodiac",
+   "tags": 2,
+   "events": 16,
+   "hits": 15,
+   "profit": 322.0,
+   "hit_rate": 0.9375,
+   "per_event": 20.12
+  },
+  {
+   "dim": "单双",
+   "dim_key": "odd_even",
+   "tags": 2,
+   "events": 14,
+   "hits": 14,
+   "profit": 317.0,
+   "hit_rate": 1.0,
+   "per_event": 22.64
+  },
+  {
+   "dim": "大小",
+   "dim_key": "big_small",
+   "tags": 2,
+   "events": 16,
+   "hits": 15,
+   "profit": 311.0,
+   "hit_rate": 0.9375,
+   "per_event": 19.44
+  },
+  {
+   "dim": "号码波色",
+   "dim_key": "wave_color",
+   "tags": 3,
+   "events": 12,
+   "hits": 10,
+   "profit": 274.0,
+   "hit_rate": 0.8333,
+   "per_event": 22.83
+  },
+  {
+   "dim": "家禽野兽",
+   "dim_key": "animal_type",
+   "tags": 2,
+   "events": 14,
+   "hits": 13,
+   "profit": 268.0,
+   "hit_rate": 0.9286,
+   "per_event": 19.14
   },
   {
    "dim": "前后肖",
@@ -382,80 +421,40 @@
    "tags": 2,
    "events": 9,
    "hits": 9,
-   "profit": 202.0,
+   "profit": 201.0,
    "hit_rate": 1.0,
-   "per_event": 22.44
+   "per_event": 22.33
   },
   {
-   "dim": "男女肖",
-   "dim_key": "gender_zodiac",
+   "dim": "阴阳",
+   "dim_key": "yin_yang",
    "tags": 2,
-   "events": 9,
-   "hits": 9,
-   "profit": 198.0,
+   "events": 6,
+   "hits": 6,
+   "profit": 137.0,
    "hit_rate": 1.0,
-   "per_event": 22.0
-  },
-  {
-   "dim": "尾数",
-   "dim_key": "tail_number",
-   "tags": 10,
-   "events": 30,
-   "hits": 7,
-   "profit": 183.0,
-   "hit_rate": 0.2333,
-   "per_event": 6.1
-  },
-  {
-   "dim": "家禽野兽",
-   "dim_key": "animal_type",
-   "tags": 2,
-   "events": 10,
-   "hits": 9,
-   "profit": 177.0,
-   "hit_rate": 0.9,
-   "per_event": 17.7
-  },
-  {
-   "dim": "单笔双笔",
-   "dim_key": "stroke_type",
-   "tags": 2,
-   "events": 7,
-   "hits": 7,
-   "profit": 158.0,
-   "hit_rate": 1.0,
-   "per_event": 22.57
-  },
-  {
-   "dim": "天地肖",
-   "dim_key": "sky_earth",
-   "tags": 2,
-   "events": 9,
-   "hits": 8,
-   "profit": 155.0,
-   "hit_rate": 0.8889,
-   "per_event": 17.22
+   "per_event": 22.83
   }
  ],
  "conclusion": {
   "best_profit": {
    "scheme": "全维度19",
    "offset": 2,
-   "profit": 13176.0,
-   "events": 641,
-   "hits": 537,
-   "hit_rate": 0.8378,
-   "per_event": 20.56
+   "profit": 19807.0,
+   "events": 917,
+   "hits": 798,
+   "hit_rate": 0.8702,
+   "per_event": 21.6
   },
   "best_dim": {
-   "dim": "大小单双",
-   "dim_key": "size_odd_even",
-   "tags": 4,
-   "events": 18,
-   "hits": 16,
-   "profit": 531.0,
-   "hit_rate": 0.8889,
-   "per_event": 29.5
+   "dim": "尾数",
+   "dim_key": "tail_number",
+   "tags": 10,
+   "events": 36,
+   "hits": 20,
+   "profit": 766.0,
+   "hit_rate": 0.5556,
+   "per_event": 21.28
   }
  }
 }
