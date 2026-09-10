@@ -1511,6 +1511,13 @@ table.data tr.warn td{background:var(--warnbg)}
                     {{ m.month.slice(5) }}<br>{{ m.alpha>0?'+':'' }}{{ m.alpha }}%
                   </span>
                 </div>
+                <div v-if="consensus.forward" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
+                  🔴 真实前向：<b>{{ consensus.forward.periods }}</b> 期
+                  <span v-if="consensus.forward.periods > 0">
+                    · 命中 {{ (consensus.forward.hit_rate*100).toFixed(1) }}% · 超额 {{ consensus.forward.alpha>0?'+':'' }}{{ (consensus.forward.alpha*100).toFixed(1) }}%<span v-if="consensus.forward.p_value != null"> · p={{ consensus.forward.p_value }}</span>
+                  </span>
+                  <span v-else style="color:#b8b0a0">（cron 每日固化，明日开奖起自动积累）</span>
+                </div>
               </div>
               <div v-if="consensus.consensus4 && consensus.consensus4.length" style="margin-top:6px;font-size:11px;color:#b8b0a0">
                 ≥4票高共识：<span style="font-family:'Roboto Mono',monospace;color:#3a6ea5">{{ fmtPicks(consensus.consensus4) }}</span>

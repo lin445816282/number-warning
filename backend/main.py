@@ -2569,6 +2569,61 @@ def _generate_dim_forward(offset=0, window=60):
     return {"generated": generated, "date": next_date}
 
 
+def _compute_consensus_next():
+    """共识信号「春夏秋冬+红肖蓝肖绿肖 4变体≥2票」下一期选号（与 consensus API 口径一致）。"""
+    dims = ["season_type", "zodiac_color_type"]
+    variants = [(+2, 90), (+1, 60), (+2, 60), (+1, 90)]
+    votes = {}
+    bet_date = ""
+    for off, w in variants:
+        order = _compute_current_picks(dims, off, w, "union")
+        bet_date = bet_date or order.get("date", "")
+        for n in order.get("picks", []):
+            votes[n] = votes.get(n, 0) + 1
+    picks = sorted(n for n, c in votes.items() if c >= 2)
+    return {"date": bet_date, "picks": picks, "N": len(picks)}
+
+
+def _generate_consensus_forward():
+    """固化共识信号下一期选号到 dim_forward_track（dim_key='consensus'），N>0 才固化。
+
+    结算由 _settle_dim_forward 通用逻辑完成（按 bet_date + picks_json 对开奖号判命中）。"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    nxt = _compute_consensus_next()
+    if nxt.get("date") and nxt.get("N", 0) > 0:
+        db = get_db()
+        db.execute(
+            "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, is_live, create_time) VALUES (?,?,?,?,NULL,NULL,1,?)",
+            ("consensus", nxt["date"], json.dumps(nxt["picks"]), nxt["N"], now))
+        db.commit()
+        db.close()
+        return {"generated": 1, "date": nxt["date"], "N": nxt["N"]}
+    return {"generated": 0, "date": nxt.get("date", ""), "N": nxt.get("N", 0)}
+
+
+def _consensus_forward_stats():
+    """共识信号真实前向表现：从 dim_forward_track 聚合 dim_key='consensus' 的已结算记录。"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT N, hit FROM dim_forward_track WHERE dim_key='consensus' AND hit IS NOT NULL").fetchall()
+    db.close()
+    periods = len(rows)
+    hits = sum(1 for r in rows if r["hit"] == 1)
+    sum_n = sum(r["N"] or 0 for r in rows)
+    avg_n = round(sum_n / periods, 2) if periods else 0.0
+    hit_rate = round(hits / periods, 4) if periods else None
+    rand_base = round(avg_n / 49, 4) if avg_n else None
+    alpha = round(hit_rate - rand_base, 4) if (hit_rate is not None and rand_base is not None) else None
+    p = None
+    if periods >= 10 and rand_base:
+        p = round(_dim_forward_binomial_sf(hits, periods, rand_base), 6)
+    return {
+        "periods": periods, "hits": hits, "avg_n": avg_n,
+        "hit_rate": hit_rate, "rand_base": rand_base,
+        "alpha": alpha, "p_value": p,
+    }
+
+
 def _compute_dim_forward_report():
     """前向验证报告：全 19 维度前向命中率 + 超额 + 二项检验 p 值 + FDR 校正 + 结论。"""
     db = get_db()
@@ -3569,6 +3624,7 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
             votes[n] = votes.get(n, 0) + 1
     consensus = {k: sorted(n for n, c in votes.items() if c >= k) for k in (2, 3, 4)}
     health = _consensus_health()
+    forward = _consensus_forward_stats()
     return {
         "dims": dims,
         "date": bet_date,
@@ -3579,6 +3635,7 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
         "consensus4": consensus[4],
         "consensus2_count": len(consensus[2]),
         "health": health,
+        "forward": forward,
         "note": "≥2票共识：命中率50%(样本外102期) 超额+12.5% 最大连空8期",
     }
 

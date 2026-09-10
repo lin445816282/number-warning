@@ -30,9 +30,12 @@ def main():
     # 3. 自主跟踪方案前向：结算后回填指标 + 固化下一期选号
     upd = M._update_scheme_forward_stats()
     sgen = M._generate_scheme_forward()
+    # 4. 共识信号前向：固化下一期选号（结算已由上面 _settle_dim_forward 统一处理）
+    cgen = M._generate_consensus_forward()
     print(f"[{now}] matched={matched} settled={settled} "
           f"generated={gen['generated']} date={gen['date']} "
-          f"scheme_updated={upd} scheme_generated={sgen['generated']}")
+          f"scheme_updated={upd} scheme_generated={sgen['generated']} "
+          f"consensus_generated={cgen['generated']} consensus_N={cgen.get('N', 0)}")
 
 
 if __name__ == "__main__":
