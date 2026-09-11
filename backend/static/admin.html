@@ -1588,6 +1588,12 @@ table.data tr.warn td{background:var(--warnbg)}
                       <td style="font-size:11px" :style="p.fwd_periods>0 && p.fwd_hits/p.fwd_periods>=(p.bt_avg_n||1)/49?'color:var(--ok)':'color:var(--ink2)'" :title="p.fwd_periods>0 ? '真实开奖已结算 '+p.fwd_periods+' 期' : '真实样本外待开奖（cron 每日固化）'">{{ p.fwd_periods>0 ? p.fwd_hits+'/'+p.fwd_periods+'期' : '跟踪中' }}</td>
                       <td><button v-if="p.N>0" class="btn btn-sm" @click="copySchemePicks(p)" style="padding:2px 8px;font-size:11px">📋 复制</button></td>
                     </tr>
+                    <tr v-if="!filteredPicks.length && picksList.length">
+                      <td colspan="6" style="text-align:center;padding:18px;color:#b8b0a0;font-size:12px;line-height:1.9">
+                        ⚠️ 当前 <b style="color:var(--ink)">{{ picksList.length }}</b> 个跟踪方案均空仓 —— 春夏秋冬各标签遗漏均未达历史高位（「憋高位」信号未触发），是择时策略的正常状态，无需下单。<br>
+                        <span style="color:var(--ink2)">点右上「只看有号」可切换查看全部方案明细。</span>
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
