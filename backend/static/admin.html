@@ -1504,6 +1504,7 @@ table.data tr.warn td{background:var(--warnbg)}
                   </span>
                   <span style="font-size:12px;color:var(--ink)">连空 <b>{{ consensus.health.current_streak }}</b> 期（历史最大 {{ consensus.health.max_streak }}）</span>
                   <span style="font-size:12px;color:var(--ink)">仓位建议：<b :style="consensus.health.position_advice==='等额'?'color:#2e7d32':(consensus.health.position_advice==='半仓'?'color:#f57f17':'color:#c62828')">{{ consensus.health.position_advice }}</b></span>
+                  <span v-if="consensus.health.rolling_alpha != null" style="font-size:12px;color:var(--ink)">近20期超额：<b :style="consensus.health.rolling_alpha>0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_alpha>0?'+':'' }}{{ (consensus.health.rolling_alpha*100).toFixed(1) }}%</b></span>
                 </div>
                 <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:6px;align-items:flex-end">
                   <span style="font-size:10px;color:var(--ink2);margin-right:3px">近6月超额：</span>

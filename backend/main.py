@@ -3604,6 +3604,16 @@ def _consensus_health():
     else:
         status = "健康"
 
+    # 滚动 20 期超额（早期失效预警，比月度更及时；power 分析证明统计定论需3年，须靠软判断）
+    W = 20
+    recent_daily = daily[-W:]
+    rolling_alpha = None
+    rolling_periods = len(recent_daily)
+    if rolling_periods >= 10:
+        rh = sum(1 for _, _, h in recent_daily if h)
+        rn = sum(N for _, N, _ in recent_daily) / rolling_periods
+        rolling_alpha = round(rh / rolling_periods - rn / 49, 4)
+
     capital_req = max_dd + max_N
     capital = {
         "total_invest": round(total_invest, 1),
@@ -3620,6 +3630,8 @@ def _consensus_health():
         "recent_monthly": recent,
         "neg_month_streak": neg_streak,
         "health_status": status,
+        "rolling_alpha": rolling_alpha,
+        "rolling_periods": rolling_periods,
         "capital": capital,
     }
 
