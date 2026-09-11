@@ -2999,10 +2999,9 @@ def _scan_schemes(windows=None, odds=SCHEME_ODDS):
                 stable_list.append({"name": _scheme_name(dims, off), "dims": dims,
                                     "offset": off, "window": w, "pick_rule": pr, **bt})
             elif p < 0.1 and alpha > 0 and avg_n < 20:
-                status = "forwarding"
-                conclusion = f"弱信号(未校正p={p}<0.1)，前向观察"
-                stable_list.append({"name": _scheme_name(dims, off), "dims": dims,
-                                    "offset": off, "window": w, "pick_rule": pr, **bt})
+                # 未校正 p<0.1 但 FDR 校正后不显著：多重比较下的假阳性，不转前向（诚实原则）
+                status = "backtested"
+                conclusion = f"未校正p={p}<0.1但FDR校正后不显著，多重比较假阳性，淘汰"
             else:
                 status = "backtested"
                 conclusion = f"4段稳健但未显著或均号过大(p={p})，观察"

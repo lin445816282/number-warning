@@ -1487,15 +1487,16 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
             </div>
             <!-- 🎯 共识强信号（4变体 ≥2票） -->
-            <div class="card" v-if="consensus.consensus2 && consensus.consensus2.length" style="border:2px solid #3a6ea5;background:linear-gradient(135deg,#eef4fb,#ffffff)">
+            <div class="card" v-if="consensus && consensus.health" style="border:2px solid #3a6ea5;background:linear-gradient(135deg,#eef4fb,#ffffff)">
               <div class="card-title">🎯 共识强信号 · 红肖蓝肖绿肖+春夏秋冬（4变体 ≥2票）
-                <button class="btn btn-sm" @click="copyConsensus()" style="float:right;padding:3px 10px;font-size:12px">📋 复制</button>
+                <button class="btn btn-sm" @click="copyConsensus()" :disabled="!consensus.consensus2.length" style="float:right;padding:3px 10px;font-size:12px">📋 复制</button>
               </div>
-              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+              <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap" v-if="consensus.consensus2 && consensus.consensus2.length">
                 <span style="font-family:'Roboto Mono',monospace;font-size:24px;font-weight:800;color:#3a6ea5;letter-spacing:2px">{{ fmtPicks(consensus.consensus2) }}</span>
                 <span style="font-size:12px;color:var(--ink2)">买 {{ consensus.consensus2_count }} 号</span>
                 <span style="font-size:11px;color:var(--ok);font-weight:700">样本外命中 50% · 超额 +12.5%</span>
               </div>
+              <div v-else style="padding:6px 0;font-size:13px;color:#b8b0a0">⚠️ 今日信号未触发（各标签遗漏均未「憋到高位」），空仓不下注</div>
               <!-- 🩺 信号健康度（连空降半仓闭环） -->
               <div v-if="consensus.health" style="margin-top:8px;padding:8px 10px;border-radius:4px" :style="consensus.health.health_status==='健康'?'background:#e8f5e9':(consensus.health.health_status==='警惕'?'background:#fff8e1':'background:#ffebee')">
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
