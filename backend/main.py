@@ -2752,7 +2752,7 @@ def _scheme_key(dims, signal_rule, offset, window=60):
     return hashlib.md5(raw.encode()).hexdigest()[:16]
 
 
-def _scheme_name(dims, offset, signal_rule="high_gap"):
+def _scheme_name(dims, offset, signal_rule="high_gap", window=60):
     if len(dims) == 1:
         base = DIM_NAMES.get(dims[0], dims[0])
     elif len(dims) >= 18:
@@ -2763,7 +2763,11 @@ def _scheme_name(dims, offset, signal_rule="high_gap"):
         base = "+".join(DIM_NAMES.get(d, d) for d in dims[:4])
         if len(dims) > 4:
             base += f"等{len(dims)}维"
-    return f"{base}·高位触发(off{offset:+d})"
+    name = f"{base}·高位触发(off{offset:+d})"
+    # window != 60 时标注，避免 window=60/90/120 同 offset 方案名字重复（60 为默认主力窗口）
+    if window and window != 60:
+        name += f"·w{window}"
+    return name
 
 
 def _load_backtest_data():
@@ -2912,7 +2916,7 @@ def _register_scheme(dims, offset, signal_rule="high_gap", window=60, source="au
         db.close()
         return {"key": key, "exists": True, "skipped": True}
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    name = _scheme_name(dims, offset)
+    name = _scheme_name(dims, offset, signal_rule, window)
     bt = bt or {}
     db.execute(
         "INSERT INTO strategy_scheme_record (scheme_key, scheme_name, dims_json, signal_rule, offset, window, "
@@ -3005,7 +3009,7 @@ def _scan_schemes(windows=None, odds=SCHEME_ODDS):
             elif sig and alpha > 0 and avg_n < 20:
                 status = "forwarding"
                 conclusion = f"FDR显著(p={p})，转前向跟踪候选"
-                stable_list.append({"name": _scheme_name(dims, off), "dims": dims,
+                stable_list.append({"name": _scheme_name(dims, off, window=w), "dims": dims,
                                     "offset": off, "window": w, "pick_rule": pr, **bt})
             elif p < 0.1 and alpha > 0 and avg_n < 20:
                 # 未校正 p<0.1 但 FDR 校正后不显著：多重比较下的假阳性，不转前向（诚实原则）
