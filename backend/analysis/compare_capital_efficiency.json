@@ -1,0 +1,89 @@
+{
+  "schemes": [
+    {
+      "name": "共识信号(4变体≥2票)",
+      "triggered": 362,
+      "hit_rate": 42.8,
+      "avg_N": 18.7,
+      "total_invest": 6769.0,
+      "total_profit": 516.0,
+      "bet_roi": 7.62,
+      "max_drawdown": 497.0,
+      "capital_required": 542.0,
+      "capital_roi": 95.2,
+      "profit_dd_ratio": 1.04
+    },
+    {
+      "name": "春夏秋冬单维",
+      "triggered": 228,
+      "hit_rate": 33.3,
+      "avg_N": 14.3,
+      "total_invest": 3251.0,
+      "total_profit": 321.0,
+      "bet_roi": 9.87,
+      "max_drawdown": 477.0,
+      "capital_required": 514.0,
+      "capital_roi": 62.45,
+      "profit_dd_ratio": 0.67
+    },
+    {
+      "name": "头数单维",
+      "triggered": 115,
+      "hit_rate": 30.4,
+      "avg_N": 10.9,
+      "total_invest": 1256.0,
+      "total_profit": 389.0,
+      "bet_roi": 30.97,
+      "max_drawdown": 150.0,
+      "capital_required": 179.0,
+      "capital_roi": 217.32,
+      "profit_dd_ratio": 2.59
+    },
+    {
+      "name": "生肖+头数",
+      "triggered": 77,
+      "hit_rate": 10.4,
+      "avg_N": 1.7,
+      "total_invest": 133.0,
+      "total_profit": 243.0,
+      "bet_roi": 182.71,
+      "max_drawdown": 25.0,
+      "capital_required": 32.0,
+      "capital_roi": 759.38,
+      "profit_dd_ratio": 9.72
+    },
+    {
+      "name": "核心6维",
+      "triggered": 460,
+      "hit_rate": 16.1,
+      "avg_N": 6.9,
+      "total_invest": 3186.0,
+      "total_profit": 292.0,
+      "bet_roi": 9.17,
+      "max_drawdown": 356.0,
+      "capital_required": 391.0,
+      "capital_roi": 74.68,
+      "profit_dd_ratio": 0.82
+    },
+    {
+      "name": "五行+号码波色+红肖蓝肖绿肖",
+      "triggered": 419,
+      "hit_rate": 42.2,
+      "avg_N": 18.7,
+      "total_invest": 7829.0,
+      "total_profit": 490.0,
+      "bet_roi": 6.26,
+      "max_drawdown": 371.0,
+      "capital_required": 420.0,
+      "capital_roi": 116.67,
+      "profit_dd_ratio": 1.32
+    }
+  ],
+  "best": {
+    "capital_roi": 759.38,
+    "profit_dd_ratio": 9.72,
+    "min_drawdown": 25.0,
+    "min_capital": 32.0,
+    "bet_roi": 182.71
+  }
+}
