@@ -2585,40 +2585,49 @@ def _compute_consensus_next():
 
 
 def _generate_consensus_forward():
-    """固化共识信号下一期选号到 dim_forward_track（dim_key='consensus'），N>0 才固化。
+    """固化共识信号下一期选号到 dim_forward_track（dim_key='consensus'）。
 
-    结算由 _settle_dim_forward 通用逻辑完成（按 bet_date + picks_json 对开奖号判命中）。"""
+    无论触发(N>0)还是空仓(N=0)都固化：空仓期也是有效决策，记录后让真实前向
+    periods 反映「策略真实运行期数」而非「仅触发期数」。结算由 _settle_dim_forward 统一处理。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     nxt = _compute_consensus_next()
-    if nxt.get("date") and nxt.get("N", 0) > 0:
+    if nxt.get("date"):
         db = get_db()
         db.execute(
             "INSERT OR IGNORE INTO dim_forward_track (dim_key, bet_date, picks_json, N, open_number, hit, is_live, create_time) VALUES (?,?,?,?,NULL,NULL,1,?)",
-            ("consensus", nxt["date"], json.dumps(nxt["picks"]), nxt["N"], now))
+            ("consensus", nxt["date"], json.dumps(nxt.get("picks", [])), nxt.get("N", 0), now))
         db.commit()
         db.close()
-        return {"generated": 1, "date": nxt["date"], "N": nxt["N"]}
+        return {"generated": 1, "date": nxt["date"], "N": nxt.get("N", 0),
+                "empty": nxt.get("N", 0) == 0}
     return {"generated": 0, "date": nxt.get("date", ""), "N": nxt.get("N", 0)}
 
 
 def _consensus_forward_stats():
-    """共识信号真实前向表现：从 dim_forward_track 聚合 dim_key='consensus' 的已结算记录。"""
+    """共识信号真实前向表现：从 dim_forward_track 聚合 dim_key='consensus' 的已结算记录。
+
+    区分「总运行期(含空仓)」与「触发期(N>0)」：命中率/超额/二项检验只在触发期算，
+    空仓期不计入（空仓是择时决策，不参与选号质量评估）。"""
     db = get_db()
     rows = db.execute(
         "SELECT N, hit FROM dim_forward_track WHERE dim_key='consensus' AND hit IS NOT NULL").fetchall()
     db.close()
-    periods = len(rows)
-    hits = sum(1 for r in rows if r["hit"] == 1)
-    sum_n = sum(r["N"] or 0 for r in rows)
-    avg_n = round(sum_n / periods, 2) if periods else 0.0
-    hit_rate = round(hits / periods, 4) if periods else None
+    periods = len(rows)  # 总运行期（含空仓）
+    triggered = [r for r in rows if (r["N"] or 0) > 0]  # 触发期
+    n_triggered = len(triggered)
+    empty = periods - n_triggered
+    hits = sum(1 for r in triggered if r["hit"] == 1)
+    sum_n = sum(r["N"] or 0 for r in triggered)
+    avg_n = round(sum_n / n_triggered, 2) if n_triggered else 0.0
+    hit_rate = round(hits / n_triggered, 4) if n_triggered else None
     rand_base = round(avg_n / 49, 4) if avg_n else None
     alpha = round(hit_rate - rand_base, 4) if (hit_rate is not None and rand_base is not None) else None
     p = None
-    if periods >= 10 and rand_base:
-        p = round(_dim_forward_binomial_sf(hits, periods, rand_base), 6)
+    if n_triggered >= 10 and rand_base:
+        p = round(_dim_forward_binomial_sf(hits, n_triggered, rand_base), 6)
     return {
-        "periods": periods, "hits": hits, "avg_n": avg_n,
+        "periods": periods, "triggered": n_triggered, "empty": empty,
+        "hits": hits, "avg_n": avg_n,
         "hit_rate": hit_rate, "rand_base": rand_base,
         "alpha": alpha, "p_value": p,
     }
@@ -3087,12 +3096,19 @@ def strategy_scheme_scan(body: dict, user=Header(None, alias="authorization")):
     return {"ok": True, **res}
 
 
-def _compute_current_picks(dims, offset=0, window=60, pick_rule="union"):
-    """基于当前全部数据算下一期选号（支持 union/ge2 选号规则）。与 _backtest_scheme 口径一致。"""
+def _compute_current_picks(dims, offset=0, window=60, pick_rule="union", end_date=None):
+    """基于当前全部数据算下一期选号（支持 union/ge2 选号规则）。与 _backtest_scheme 口径一致。
+
+    end_date：可选，指定数据截止日期（含），用于历史回填 walk-forward 重放，不传则用全量数据。"""
     db = get_db()
     cycle_maps = _load_cycle_maps(db)
-    rows = db.execute(
-        "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
+    if end_date:
+        rows = db.execute(
+            "SELECT * FROM number_knowledge_record WHERE status=1 AND record_date <= ? ORDER BY record_date, id",
+            (end_date,)).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT * FROM number_knowledge_record WHERE status=1 ORDER BY record_date, id").fetchall()
     db.close()
     if not rows:
         return {"date": "", "picks": [], "N": 0}
