@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "periods": 362,
+    "n_sim": 20000,
+    "seed": 20260911,
+    "block": 10,
+    "odds": 47,
+    "date_range": [
+      "2025-01-03",
+      "2026-09-07"
+    ],
+    "years": 1.68
+  },
+  "observed": {
+    "total_profit": 516.0,
+    "hit_rate": 0.4282,
+    "avg_n": 18.7,
+    "rand_base": 0.3816,
+    "alpha": 0.0466,
+    "max_drawdown": 497.0
+  },
+  "luck_test": {
+    "p_random_at_least_this_profit": 0.0306,
+    "interpretation": "P(纯随机策略净收益 ≥ 观察值)。<0.05 说明超额显著非运气；>0.1 说明可能是运气",
+    "h0_profit_ci": [
+      -1082.0,
+      -283.0,
+      516.0
+    ],
+    "h0_p_loss": 0.766
+  },
+  "profit_distribution": {
+    "ci_95": [
+      -296.0,
+      515.0,
+      1340.0
+    ],
+    "median": 515.0,
+    "p_loss": 0.1071,
+    "p_loss_interpretation": "P(该策略净收益 < 0)，即亏损概率"
+  },
+  "alpha_distribution": {
+    "ci_95": [
+      -0.0012,
+      0.0465,
+      0.0949
+    ],
+    "p_alpha_le0": 0.028
+  },
+  "drawdown_distribution": {
+    "median": 334.0,
+    "p90": 549.0,
+    "p95": 636.0,
+    "p99": 799.0
+  },
+  "elapsed_sec": 8.0
+}

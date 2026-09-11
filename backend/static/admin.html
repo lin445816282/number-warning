@@ -1518,6 +1518,13 @@ table.data tr.warn td{background:var(--warnbg)}
                   · 本金收益率 <b :style="consensus.health.capital.capital_roi>0?'color:var(--ok);font-weight:800':'color:var(--warn)'">+{{ consensus.health.capital.capital_roi }}%</b>
                   · 最大回撤 {{ consensus.health.capital.max_drawdown }} 元 · 下注收益率 +{{ consensus.health.capital.bet_roi }}%
                 </div>
+                <div v-if="consensus.monte_carlo" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
+                  🎲 概率化风险（2万次蒙特卡洛）：
+                  运气概率 <b style="color:var(--ok)">{{ (consensus.monte_carlo.luck_test.p_random_at_least_this_profit*100).toFixed(1) }}%</b>
+                  · 亏损概率 <b style="color:var(--warn)">{{ (consensus.monte_carlo.profit_distribution.p_loss*100).toFixed(1) }}%</b>
+                  · P95回撤 <b style="color:var(--warn)">{{ consensus.monte_carlo.drawdown_distribution.p95 }} 元</b>
+                  <div style="color:#b8b0a0;margin-top:2px">净收益95%CI {{ consensus.monte_carlo.profit_distribution.ci_95[0] }} ~ +{{ consensus.monte_carlo.profit_distribution.ci_95[2] }} 元 · 建议本金按P95回撤 ≥{{ consensus.monte_carlo.drawdown_distribution.p95 }}元（旧口径542元偏乐观）</div>
+                </div>
                 <div v-if="consensus.forward" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
                   🔴 真实前向：<b>{{ consensus.forward.periods }}</b> 期
                   <span v-if="consensus.forward.periods > 0">

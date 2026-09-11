@@ -3655,6 +3655,16 @@ def _consensus_health():
     }
 
 
+def _load_monte_carlo():
+    """读蒙特卡洛 bootstrap 预计算结果（analysis/consensus_monte_carlo.json），无则返回 None。"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analysis", "consensus_monte_carlo.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 @app.get("/api/strategyScheme/consensus")
 def strategy_scheme_consensus(user=Header(None, alias="authorization")):
     """样本外强信号「红肖蓝肖绿肖+春夏秋冬」4 变体共识选号。
@@ -3677,6 +3687,7 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
     consensus = {k: sorted(n for n, c in votes.items() if c >= k) for k in (2, 3, 4)}
     health = _consensus_health()
     forward = _consensus_forward_stats()
+    monte_carlo = _load_monte_carlo()
     return {
         "dims": dims,
         "date": bet_date,
@@ -3688,6 +3699,7 @@ def strategy_scheme_consensus(user=Header(None, alias="authorization")):
         "consensus2_count": len(consensus[2]),
         "health": health,
         "forward": forward,
+        "monte_carlo": monte_carlo,
         "note": "≥2票共识：命中率50%(样本外102期) 超额+12.5% 最大连空8期",
     }
 
