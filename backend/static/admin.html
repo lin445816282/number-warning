@@ -1511,6 +1511,11 @@ table.data tr.warn td{background:var(--warnbg)}
                     {{ m.month.slice(5) }}<br>{{ m.alpha>0?'+':'' }}{{ m.alpha }}%
                   </span>
                 </div>
+                <div v-if="consensus.health && consensus.health.capital" style="margin-top:6px;font-size:11px;color:var(--ink2)">
+                  💰 资金真相（全历史回测）：本金需求 <b style="color:var(--warn)">{{ consensus.health.capital.capital_required }}</b> 元
+                  · 本金收益率 <b :style="consensus.health.capital.capital_roi>0?'color:var(--ok);font-weight:800':'color:var(--warn)'">+{{ consensus.health.capital.capital_roi }}%</b>
+                  · 最大回撤 {{ consensus.health.capital.max_drawdown }} 元 · 下注收益率 +{{ consensus.health.capital.bet_roi }}%
+                </div>
                 <div v-if="consensus.forward" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
                   🔴 真实前向：<b>{{ consensus.forward.periods }}</b> 期
                   <span v-if="consensus.forward.periods > 0">

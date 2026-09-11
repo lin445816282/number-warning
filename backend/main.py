@@ -3532,6 +3532,9 @@ def _consensus_health():
 
     var_picks = {v: run_walkforward(*v) for v in variants}
     daily = []
+    # 资金指标累计（等额每号1元，赔率47）
+    cum_profit = 0.0; peak = 0.0; max_dd = 0.0
+    max_N = 0; total_invest = 0.0; total_profit = 0.0
     for i in range(len(rows)):
         date = rows[i]["record_date"]
         open_num = int(rows[i]["source_number"])
@@ -3543,7 +3546,15 @@ def _consensus_health():
         if not picks:
             continue
         hit = 1 if open_num in picks else 0
-        daily.append((date, len(picks), hit))
+        N = len(picks)
+        daily.append((date, N, hit))
+        profit = (SCHEME_ODDS - N) if hit else -N
+        cum_profit += profit
+        total_invest += N
+        total_profit += profit
+        max_N = max(max_N, N)
+        peak = max(peak, cum_profit)
+        max_dd = max(max_dd, peak - cum_profit)
 
     # 当前连空（末尾连续未命中）
     cur_streak = 0
@@ -3593,6 +3604,15 @@ def _consensus_health():
     else:
         status = "健康"
 
+    capital_req = max_dd + max_N
+    capital = {
+        "total_invest": round(total_invest, 1),
+        "total_profit": round(total_profit, 1),
+        "bet_roi": round(total_profit / total_invest * 100, 2) if total_invest else 0.0,
+        "max_drawdown": round(max_dd, 1),
+        "capital_required": round(capital_req, 1),
+        "capital_roi": round(total_profit / capital_req * 100, 2) if capital_req else 0.0,
+    }
     return {
         "current_streak": cur_streak,
         "max_streak": max_streak,
@@ -3600,6 +3620,7 @@ def _consensus_health():
         "recent_monthly": recent,
         "neg_month_streak": neg_streak,
         "health_status": status,
+        "capital": capital,
     }
 
 

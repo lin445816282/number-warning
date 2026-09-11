@@ -1,0 +1,17 @@
+{
+  "signal": "共识信号 4变体≥2票",
+  "data_range": "2025-01-01~2026-09-10",
+  "years": 1.69,
+  "triggered": 362,
+  "hits": 155,
+  "hit_rate": 0.4282,
+  "avg_N": 18.7,
+  "max_N": 45,
+  "total_invest": 6769.0,
+  "total_profit": 516.0,
+  "bet_roi": 0.0762,
+  "max_drawdown": 497.0,
+  "capital_required": 542.0,
+  "capital_roi": 0.952,
+  "annual_capital_roi": 0.5636
+}
