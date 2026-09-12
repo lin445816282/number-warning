@@ -1367,8 +1367,8 @@ table.data tr.warn td{background:var(--warnbg)}
             <div class="card">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
                 <div>
-                  <div class="card-title">🐉 肖跟踪 · 生肖遗漏 ≥ {{ zodiacTrack.threshold }} 期（6肖全跟踪）</div>
-                  <div style="font-size:12px;color:var(--ink2)">锁定遗漏≥{{ zodiacTrack.threshold }}期的最冷{{ zodiacTrack.max_track }}个生肖并行跟踪，每肖{{ zodiacTrack.K }}期，命中赚47倍−累计投入，满{{ zodiacTrack.K }}期止损。本金 {{ zodiacTrack.account?.initial_capital || 3000 }} 元。</div>
+                  <div class="card-title">🐉 肖跟踪 · 6肖同时遗漏 ≥ {{ zodiacTrack.threshold }} 期（源头跟踪）</div>
+                  <div style="font-size:12px;color:var(--ink2)">跟踪源头：当 <b>≥{{ zodiacTrack.max_track }} 个生肖同时遗漏 ≥{{ zodiacTrack.threshold }} 期</b> 时触发，锁定最冷{{ zodiacTrack.max_track }}肖并行跟踪，每肖{{ zodiacTrack.K }}期，命中赚47倍−累计投入，满{{ zodiacTrack.K }}期止损。本金 {{ zodiacTrack.account?.initial_capital || 3000 }} 元。</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                   <button class="btn btn-sm" @click="loadZodiacTrack()">🔄 刷新</button>
@@ -1409,7 +1409,7 @@ table.data tr.warn td{background:var(--warnbg)}
                   </div>
                 </div>
                 <div v-else style="text-align:center;background:#f1f5f9;border-radius:10px;padding:8px 14px">
-                  <div style="font-size:11px;color:var(--ink2)">🟢 空仓（待冷肖触发建仓）</div>
+                  <div style="font-size:11px;color:var(--ink2)">🟢 空仓（待 6肖同时≥{{ zodiacTrack.threshold }}期 触发）</div>
                 </div>
               </div>
             </div>
@@ -1461,9 +1461,30 @@ table.data tr.warn td{background:var(--warnbg)}
               <div v-if="!zodiacTrack.cold.length" style="text-align:center;color:var(--ink2);padding:20px">当前无冷肖（所有生肖遗漏均 &lt; {{ zodiacTrack.threshold }} 期）</div>
             </div>
 
+            <!-- 源头事件列表 -->
+            <div class="card" v-if="zodiacTrack.sources && zodiacTrack.sources.length">
+              <div class="card-title">📅 源头事件跟踪（6肖同时≥{{ zodiacTrack.threshold }}期，共 {{ zodiacTrack.source_count }} 次）</div>
+              <div class="table-scroll" style="max-height:400px">
+                <table class="data">
+                  <thead><tr><th>触发日期</th><th>结束日期</th><th>状态</th><th>6肖（遗漏）</th><th>命中</th><th>止损</th><th>盈亏</th></tr></thead>
+                  <tbody>
+                    <tr v-for="s in zodiacTrack.sources" :key="s.id" :style="s.status==='active' ? 'background:#dbeafe' : ''">
+                      <td style="font-family:Roboto Mono,monospace">{{ s.source_date }}</td>
+                      <td style="font-family:Roboto Mono,monospace;color:var(--ink2)">{{ s.end_date || '—' }}</td>
+                      <td :style="s.status==='active' ? 'color:#1e40af;font-weight:700' : 'color:var(--ink2)'">{{ s.status==='active' ? '🔴 跟踪中' : '✅ 已结束' }}</td>
+                      <td style="white-space:normal;line-height:1.7"><span v-for="z in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px">{{ z.zodiac }}{{ z.gap }}</span></td>
+                      <td :style="s.hit_count>0?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ s.hit_count }}</td>
+                      <td :style="s.stop_count>0?'color:#dc2626;font-weight:700':'color:var(--ink2)'">{{ s.stop_count }}</td>
+                      <td :style="s.total_pnl>=0?'color:var(--ok);font-weight:700':'color:#dc2626;font-weight:700'">{{ s.total_pnl>0?'+':'' }}{{ s.total_pnl }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- 回测指标 -->
             <div class="card" v-if="zodiacTrack.backtest">
-              <div class="card-title">📊 回测 · 6肖全跟踪（阈值{{ zodiacTrack.backtest.threshold }}期 / 跟踪{{ zodiacTrack.backtest.K }}期 / 最多{{ zodiacTrack.backtest.max_track }}肖 / 1元/号）</div>
+              <div class="card-title">📊 回测 · 6肖同时≥阈值触发（阈值{{ zodiacTrack.backtest.threshold }}期 / 跟踪{{ zodiacTrack.backtest.K }}期 / 最多{{ zodiacTrack.backtest.max_track }}肖 / 1元/号）</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
                 <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.rounds }}</div><div class="tracking-stat-label">总轮数</div></div>
                 <div class="tracking-stat"><div class="tracking-stat-value" :style="zodiacTrack.backtest.hit_rate>=50?'color:var(--ok)':'color:var(--warn)'">{{ zodiacTrack.backtest.hit_rate }}%</div><div class="tracking-stat-label">命中率（{{ zodiacTrack.backtest.hits }}中）</div></div>
@@ -2661,7 +2682,7 @@ createApp({
       } catch (e) {}
     }
     // ====== 肖跟踪（生肖遗漏≥12期，6肖全跟踪）======
-    const zodiacTrack = ref({ threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0 });
+    const zodiacTrack = ref({ threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 });
     const zodiacOrders = ref([]);
     const zodiacDepositAmount = ref(null);
     async function loadZodiacTrack() {
@@ -2669,7 +2690,7 @@ createApp({
         zodiacTrack.value = await api('GET', '/api/zodiacTrack/overview');
         const od = await api('GET', '/api/zodiacTrack/orders?limit=200');
         zodiacOrders.value = od.orders || [];
-      } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0 }; }
+      } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 }; }
     }
     async function zodiacSettle() {
       try {

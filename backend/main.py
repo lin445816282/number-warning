@@ -281,6 +281,7 @@ CREATE TABLE IF NOT EXISTS zodiac_track_order (
 CREATE INDEX IF NOT EXISTS idx_zodiac_order_date ON zodiac_track_order(bet_date);
 CREATE TABLE IF NOT EXISTS zodiac_track_position (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id INTEGER DEFAULT 0,      -- 关联源头事件(zodiac_track_source.id)
   zodiac TEXT,                      -- 跟踪生肖
   enter_date TEXT DEFAULT '',       -- 进场日期
   held INTEGER DEFAULT 0,           -- 已跟踪期数
@@ -291,6 +292,18 @@ CREATE TABLE IF NOT EXISTS zodiac_track_position (
   create_time TEXT, update_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_zodiac_pos_status ON zodiac_track_position(status);
+CREATE TABLE IF NOT EXISTS zodiac_track_source (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_date TEXT DEFAULT '',      -- 触发日期（≥6肖同时遗漏≥12）
+  end_date TEXT DEFAULT '',         -- 结束日期（6肖全部关闭）
+  zodiacs_json TEXT DEFAULT '',     -- 6肖信息 [{zodiac,gap,nums}]
+  status TEXT DEFAULT 'active',     -- active/closed
+  hit_count INTEGER DEFAULT 0,      -- 命中肖数
+  stop_count INTEGER DEFAULT 0,     -- 止损肖数
+  total_pnl REAL DEFAULT 0,         -- 该事件总盈亏（元）
+  create_time TEXT, update_time TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_zodiac_source_status ON zodiac_track_source(status);
 """
 
 # 默认生肖映射（丙午马年 2026-02-17）
@@ -412,6 +425,10 @@ def init_db():
     sscols = [r[1] for r in db.execute("PRAGMA table_info(strategy_scheme_record)").fetchall()]
     if sscols and "seg_evs_json" not in sscols:
         db.execute("ALTER TABLE strategy_scheme_record ADD COLUMN seg_evs_json TEXT")
+    # 迁移：zodiac_track_position 补 source_id 列（关联源头事件）
+    zpos_cols = [r[1] for r in db.execute("PRAGMA table_info(zodiac_track_position)").fetchall()]
+    if zpos_cols and "source_id" not in zpos_cols:
+        db.execute("ALTER TABLE zodiac_track_position ADD COLUMN source_id INTEGER DEFAULT 0")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 角色
@@ -4677,13 +4694,14 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
         if not z_open:
             continue
         seq = i + 1
-        # 空仓期扫描建仓（全部清仓后才重扫，持仓期间不换仓不补仓）
+        # 空仓期扫描建仓（必须≥max_track个肖同时遗漏≥theta才触发，锁定最冷max_track个）
         if not positions:
             gap = {z: seq - last_seen[z] for z in DEFAULT_ZODIAC}
             cold = [z for z in DEFAULT_ZODIAC if gap[z] >= theta]
             cold.sort(key=lambda z: -gap[z])
-            for z in cold[:max_track]:
-                positions[z] = {"held": 0, "invest": 0.0}
+            if len(cold) >= max_track:
+                for z in cold[:max_track]:
+                    positions[z] = {"held": 0, "invest": 0.0}
         # 推进所有持仓（每期每持仓下注 N*1 元）
         for z in list(positions.keys()):
             pos = positions[z]
@@ -4741,9 +4759,19 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
     acc = db.execute("SELECT * FROM zodiac_track_account ORDER BY id LIMIT 1").fetchone()
     positions = db.execute(
         "SELECT * FROM zodiac_track_position WHERE status='holding' ORDER BY id").fetchall()
+    source_rows = db.execute(
+        "SELECT * FROM zodiac_track_source ORDER BY source_date DESC LIMIT 50").fetchall()
     db.close()
     account = dict(acc) if acc else None
     holding = [dict(p) for p in positions]
+    sources = []
+    for s in source_rows:
+        sd = dict(s)
+        try:
+            sd["zodiacs"] = json.loads(s["zodiacs_json"]) if s["zodiacs_json"] else []
+        except Exception:
+            sd["zodiacs"] = []
+        sources.append(sd)
     holding_set = {p["zodiac"] for p in holding}
     for c in cold:
         c["tracking"] = c["zodiac"] in holding_set
@@ -4786,6 +4814,7 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
         "backtest": bt,
         "account": account,
         "holding": holding, "holding_count": len(holding),
+        "sources": sources, "source_count": len(sources),
         "guide": guide,
     }
 
@@ -4798,6 +4827,7 @@ def zodiac_track_init(capital: float = 3000, per: float = 4, user=Header(None, a
     db.execute("DELETE FROM zodiac_track_account")
     db.execute("DELETE FROM zodiac_track_order")
     db.execute("DELETE FROM zodiac_track_position")
+    db.execute("DELETE FROM zodiac_track_source")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
         "INSERT INTO zodiac_track_account (capital, initial_capital, per, warn_threshold, status, tracking_zodiac, held, enter_date, last_settle_date, create_time, update_time) VALUES (?,?,?,500,'running','',0,'','',?,?)",
@@ -4858,16 +4888,21 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
             continue
         seq = i + 1
         d = r["record_date"]
-        # 空仓期扫描建仓（全部清仓后才重扫，锁定遗漏≥阈值的冷肖 Top6）
+        # 空仓期扫描建仓（必须≥6肖同时遗漏≥阈值才触发，记录源头事件）
         if not positions:
             gap = {z: seq - last_seen[z] for z in DEFAULT_ZODIAC}
             cold = [z for z in DEFAULT_ZODIAC if gap[z] >= ZODIAC_TRACK_THRESHOLD]
             cold.sort(key=lambda z: -gap[z])
-            for z in cold[:ZODIAC_MAX_TRACK]:
-                cur = db.execute(
-                    "INSERT INTO zodiac_track_position (zodiac, enter_date, held, status, total_invest, create_time, update_time) VALUES (?,?,0,'holding',0,?,?)",
-                    (z, d, now, now)).lastrowid
-                positions[z] = {"id": cur, "held": 0, "invest": 0.0, "enter_date": d}
+            if len(cold) >= ZODIAC_MAX_TRACK:
+                source_zodiacs = [{"zodiac": z, "gap": gap[z], "nums": DEFAULT_ZODIAC.get(z, [])} for z in cold[:ZODIAC_MAX_TRACK]]
+                source_id = db.execute(
+                    "INSERT INTO zodiac_track_source (source_date, zodiacs_json, status, create_time, update_time) VALUES (?,?,?,?,?)",
+                    (d, json.dumps(source_zodiacs, ensure_ascii=False), 'active', now, now)).lastrowid
+                for z in cold[:ZODIAC_MAX_TRACK]:
+                    cur = db.execute(
+                        "INSERT INTO zodiac_track_position (source_id, zodiac, enter_date, held, status, total_invest, create_time, update_time) VALUES (?,?,?,0,'holding',0,?,?)",
+                        (source_id, z, d, now, now)).lastrowid
+                    positions[z] = {"id": cur, "held": 0, "invest": 0.0, "enter_date": d, "source_id": source_id}
         # 推进所有持仓（每期每持仓下注 N*per 元）
         for z in list(positions.keys()):
             pos = positions[z]
@@ -4910,6 +4945,26 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
                     (held_now, round(pos["invest"], 2), now, pos["id"]))
             new_orders += 1
         last_seen[z_open] = seq
+
+    # 清理已结束的源头事件（active 且所有持仓都关闭）
+    for s in db.execute("SELECT * FROM zodiac_track_source WHERE status='active'").fetchall():
+        sid = s["id"]
+        open_cnt = db.execute(
+            "SELECT COUNT(*) FROM zodiac_track_position WHERE source_id=? AND status='holding'", (sid,)).fetchone()[0]
+        if open_cnt == 0:
+            hit = db.execute(
+                "SELECT COUNT(*) FROM zodiac_track_position WHERE source_id=? AND close_reason='hit'", (sid,)).fetchone()[0]
+            stop = db.execute(
+                "SELECT COUNT(*) FROM zodiac_track_position WHERE source_id=? AND close_reason='stop'", (sid,)).fetchone()[0]
+            hit_pnl = db.execute(
+                "SELECT COALESCE(SUM(47*? - total_invest),0) FROM zodiac_track_position WHERE source_id=? AND close_reason='hit'", (per, sid)).fetchone()[0]
+            stop_pnl = db.execute(
+                "SELECT COALESCE(SUM(-total_invest),0) FROM zodiac_track_position WHERE source_id=? AND close_reason='stop'", (sid,)).fetchone()[0]
+            end_dt = db.execute(
+                "SELECT MAX(close_date) FROM zodiac_track_position WHERE source_id=?", (sid,)).fetchone()[0] or last_date
+            db.execute(
+                "UPDATE zodiac_track_source SET status='closed', end_date=?, hit_count=?, stop_count=?, total_pnl=?, update_time=? WHERE id=?",
+                (end_dt, hit, stop, round(hit_pnl + stop_pnl, 2), now, sid))
 
     # 更新账户
     if capital <= 0:
