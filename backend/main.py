@@ -4676,14 +4676,14 @@ def _zodiac_cold_list(cur, hist_max, nums, threshold=ZODIAC_TRACK_THRESHOLD):
 
 
 def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=ZODIAC_MAX_TRACK):
-    """6肖全跟踪回测（1元/号口径）：空仓时锁定遗漏≥theta的最冷max_track个冷肖并行跟踪K期。"""
+    """6肖全冷事件回测（1元/号口径）：开始=≥6肖同时遗漏≥theta，结束=任意1个冷肖开出。"""
     db = get_db()
     cycle_maps, rows = _zodiac_track_load(db)
     db.close()
     last_seen = {z: -1 for z in DEFAULT_ZODIAC}
     nums = {z: len(DEFAULT_ZODIAC[z]) for z in DEFAULT_ZODIAC}
     positions = {}  # zodiac -> {"held": int, "invest": float}
-    rounds = []
+    rounds = []     # 每事件一条
     equity = 0.0
     peak = 0.0
     maxdd = 0.0
@@ -4702,31 +4702,41 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
             if len(cold) >= max_track:
                 for z in cold[:max_track]:
                     positions[z] = {"held": 0, "invest": 0.0}
-        # 推进所有持仓（每期每持仓下注 N*1 元）
-        for z in list(positions.keys()):
-            pos = positions[z]
-            pos["held"] += 1
-            N = nums[z]
-            cost = N * 1.0
-            pos["invest"] += cost
-            equity -= cost
-            if z_open == z:
-                payout = 47 * 1.0
-                equity += payout
-                pnl = payout - pos["invest"]
-                rounds.append({"zodiac": z, "N": N, "held": pos["held"],
-                               "result": "hit", "pnl": round(pnl, 2), "date": r["record_date"]})
+        # 推进：任意1个冷肖开出 → 整个事件结算
+        if z_open in positions:
+            hit_z = z_open
+            event_pnl = 0.0
+            hit_held = None
+            for z in list(positions.keys()):
+                pos = positions[z]
+                pos["held"] += 1
+                N = nums[z]
+                cost = N * 1.0
+                pos["invest"] += cost
+                equity -= cost
+                if z == hit_z:
+                    payout = 47 * 1.0
+                    equity += payout
+                    event_pnl += payout - pos["invest"]
+                    hit_held = pos["held"]
+                else:
+                    event_pnl += -pos["invest"]
                 del positions[z]
-            elif pos["held"] >= K:
-                pnl = -pos["invest"]
-                rounds.append({"zodiac": z, "N": N, "held": pos["held"],
-                               "result": "stop", "pnl": round(pnl, 2), "date": r["record_date"]})
-                del positions[z]
+            rounds.append({"zodiac": hit_z, "held": hit_held, "result": "hit",
+                           "pnl": round(event_pnl, 2), "date": r["record_date"]})
+        else:
+            for z in positions:
+                pos = positions[z]
+                pos["held"] += 1
+                N = nums[z]
+                cost = N * 1.0
+                pos["invest"] += cost
+                equity -= cost
         peak = max(peak, equity)
         maxdd = min(maxdd, equity - peak)
         last_seen[z_open] = seq
 
-    hits = sum(1 for x in rounds if x["result"] == "hit")
+    hits = len(rounds)  # 每事件必然命中1个冷肖
     total = sum(x["pnl"] for x in rounds)
     pnls = [x["pnl"] for x in rounds]
     max_streak = cur_streak = 0
@@ -4735,12 +4745,14 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
             cur_streak += 1; max_streak = max(max_streak, cur_streak)
         else:
             cur_streak = 0
+    helds = [x["held"] for x in rounds if x["held"]]
     return {
         "threshold": theta, "K": K, "max_track": max_track,
         "rounds": len(rounds), "hits": hits,
         "hit_rate": round(hits / len(rounds) * 100, 2) if rounds else 0,
         "total_pnl": round(total, 2),
         "avg_pnl": round(total / len(rounds), 2) if rounds else 0,
+        "avg_held": round(sum(helds) / len(helds), 1) if helds else 0,
         "max_loss_streak": max_streak, "max_drawdown": round(maxdd, 2),
         "detail": rounds,
     }
@@ -4786,6 +4798,14 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
                 z["unfreeze"] = -1                 # 跟踪中（未开）
             else:
                 z["unfreeze"] = None               # 止损（12期内未开）
+        # 首个开的肖 + 持续期数（任意1个开即结束，hit恒1个）
+        hit_pos = [p for p in pmap.values() if p["close_reason"] == "hit"]
+        sd["first_open"] = hit_pos[0]["zodiac"] if hit_pos else None
+        sd["dur"] = hit_pos[0]["held"] if hit_pos else None
+        # active 事件：已跟踪期数（还未开）
+        if sd["status"] == "active":
+            holding_pos = [p for p in pmap.values() if p["status"] == "holding"]
+            sd["cur_dur"] = holding_pos[0]["held"] if holding_pos else 0
         sd["zodiacs"] = zodiacs
         sources.append(sd)
     holding_set = {p["zodiac"] for p in holding}
@@ -4919,47 +4939,51 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
                         "INSERT INTO zodiac_track_position (source_id, zodiac, enter_date, held, status, total_invest, create_time, update_time) VALUES (?,?,?,0,'holding',0,?,?)",
                         (source_id, z, d, now, now)).lastrowid
                     positions[z] = {"id": cur, "held": 0, "invest": 0.0, "enter_date": d, "source_id": source_id}
-        # 推进所有持仓（每期每持仓下注 N*per 元）
-        for z in list(positions.keys()):
-            pos = positions[z]
-            pos["held"] += 1
-            N = nums[z]
-            cost = N * per
-            pos["invest"] += cost
-            capital -= cost
-            held_now = pos["held"]
-            result = "hold"
-            pnl = None
-            if z_open == z:
-                payout = 47 * per
-                capital += payout
-                pnl = payout - pos["invest"]
-                result = "hit"
+        # 推进：每期买6肖全部号；任意1个冷肖开出 → 整个事件结算结束
+        if z_open in positions:
+            # 本期开出冷肖 → 整个事件结束（命中1个 + 其余5个平仓）
+            hit_z = z_open
+            for z in list(positions.keys()):
+                pos = positions[z]
+                pos["held"] += 1
+                N = nums[z]
+                cost = N * per
+                pos["invest"] += cost
+                capital -= cost
+                held_now = pos["held"]
+                if z == hit_z:
+                    payout = 47 * per
+                    capital += payout
+                    pnl = payout - pos["invest"]
+                    result = "hit"
+                else:
+                    pnl = -pos["invest"]
+                    result = "stop"
                 db.execute(
                     "INSERT INTO zodiac_track_order (bet_date, zodiac, nums_json, N, held, result, open_zodiac, pnl, capital_after, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (d, z, json.dumps(DEFAULT_ZODIAC.get(z, [])), N, held_now, result, z_open, round(pnl, 2), round(capital, 2), now))
                 db.execute(
-                    "UPDATE zodiac_track_position SET held=?, status='closed', close_date=?, close_reason='hit', total_invest=?, update_time=? WHERE id=?",
-                    (held_now, d, round(pos["invest"], 2), now, pos["id"]))
+                    "UPDATE zodiac_track_position SET held=?, status='closed', close_date=?, close_reason=?, total_invest=?, update_time=? WHERE id=?",
+                    (held_now, d, result, round(pos["invest"], 2), now, pos["id"]))
+                new_orders += 1
                 del positions[z]
-            elif pos["held"] >= ZODIAC_TRACK_K:
-                pnl = -pos["invest"]
-                result = "stop"
+        else:
+            # 本期无冷肖开出 → 继续持有
+            for z in positions:
+                pos = positions[z]
+                pos["held"] += 1
+                N = nums[z]
+                cost = N * per
+                pos["invest"] += cost
+                capital -= cost
+                held_now = pos["held"]
                 db.execute(
                     "INSERT INTO zodiac_track_order (bet_date, zodiac, nums_json, N, held, result, open_zodiac, pnl, capital_after, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (d, z, json.dumps(DEFAULT_ZODIAC.get(z, [])), N, held_now, result, z_open, round(pnl, 2), round(capital, 2), now))
-                db.execute(
-                    "UPDATE zodiac_track_position SET held=?, status='closed', close_date=?, close_reason='stop', total_invest=?, update_time=? WHERE id=?",
-                    (held_now, d, round(pos["invest"], 2), now, pos["id"]))
-                del positions[z]
-            else:
-                db.execute(
-                    "INSERT INTO zodiac_track_order (bet_date, zodiac, nums_json, N, held, result, open_zodiac, pnl, capital_after, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (d, z, json.dumps(DEFAULT_ZODIAC.get(z, [])), N, held_now, result, z_open, None, round(capital, 2), now))
+                    (d, z, json.dumps(DEFAULT_ZODIAC.get(z, [])), N, held_now, "hold", z_open, None, round(capital, 2), now))
                 db.execute(
                     "UPDATE zodiac_track_position SET held=?, total_invest=?, update_time=? WHERE id=?",
                     (held_now, round(pos["invest"], 2), now, pos["id"]))
-            new_orders += 1
+                new_orders += 1
         last_seen[z_open] = seq
 
     # 清理已结束的源头事件（active 且所有持仓都关闭）

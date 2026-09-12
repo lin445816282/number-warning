@@ -1463,37 +1463,37 @@ table.data tr.warn td{background:var(--warnbg)}
 
             <!-- 源头事件列表 -->
             <div class="card" v-if="zodiacTrack.sources && zodiacTrack.sources.length">
-              <div class="card-title">📅 源头事件跟踪（6肖同时≥{{ zodiacTrack.threshold }}期，共 {{ zodiacTrack.source_count }} 次）</div>
+              <div class="card-title">📅 源头事件跟踪（开始=6肖同时≥{{ zodiacTrack.threshold }}期，结束=任意1个开，共 {{ zodiacTrack.source_count }} 次）</div>
               <div class="table-scroll" style="max-height:400px">
                 <table class="data">
-                  <thead><tr><th>触发日期</th><th>结束日期</th><th>状态</th><th>6肖（遗漏）</th><th>命中</th><th>止损</th><th>盈亏</th></tr></thead>
+                  <thead><tr><th>触发日期</th><th>结束日期</th><th>几期开</th><th>首个开</th><th>6肖（遗漏）</th><th>盈亏</th></tr></thead>
                   <tbody>
                     <tr v-for="s in zodiacTrack.sources" :key="s.id" :style="s.status==='active' ? 'background:#dbeafe' : ''">
                       <td style="font-family:Roboto Mono,monospace">{{ s.source_date }}</td>
                       <td style="font-family:Roboto Mono,monospace;color:var(--ink2)">{{ s.end_date || '—' }}</td>
-                      <td :style="s.status==='active' ? 'color:#1e40af;font-weight:700' : 'color:var(--ink2)'">{{ s.status==='active' ? '🔴 跟踪中' : '✅ 已结束' }}</td>
-                      <td style="white-space:normal;line-height:1.8"><span v-for="z in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px;margin:2px 2px" :style="z.unfreeze>0 ? 'background:#f0fdf4;color:#166534;border:1px solid #86efac' : z.unfreeze===-1 ? 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd' : 'color:#9ca3af;border:1px solid #e5e7eb;background:#fafafa'">{{ z.zodiac }}{{ z.gap }}<template v-if="z.unfreeze>0">·{{ z.unfreeze }}期开</template><template v-else-if="z.unfreeze===-1">·跟踪中</template><template v-else>·未开</template></span></td>
-                      <td :style="s.hit_count>0?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ s.hit_count }}</td>
-                      <td :style="s.stop_count>0?'color:#dc2626;font-weight:700':'color:var(--ink2)'">{{ s.stop_count }}</td>
+                      <td style="font-weight:700" :style="s.status==='active' ? 'color:#1e40af' : 'color:var(--ink)'">{{ s.status==='active' ? '已'+(s.cur_dur||0)+'期未开' : s.dur + '期' }}</td>
+                      <td><b v-if="s.first_open" style="color:#166534">{{ s.first_open }}</b><span v-else style="color:var(--ink2)">—</span></td>
+                      <td style="white-space:normal;line-height:1.8"><span v-for="z in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px;margin:2px 2px" :style="z.unfreeze>0 ? 'background:#f0fdf4;color:#166534;border:1px solid #86efac' : z.unfreeze===-1 ? 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd' : 'color:#9ca3af;border:1px solid #e5e7eb;background:#fafafa'">{{ z.zodiac }}{{ z.gap }}</span></td>
                       <td :style="s.total_pnl>=0?'color:var(--ok);font-weight:700':'color:#dc2626;font-weight:700'">{{ s.total_pnl>0?'+':'' }}{{ s.total_pnl }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:8px">💡 绿=首个开出的冷肖，灰=其余未开即平仓。事件持续越短（1期）越赚，持续≥3期则亏（6肖全买成本高）。</div>
             </div>
 
             <!-- 回测指标 -->
             <div class="card" v-if="zodiacTrack.backtest">
-              <div class="card-title">📊 回测 · 6肖同时≥阈值触发（阈值{{ zodiacTrack.backtest.threshold }}期 / 跟踪{{ zodiacTrack.backtest.K }}期 / 最多{{ zodiacTrack.backtest.max_track }}肖 / 1元/号）</div>
+              <div class="card-title">📊 回测 · 6肖全冷事件（开始=6肖同时≥{{ zodiacTrack.backtest.threshold }}期，结束=任意1个开 / 1元/号）</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
-                <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.rounds }}</div><div class="tracking-stat-label">总轮数</div></div>
-                <div class="tracking-stat"><div class="tracking-stat-value" :style="zodiacTrack.backtest.hit_rate>=50?'color:var(--ok)':'color:var(--warn)'">{{ zodiacTrack.backtest.hit_rate }}%</div><div class="tracking-stat-label">命中率（{{ zodiacTrack.backtest.hits }}中）</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.rounds }}</div><div class="tracking-stat-label">事件数</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ok)">{{ zodiacTrack.backtest.avg_held }}期</div><div class="tracking-stat-label">平均持续</div></div>
                 <div class="tracking-stat"><div class="tracking-stat-value" :style="zodiacTrack.backtest.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ zodiacTrack.backtest.total_pnl>=0?'+':'' }}{{ zodiacTrack.backtest.total_pnl }}</div><div class="tracking-stat-label">总盈亏（1元/号）</div></div>
-                <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.avg_pnl }}</div><div class="tracking-stat-label">每轮平均</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.avg_pnl }}</div><div class="tracking-stat-label">每事件平均</div></div>
                 <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--warn)">{{ zodiacTrack.backtest.max_loss_streak }}</div><div class="tracking-stat-label">最长连亏</div></div>
                 <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--warn)">{{ zodiacTrack.backtest.max_drawdown }}</div><div class="tracking-stat-label">最大回撤（1元/号）</div></div>
               </div>
-              <div style="font-size:12px;color:var(--ink2);margin-top:8px">⚠️ 命中率 {{ zodiacTrack.backtest.hit_rate }}% 略高于随机基线（单肖12期≈64%），属<b>弱正期望</b>信号，勿重仓。此为<b>回测口径（样本内）</b>，前向会衰减；真实下单以账户盈亏为准。</div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:8px">⚠️ 每次事件必然开出1个冷肖（命中率100%），但6肖全买成本高：仅持续1期赚钱，持续≥3期亏钱，总盈亏<b>{{ zodiacTrack.backtest.total_pnl>=0?'微正':'为负' }}</b>。此为<b>回测口径（样本内）</b>，前向会衰减；真实下单以账户盈亏为准。</div>
             </div>
 
             <!-- 订单明细 -->
