@@ -1367,8 +1367,8 @@ table.data tr.warn td{background:var(--warnbg)}
             <div class="card">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
                 <div>
-                  <div class="card-title">🐉 肖跟踪 · 6肖同时遗漏 ≥ {{ zodiacTrack.threshold }} 期（源头跟踪）</div>
-                  <div style="font-size:12px;color:var(--ink2)">跟踪源头：当 <b>≥{{ zodiacTrack.max_track }} 个生肖同时遗漏 ≥{{ zodiacTrack.threshold }} 期</b> 时触发，锁定最冷{{ zodiacTrack.max_track }}肖并行跟踪，每肖{{ zodiacTrack.K }}期，命中赚47倍−累计投入，满{{ zodiacTrack.K }}期止损。本金 {{ zodiacTrack.account?.initial_capital || 3000 }} 元。</div>
+                  <div class="card-title">🐉 肖跟踪 · 6肖同时遗漏 ≥ {{ zodiacTrack.threshold }} 期 → 买最冷{{ zodiacTrack.bet_n }}肖</div>
+                  <div style="font-size:12px;color:var(--ink2)">跟踪源头：当 <b>≥{{ zodiacTrack.max_track }} 个生肖同时遗漏 ≥{{ zodiacTrack.threshold }} 期</b> 时触发，<b>下单只买遗漏最久的{{ zodiacTrack.bet_n }}个冷肖</b>，任意1个开出即结算（命中1个+其余平仓），满{{ zodiacTrack.K }}期止损。本金 {{ zodiacTrack.account?.initial_capital || 3000 }} 元。</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                   <button class="btn btn-sm" @click="loadZodiacTrack()">🔄 刷新</button>
@@ -1473,18 +1473,18 @@ table.data tr.warn td{background:var(--warnbg)}
                       <td style="font-family:Roboto Mono,monospace;color:var(--ink2)">{{ s.end_date || '—' }}</td>
                       <td style="font-weight:700" :style="s.status==='active' ? 'color:#1e40af' : 'color:var(--ink)'">{{ s.status==='active' ? '已'+(s.cur_dur||0)+'期未开' : s.dur + '期' }}</td>
                       <td><b v-if="s.first_open" style="color:#166534">{{ s.first_open }}</b><span v-else style="color:var(--ink2)">—</span></td>
-                      <td style="white-space:normal;line-height:1.8"><span v-for="z in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px;margin:2px 2px" :style="z.unfreeze>0 ? 'background:#f0fdf4;color:#166534;border:1px solid #86efac' : z.unfreeze===-1 ? 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd' : 'color:#9ca3af;border:1px solid #e5e7eb;background:#fafafa'">{{ z.zodiac }}{{ z.gap }}</span></td>
+                      <td style="white-space:normal;line-height:1.8"><span v-for="(z, zi) in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px;margin:2px 2px" :style="z.unfreeze>0 ? 'background:#f0fdf4;color:#166534;border:1px solid #86efac' : zi < zodiacTrack.bet_n ? 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd' : 'color:#9ca3af;border:1px solid #e5e7eb;background:#fafafa'">{{ z.zodiac }}{{ z.gap }}<template v-if="zi < zodiacTrack.bet_n">·买</template></span></td>
                       <td :style="s.total_pnl>=0?'color:var(--ok);font-weight:700':'color:#dc2626;font-weight:700'">{{ s.total_pnl>0?'+':'' }}{{ s.total_pnl }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <div style="font-size:12px;color:var(--ink2);margin-top:8px">💡 绿=首个开出的冷肖，灰=其余未开即平仓。事件持续越短（1期）越赚，持续≥3期则亏（6肖全买成本高）。</div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:8px">💡 蓝·买=下单买入的最冷{{ zodiacTrack.bet_n }}肖，绿=首个开出的肖，灰=未买。任意1个开即结算，满{{ zodiacTrack.K }}期止损。</div>
             </div>
 
             <!-- 回测指标 -->
             <div class="card" v-if="zodiacTrack.backtest">
-              <div class="card-title">📊 回测 · 6肖全冷事件（开始=6肖同时≥{{ zodiacTrack.backtest.threshold }}期，结束=任意1个开 / 1元/号）</div>
+              <div class="card-title">📊 回测 · 买最冷{{ zodiacTrack.backtest.bet_n }}肖（开始=6肖同时≥{{ zodiacTrack.backtest.threshold }}期，任意1个开即结算 / 1元/号）</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
                 <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.rounds }}</div><div class="tracking-stat-label">事件数</div></div>
                 <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ok)">{{ zodiacTrack.backtest.avg_held }}期</div><div class="tracking-stat-label">平均持续</div></div>
@@ -1493,7 +1493,7 @@ table.data tr.warn td{background:var(--warnbg)}
                 <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--warn)">{{ zodiacTrack.backtest.max_loss_streak }}</div><div class="tracking-stat-label">最长连亏</div></div>
                 <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--warn)">{{ zodiacTrack.backtest.max_drawdown }}</div><div class="tracking-stat-label">最大回撤（1元/号）</div></div>
               </div>
-              <div style="font-size:12px;color:var(--ink2);margin-top:8px">⚠️ 每次事件必然开出1个冷肖（命中率100%），但6肖全买成本高：仅持续1期赚钱，持续≥3期亏钱，总盈亏<b>{{ zodiacTrack.backtest.total_pnl>=0?'微正':'为负' }}</b>。此为<b>回测口径（样本内）</b>，前向会衰减；真实下单以账户盈亏为准。</div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:8px">⚠️ 下单只买遗漏最久的{{ zodiacTrack.backtest.bet_n }}个冷肖（约12号），命中率{{ zodiacTrack.backtest.hit_rate }}%但样本仅{{ zodiacTrack.backtest.rounds }}次，总盈亏<b>{{ zodiacTrack.backtest.total_pnl>=0?'微正':'为负' }}</b>。此为<b>回测口径（样本内）</b>，前向会衰减；真实下单以账户盈亏为准。</div>
             </div>
 
             <!-- 订单明细 -->
@@ -2682,7 +2682,7 @@ createApp({
       } catch (e) {}
     }
     // ====== 肖跟踪（生肖遗漏≥12期，6肖全跟踪）======
-    const zodiacTrack = ref({ threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 });
+    const zodiacTrack = ref({ threshold: 12, K: 12, max_track: 6, bet_n: 3, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 });
     const zodiacOrders = ref([]);
     const zodiacDepositAmount = ref(null);
     async function loadZodiacTrack() {
@@ -2690,7 +2690,7 @@ createApp({
         zodiacTrack.value = await api('GET', '/api/zodiacTrack/overview');
         const od = await api('GET', '/api/zodiacTrack/orders?limit=200');
         zodiacOrders.value = od.orders || [];
-      } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 }; }
+      } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, bet_n: 3, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 }; }
     }
     async function zodiacSettle() {
       try {

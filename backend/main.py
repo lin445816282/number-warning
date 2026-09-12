@@ -4627,8 +4627,9 @@ def front_dim_rank(limit: int = 30, token: str = ""):
 # N = 该生肖覆盖号码数（马5个含49，其余4个）。本金 3000，每号 per 元。
 
 ZODIAC_TRACK_THRESHOLD = 12   # 冷肖信号：遗漏≥12期
-ZODIAC_TRACK_K = 12           # 跟踪期数
-ZODIAC_MAX_TRACK = 6          # 最多同时跟踪的冷肖数量（6肖全跟踪）
+ZODIAC_TRACK_K = 12           # 跟踪期数（满K期止损）
+ZODIAC_MAX_TRACK = 6          # 源头事件触发条件：≥6肖同时遗漏≥阈值
+ZODIAC_BET_N = 3              # 下单策略：只买遗漏最久的N个冷肖（回测最优=3）
 
 
 def _zodiac_track_load(db):
@@ -4675,8 +4676,8 @@ def _zodiac_cold_list(cur, hist_max, nums, threshold=ZODIAC_TRACK_THRESHOLD):
     return cold
 
 
-def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=ZODIAC_MAX_TRACK):
-    """6肖全冷事件回测（1元/号口径）：开始=≥6肖同时遗漏≥theta，结束=任意1个冷肖开出。"""
+def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=ZODIAC_MAX_TRACK, bet_n=ZODIAC_BET_N):
+    """6肖全冷事件回测（1元/号口径）：开始=≥max_track肖同时遗漏≥theta，下单买最冷bet_n个肖，任意1个开或满K期结束。"""
     db = get_db()
     cycle_maps, rows = _zodiac_track_load(db)
     db.close()
@@ -4694,13 +4695,13 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
         if not z_open:
             continue
         seq = i + 1
-        # 空仓期扫描建仓（必须≥max_track个肖同时遗漏≥theta才触发，锁定最冷max_track个）
+        # 空仓期扫描建仓（必须≥max_track个肖同时遗漏≥theta才触发，下单锁定最冷bet_n个）
         if not positions:
             gap = {z: seq - last_seen[z] for z in DEFAULT_ZODIAC}
             cold = [z for z in DEFAULT_ZODIAC if gap[z] >= theta]
             cold.sort(key=lambda z: -gap[z])
             if len(cold) >= max_track:
-                for z in cold[:max_track]:
+                for z in cold[:bet_n]:
                     positions[z] = {"held": 0, "invest": 0.0}
         # 推进：任意1个冷肖开出 → 整个事件结算
         if z_open in positions:
@@ -4747,7 +4748,7 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
             cur_streak = 0
     helds = [x["held"] for x in rounds if x["held"]]
     return {
-        "threshold": theta, "K": K, "max_track": max_track,
+        "threshold": theta, "K": K, "max_track": max_track, "bet_n": bet_n,
         "rounds": len(rounds), "hits": hits,
         "hit_rate": round(hits / len(rounds) * 100, 2) if rounds else 0,
         "total_pnl": round(total, 2),
@@ -4831,7 +4832,7 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
         else:
             mode = "ready"
             targets = [{"zodiac": c["zodiac"], "gap": c["gap"], "hist_max": c["hist_max"],
-                        "nums": c["nums"], "N": c["N"], "held": 0} for c in cold[:ZODIAC_MAX_TRACK]]
+                        "nums": c["nums"], "N": c["N"], "held": 0} for c in cold[:ZODIAC_BET_N]]
         total_N = sum(t["N"] for t in targets)
         guide = {
             "per": per, "mode": mode,
@@ -4845,7 +4846,7 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
             "risk_ratio": round(total_N * ZODIAC_TRACK_K * per / account["capital"] * 100, 1) if account["capital"] else 0,
         }
     return {
-        "threshold": ZODIAC_TRACK_THRESHOLD, "K": ZODIAC_TRACK_K, "max_track": ZODIAC_MAX_TRACK,
+        "threshold": ZODIAC_TRACK_THRESHOLD, "K": ZODIAC_TRACK_K, "max_track": ZODIAC_MAX_TRACK, "bet_n": ZODIAC_BET_N,
         "cold": cold, "cold_count": len(cold),
         "backtest": bt,
         "account": account,
@@ -4934,7 +4935,7 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
                 source_id = db.execute(
                     "INSERT INTO zodiac_track_source (source_date, zodiacs_json, status, create_time, update_time) VALUES (?,?,?,?,?)",
                     (d, json.dumps(source_zodiacs, ensure_ascii=False), 'active', now, now)).lastrowid
-                for z in cold[:ZODIAC_MAX_TRACK]:
+                for z in cold[:ZODIAC_BET_N]:
                     cur = db.execute(
                         "INSERT INTO zodiac_track_position (source_id, zodiac, enter_date, held, status, total_invest, create_time, update_time) VALUES (?,?,?,0,'holding',0,?,?)",
                         (source_id, z, d, now, now)).lastrowid
