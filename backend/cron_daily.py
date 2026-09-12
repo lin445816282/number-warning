@@ -32,10 +32,24 @@ def main():
     sgen = M._generate_scheme_forward()
     # 4. 共识信号前向：固化下一期选号（结算已由上面 _settle_dim_forward 统一处理）
     cgen = M._generate_consensus_forward()
+    # 5. 肖跟踪：结算账户到最新开奖日期
+    zt = {"status": "no_account"}
+    try:
+        db2 = M.get_db()
+        acc = db2.execute("SELECT id FROM zodiac_track_account ORDER BY id LIMIT 1").fetchone()
+        db2.close()
+        if acc:
+            token = M.create_token({"username": "admin", "role_code": "super_admin"})
+            zr = M.zodiac_track_settle(user=f"Bearer {token}")
+            zt = {"status": "ok", "new_orders": zr.get("new_orders", 0),
+                  "capital": zr["account"]["capital"], "account_status": zr["account"]["status"]}
+    except Exception as e:
+        zt = {"status": "error", "msg": str(e)}
     print(f"[{now}] matched={matched} settled={settled} "
           f"generated={gen['generated']} date={gen['date']} "
           f"scheme_updated={upd} scheme_generated={sgen['generated']} "
-          f"consensus_generated={cgen['generated']} consensus_N={cgen.get('N', 0)}")
+          f"consensus_generated={cgen['generated']} consensus_N={cgen.get('N', 0)} "
+          f"zodiac_track={zt}")
 
 
 if __name__ == "__main__":

@@ -301,6 +301,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='zodiac'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='zodiac';loadZodiacTrack()">肖跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling();loadGeneralize()">自主跟踪</button>
         </div>
 
@@ -1353,6 +1354,146 @@ table.data tr.warn td{background:var(--warnbg)}
                       <td style="text-align:right" :style="{color:m.profit>=0?'var(--ok)':'var(--warn)',fontWeight:'700'}">{{ m.profit>=0?'+':'' }}{{ m.profit.toLocaleString() }}</td>
                       <td style="text-align:right">{{ m.hits }}/{{ m.periods }}</td>
                       <td style="text-align:right">{{ m.hit_rate }}%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
+          <!-- tab: 肖跟踪 -->
+          <template v-if="dimTab==='zodiac'">
+            <!-- 顶部操作 + 预警 -->
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                <div>
+                  <div class="card-title">🐉 肖跟踪 · 生肖遗漏 ≥ {{ zodiacTrack.threshold }} 期（6肖全跟踪）</div>
+                  <div style="font-size:12px;color:var(--ink2)">锁定遗漏≥{{ zodiacTrack.threshold }}期的最冷{{ zodiacTrack.max_track }}个生肖并行跟踪，每肖{{ zodiacTrack.K }}期，命中赚47倍−累计投入，满{{ zodiacTrack.K }}期止损。本金 {{ zodiacTrack.account?.initial_capital || 3000 }} 元。</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button class="btn btn-sm" @click="loadZodiacTrack()">🔄 刷新</button>
+                  <button class="btn btn-sm" @click="zodiacSettle()" style="background:var(--warn);color:#fff;border:none">⚡ 每日结算</button>
+                  <button class="btn btn-sm" v-if="isAdmin" @click="zodiacInit()">🔧 重置账户</button>
+                </div>
+              </div>
+              <!-- 系统级预警 -->
+              <div v-if="zodiacTrack.account && (zodiacTrack.account.status==='bankrupt' || zodiacTrack.account.status==='warn')"
+                   style="margin-top:10px;padding:12px 14px;border-radius:10px;font-weight:700;font-size:14px"
+                   :style="zodiacTrack.account.status==='bankrupt' ? 'background:#fee2e2;color:#dc2626;border:2px solid #dc2626' : 'background:#fef3c7;color:#b45309;border:2px solid #f59e0b'">
+                {{ zodiacTrack.account.status==='bankrupt' ? '💀 系统预警：肖跟踪账户已破产！' : '⚠️ 系统预警：本金低于 ' + zodiacTrack.account.warn_threshold + ' 元！' }}
+                当前本金 <b>{{ zodiacTrack.account.capital }}</b> 元
+                <span v-if="zodiacTrack.account.status==='bankrupt'" style="margin-left:8px">
+                  <input type="number" v-model.number="zodiacDepositAmount" placeholder="追加金额" style="width:100px;padding:4px 8px;border:1px solid #dc2626;border-radius:6px;font-size:13px">
+                  <button class="btn btn-sm" @click="zodiacDeposit()" style="background:#dc2626;color:#fff;border:none;padding:5px 12px">💰 增加本金</button>
+                </span>
+              </div>
+            </div>
+
+            <!-- 账户卡片 -->
+            <div class="card" v-if="zodiacTrack.account">
+              <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+                <div style="text-align:center">
+                  <div style="font-size:11px;color:var(--ink2)">当前本金</div>
+                  <div style="font-size:28px;font-weight:800" :style="{color: zodiacTrack.account.capital >= zodiacTrack.account.initial_capital ? 'var(--ok)' : zodiacTrack.account.capital <= 0 ? '#dc2626' : '#b45309'}">{{ zodiacTrack.account.capital }}</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:11px;color:var(--ink2)">每号下注</div>
+                  <div style="font-size:22px;font-weight:700;color:var(--ink)">{{ zodiacTrack.account.per }} 元</div>
+                </div>
+                <div v-if="zodiacTrack.holding && zodiacTrack.holding.length" style="flex:1;min-width:220px">
+                  <div style="font-size:11px;color:#1e40af;margin-bottom:4px">🔴 跟踪中（{{ zodiacTrack.holding_count }} 个持仓）</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <span v-for="p in zodiacTrack.holding" :key="p.zodiac" style="background:#dbeafe;border:1px solid #bfdbfe;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:700;color:#1e40af">
+                      {{ p.zodiac }} · {{ p.held }}/{{ zodiacTrack.K }}
+                    </span>
+                  </div>
+                </div>
+                <div v-else style="text-align:center;background:#f1f5f9;border-radius:10px;padding:8px 14px">
+                  <div style="font-size:11px;color:var(--ink2)">🟢 空仓（待冷肖触发建仓）</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 下单指南 -->
+            <div class="card" v-if="zodiacTrack.guide && Object.keys(zodiacTrack.guide).length">
+              <div class="card-title">📌 下单指南 · {{ zodiacTrack.guide.mode==='holding' ? '当前持仓跟踪' : '下一轮候选（空仓待建）' }}（本金 {{ zodiacTrack.guide.capital }} 元 / 每号 {{ zodiacTrack.guide.per }} 元）</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+                <div v-for="t in zodiacTrack.guide.targets" :key="t.zodiac" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px">
+                  <div style="font-size:13px;font-weight:800;color:#166534">{{ t.zodiac }}<span v-if="t.gap!=null">（遗漏 {{ t.gap }}期）</span><span v-if="t.held>0" style="color:#1e40af"> · 第{{ t.held }}/{{ zodiacTrack.K }}期</span></div>
+                  <div style="font-size:12px;color:#15803d;font-family:Roboto Mono,monospace;margin-top:3px;word-break:break-all">{{ t.nums.map(n=>pad(n)).join('.') }}</div>
+                </div>
+              </div>
+              <div v-if="!zodiacTrack.guide.targets.length" style="text-align:center;color:var(--ink2);padding:12px">当前无冷肖可跟踪（所有生肖遗漏均 &lt; {{ zodiacTrack.threshold }} 期）</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px">
+                  <div style="font-size:11px;color:var(--ink2)">每期总投入（{{ zodiacTrack.guide.total_N }}号）</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--ink)">{{ zodiacTrack.guide.per_round_invest }} 元</div>
+                </div>
+                <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 14px">
+                  <div style="font-size:11px;color:#991b1b">单轮全止损</div>
+                  <div style="font-size:16px;font-weight:700;color:#dc2626">{{ zodiacTrack.guide.stop_loss }} 元</div>
+                </div>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px">
+                  <div style="font-size:11px;color:var(--ink2)">风险占比</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--ink)">{{ zodiacTrack.guide.risk_ratio }}%</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 冷肖列表 -->
+            <div class="card">
+              <div class="card-title">🧊 当前冷肖列表（遗漏 ≥ {{ zodiacTrack.threshold }} 期，共 {{ zodiacTrack.cold_count }} 个）</div>
+              <div class="table-scroll">
+                <table class="data">
+                  <thead><tr><th>生肖</th><th>当前遗漏</th><th>历史最高</th><th>距最高</th><th>覆盖号码</th><th>号数</th></tr></thead>
+                  <tbody>
+                    <tr v-for="c in zodiacTrack.cold" :key="c.zodiac" :style="c.tracking ? 'background:#dbeafe' : ''">
+                      <td><b>{{ c.zodiac }}</b> <span v-if="c.tracking" style="font-size:11px;color:#1e40af">🔴 跟踪中</span></td>
+                      <td :style="c.gap >= c.hist_max ? 'color:#dc2626;font-weight:800' : 'color:var(--warn);font-weight:700'">{{ c.gap }} 期</td>
+                      <td style="font-family:Roboto Mono,monospace">{{ c.hist_max }} 期</td>
+                      <td style="font-family:Roboto Mono,monospace">{{ c.diff_to_max }}</td>
+                      <td style="white-space:normal;line-height:1.7"><span v-for="n in c.nums" :key="n" class="tag" style="font-family:Roboto Mono,monospace;font-size:11px">{{ pad(n) }}</span></td>
+                      <td>{{ c.N }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="!zodiacTrack.cold.length" style="text-align:center;color:var(--ink2);padding:20px">当前无冷肖（所有生肖遗漏均 &lt; {{ zodiacTrack.threshold }} 期）</div>
+            </div>
+
+            <!-- 回测指标 -->
+            <div class="card" v-if="zodiacTrack.backtest">
+              <div class="card-title">📊 回测 · 6肖全跟踪（阈值{{ zodiacTrack.backtest.threshold }}期 / 跟踪{{ zodiacTrack.backtest.K }}期 / 最多{{ zodiacTrack.backtest.max_track }}肖 / 1元/号）</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.rounds }}</div><div class="tracking-stat-label">总轮数</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" :style="zodiacTrack.backtest.hit_rate>=50?'color:var(--ok)':'color:var(--warn)'">{{ zodiacTrack.backtest.hit_rate }}%</div><div class="tracking-stat-label">命中率（{{ zodiacTrack.backtest.hits }}中）</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" :style="zodiacTrack.backtest.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ zodiacTrack.backtest.total_pnl>=0?'+':'' }}{{ zodiacTrack.backtest.total_pnl }}</div><div class="tracking-stat-label">总盈亏（1元/号）</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ zodiacTrack.backtest.avg_pnl }}</div><div class="tracking-stat-label">每轮平均</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--warn)">{{ zodiacTrack.backtest.max_loss_streak }}</div><div class="tracking-stat-label">最长连亏</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--warn)">{{ zodiacTrack.backtest.max_drawdown }}</div><div class="tracking-stat-label">最大回撤（1元/号）</div></div>
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:8px">⚠️ 命中率 {{ zodiacTrack.backtest.hit_rate }}% 略高于随机基线（单肖12期≈64%），属<b>弱正期望</b>信号，勿重仓。此为<b>回测口径（样本内）</b>，前向会衰减；真实下单以账户盈亏为准。</div>
+            </div>
+
+            <!-- 订单明细 -->
+            <div class="card" v-if="zodiacOrders.length">
+              <div class="card-title">📜 下单明细（最近 {{ zodiacOrders.length }} 条）</div>
+              <div class="table-scroll" style="max-height:360px">
+                <table class="data">
+                  <thead><tr><th>日期</th><th>生肖</th><th>第几期</th><th>结果</th><th>开出生肖</th><th>盈亏</th><th>本金</th></tr></thead>
+                  <tbody>
+                    <tr v-for="o in zodiacOrders" :key="o.id" style="border-bottom:1px solid #f1f5f9">
+                      <td>{{ o.bet_date }}</td>
+                      <td><b>{{ o.zodiac }}</b></td>
+                      <td>{{ o.held }}/{{ zodiacTrack.K }}</td>
+                      <td :style="o.result==='hit'?'color:var(--ok);font-weight:700':o.result==='stop'?'color:#dc2626;font-weight:700':'color:var(--ink2)'">
+                        {{ o.result==='hit' ? '命中' : o.result==='stop' ? '止损' : '持有' }}
+                      </td>
+                      <td>{{ o.open_zodiac }}</td>
+                      <td :style="o.pnl==null?'color:var(--ink2)':o.pnl>=0?'color:var(--ok);font-weight:700':'color:#dc2626;font-weight:700'">
+                        {{ o.pnl==null ? '—' : (o.pnl>0?'+':'')+o.pnl }}
+                      </td>
+                      <td style="font-weight:600">{{ o.capital_after }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2519,6 +2660,42 @@ createApp({
         dimForward.value = await api('GET', '/api/dimAssess/forward');
       } catch (e) {}
     }
+    // ====== 肖跟踪（生肖遗漏≥12期，6肖全跟踪）======
+    const zodiacTrack = ref({ threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0 });
+    const zodiacOrders = ref([]);
+    const zodiacDepositAmount = ref(null);
+    async function loadZodiacTrack() {
+      try {
+        zodiacTrack.value = await api('GET', '/api/zodiacTrack/overview');
+        const od = await api('GET', '/api/zodiacTrack/orders?limit=200');
+        zodiacOrders.value = od.orders || [];
+      } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0 }; }
+    }
+    async function zodiacSettle() {
+      try {
+        const r = await api('POST', '/api/zodiacTrack/settle', {});
+        alert('结算完成：新增 ' + r.new_orders + ' 条订单，本金 ' + r.account.capital + '（' + r.account.status + '）');
+        await loadZodiacTrack();
+      } catch (e) { alert('结算失败：' + (e.message || e)); }
+    }
+    async function zodiacInit() {
+      if (!confirm('确认重置肖跟踪账户？将清空所有订单与持仓，本金回到 3000，并按新数据重放历史。')) return;
+      try {
+        await api('POST', '/api/zodiacTrack/init', { capital: 3000, per: 4 });
+        alert('账户已重置');
+        await loadZodiacTrack();
+      } catch (e) { alert('重置失败：' + (e.message || e)); }
+    }
+    async function zodiacDeposit() {
+      const amt = zodiacDepositAmount.value;
+      if (!amt || amt <= 0) { alert('请输入追加金额'); return; }
+      try {
+        await api('POST', '/api/zodiacTrack/deposit?amount=' + amt, {});
+        zodiacDepositAmount.value = null;
+        alert('已追加 ' + amt + ' 元');
+        await loadZodiacTrack();
+      } catch (e) { alert('追加失败：' + (e.message || e)); }
+    }
     function fwdOf(dim) {
       const w = dimForward.value.watch || [];
       return w.find(x => x.dim === dim) || {};
@@ -2746,6 +2923,7 @@ createApp({
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
+      zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
