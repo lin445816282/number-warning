@@ -4761,16 +4761,32 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
         "SELECT * FROM zodiac_track_position WHERE status='holding' ORDER BY id").fetchall()
     source_rows = db.execute(
         "SELECT * FROM zodiac_track_source ORDER BY source_date DESC LIMIT 50").fetchall()
+    pos_rows = db.execute(
+        "SELECT source_id, zodiac, held, close_reason, status FROM zodiac_track_position").fetchall()
     db.close()
     account = dict(acc) if acc else None
     holding = [dict(p) for p in positions]
+    # 按 source_id 分组持仓，用于回填解冻期数（命中=第几期开，止损=None，持有=-1跟踪中）
+    pos_by_source = {}
+    for p in pos_rows:
+        pos_by_source.setdefault(p["source_id"], []).append(p)
     sources = []
     for s in source_rows:
         sd = dict(s)
         try:
-            sd["zodiacs"] = json.loads(s["zodiacs_json"]) if s["zodiacs_json"] else []
+            zodiacs = json.loads(s["zodiacs_json"]) if s["zodiacs_json"] else []
         except Exception:
-            sd["zodiacs"] = []
+            zodiacs = []
+        pmap = {p["zodiac"]: p for p in pos_by_source.get(s["id"], [])}
+        for z in zodiacs:
+            p = pmap.get(z["zodiac"])
+            if p and p["close_reason"] == "hit":
+                z["unfreeze"] = p["held"]          # 从源头起第几期开
+            elif p and p["status"] == "holding":
+                z["unfreeze"] = -1                 # 跟踪中（未开）
+            else:
+                z["unfreeze"] = None               # 止损（12期内未开）
+        sd["zodiacs"] = zodiacs
         sources.append(sd)
     holding_set = {p["zodiac"] for p in holding}
     for c in cold:

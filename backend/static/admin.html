@@ -1472,7 +1472,7 @@ table.data tr.warn td{background:var(--warnbg)}
                       <td style="font-family:Roboto Mono,monospace">{{ s.source_date }}</td>
                       <td style="font-family:Roboto Mono,monospace;color:var(--ink2)">{{ s.end_date || '—' }}</td>
                       <td :style="s.status==='active' ? 'color:#1e40af;font-weight:700' : 'color:var(--ink2)'">{{ s.status==='active' ? '🔴 跟踪中' : '✅ 已结束' }}</td>
-                      <td style="white-space:normal;line-height:1.7"><span v-for="z in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px">{{ z.zodiac }}{{ z.gap }}</span></td>
+                      <td style="white-space:normal;line-height:1.8"><span v-for="z in s.zodiacs" :key="z.zodiac" class="tag" style="font-size:11px;margin:2px 2px" :style="z.unfreeze>0 ? 'background:#f0fdf4;color:#166534;border:1px solid #86efac' : z.unfreeze===-1 ? 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd' : 'color:#9ca3af;border:1px solid #e5e7eb;background:#fafafa'">{{ z.zodiac }}{{ z.gap }}<template v-if="z.unfreeze>0">·{{ z.unfreeze }}期开</template><template v-else-if="z.unfreeze===-1">·跟踪中</template><template v-else>·未开</template></span></td>
                       <td :style="s.hit_count>0?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ s.hit_count }}</td>
                       <td :style="s.stop_count>0?'color:#dc2626;font-weight:700':'color:var(--ink2)'">{{ s.stop_count }}</td>
                       <td :style="s.total_pnl>=0?'color:var(--ok);font-weight:700':'color:#dc2626;font-weight:700'">{{ s.total_pnl>0?'+':'' }}{{ s.total_pnl }}</td>
