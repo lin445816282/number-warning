@@ -4676,8 +4676,8 @@ def _zodiac_cold_list(cur, hist_max, nums, threshold=ZODIAC_TRACK_THRESHOLD):
     return cold
 
 
-def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=ZODIAC_MAX_TRACK, bet_n=ZODIAC_BET_N):
-    """6肖全冷事件回测（1元/号口径）：开始=≥max_track肖同时遗漏≥theta，下单买最冷bet_n个肖，任意1个开或满K期结束。"""
+def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=ZODIAC_MAX_TRACK, bet_n=ZODIAC_BET_N, per=1.0):
+    """6肖全冷事件回测（per 元/号口径，默认1元）：开始=≥max_track肖同时遗漏≥theta，下单买最冷bet_n个肖，任意1个开或满K期结束。"""
     db = get_db()
     cycle_maps, rows = _zodiac_track_load(db)
     db.close()
@@ -4712,11 +4712,11 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
                 pos = positions[z]
                 pos["held"] += 1
                 N = nums[z]
-                cost = N * 1.0
+                cost = N * per
                 pos["invest"] += cost
                 equity -= cost
                 if z == hit_z:
-                    payout = 47 * 1.0
+                    payout = 47 * per
                     equity += payout
                     event_pnl += payout - pos["invest"]
                     hit_held = pos["held"]
@@ -4730,7 +4730,7 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
                 pos = positions[z]
                 pos["held"] += 1
                 N = nums[z]
-                cost = N * 1.0
+                cost = N * per
                 pos["invest"] += cost
                 equity -= cost
             # 满K期止损：任一持仓肖 held >= K，整个事件止损结束（防御极尾）
@@ -4757,7 +4757,7 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
             cur_streak = 0
     helds = [x["held"] for x in rounds if x["held"]]
     return {
-        "threshold": theta, "K": K, "max_track": max_track, "bet_n": bet_n,
+        "threshold": theta, "K": K, "max_track": max_track, "bet_n": bet_n, "per": per,
         "rounds": len(rounds), "hits": hits,
         "hit_rate": round(hits / len(rounds) * 100, 2) if rounds else 0,
         "total_pnl": round(total, 2),
@@ -4776,9 +4776,9 @@ def zodiac_track_overview(user=Header(None, alias="authorization")):
     cycle_maps, rows = _zodiac_track_load(db)
     cur, hist_max, nums = _zodiac_gap_series(rows, cycle_maps)
     cold = _zodiac_cold_list(cur, hist_max, nums)
-    bt = _zodiac_backtest()
-    # 账户 + 持仓
+    # 账户 + 持仓（先读账户以对齐回测 per 口径，与源头事件/账户统一）
     acc = db.execute("SELECT * FROM zodiac_track_account ORDER BY id LIMIT 1").fetchone()
+    bt = _zodiac_backtest(per=(acc["per"] if acc else 4))
     positions = db.execute(
         "SELECT * FROM zodiac_track_position WHERE status='holding' ORDER BY id").fetchall()
     source_rows = db.execute(
@@ -4875,9 +4875,10 @@ def zodiac_track_init(capital: float = 3000, per: float = 4, user=Header(None, a
     db.execute("DELETE FROM zodiac_track_position")
     db.execute("DELETE FROM zodiac_track_source")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    warn_th = max(500.0, round(capital * 0.05, 2))  # 预警线：本金5%，最低500
     db.execute(
-        "INSERT INTO zodiac_track_account (capital, initial_capital, per, warn_threshold, status, tracking_zodiac, held, enter_date, last_settle_date, create_time, update_time) VALUES (?,?,?,500,'running','',0,'','',?,?)",
-        (capital, capital, per, now, now))
+        "INSERT INTO zodiac_track_account (capital, initial_capital, per, warn_threshold, status, tracking_zodiac, held, enter_date, last_settle_date, create_time, update_time) VALUES (?,?,?,?,'running','',0,'','',?,?)",
+        (capital, capital, per, warn_th, now, now))
     db.commit()
     row = db.execute("SELECT * FROM zodiac_track_account ORDER BY id LIMIT 1").fetchone()
     db.close()
