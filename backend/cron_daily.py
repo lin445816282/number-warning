@@ -45,11 +45,19 @@ def main():
                   "capital": zr["account"]["capital"], "account_status": zr["account"]["status"]}
     except Exception as e:
         zt = {"status": "error", "msg": str(e)}
+    # 6. 随机8码·6期跟踪：重新回测并固化到 random8_round（开奖数据更新后自动跟进）
+    r8 = {"status": "ok"}
+    try:
+        rr = M._random8_backtest()
+        r8 = {"status": "ok", "rounds": rr.get("rounds", 0), "hit_rate": rr.get("hit_rate", 0),
+              "total_pnl": rr.get("total_pnl", 0)}
+    except Exception as e:
+        r8 = {"status": "error", "msg": str(e)}
     print(f"[{now}] matched={matched} settled={settled} "
           f"generated={gen['generated']} date={gen['date']} "
           f"scheme_updated={upd} scheme_generated={sgen['generated']} "
           f"consensus_generated={cgen['generated']} consensus_N={cgen.get('N', 0)} "
-          f"zodiac_track={zt}")
+          f"zodiac_track={zt} random8={r8}")
 
 
 if __name__ == "__main__":

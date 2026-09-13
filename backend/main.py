@@ -7,6 +7,7 @@ import hashlib
 import base64
 import sqlite3
 import time
+import random
 from datetime import datetime, date
 from typing import Optional
 
@@ -304,6 +305,20 @@ CREATE TABLE IF NOT EXISTS zodiac_track_source (
   create_time TEXT, update_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_zodiac_source_status ON zodiac_track_source(status);
+CREATE TABLE IF NOT EXISTS random8_round (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_no INTEGER,                 -- 轮次号（从1递增）
+  numbers_json TEXT DEFAULT '',     -- 随机8码（逗号分隔字符串）
+  start_date TEXT DEFAULT '',       -- 本轮开始日期
+  end_date TEXT DEFAULT '',         -- 结束日期（命中或止损日）
+  hit_period INTEGER DEFAULT 0,     -- 命中第几期(1~6)，0=6期未开止损
+  hit_number INTEGER DEFAULT 0,     -- 命中号码
+  result TEXT DEFAULT '',           -- hit/stop
+  total_invest REAL DEFAULT 0,      -- 累计投入（每号1元×8码×期数）
+  pnl REAL DEFAULT 0,               -- 盈亏（命中=47-投入，止损=-投入）
+  create_time TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_random8_round_no ON random8_round(round_no);
 """
 
 # 默认生肖映射（丙午马年 2026-02-17）
@@ -5083,6 +5098,156 @@ def zodiac_track_deposit(amount: float, user=Header(None, alias="authorization")
     db.close()
     return {"ok": True, "account": dict(fresh)}
 
+
+# ============================================================
+# 十五·五、随机8码·6期跟踪（随机8码，跟踪6期，命中即下一轮，6期未开止损）
+# ============================================================
+RANDOM8_SEED = 42          # 随机种子（固定，保证可复现）
+RANDOM8_K = 6              # 跟踪期数
+RANDOM8_N = 8              # 随机选号数
+RANDOM8_ODDS = 47          # 命中赔率（买N号命中只赔1个号=47）
+
+
+def _random8_load_draws():
+    """加载开奖数据（date, number 列表）。"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT record_date, source_number FROM number_knowledge_record WHERE status=1 ORDER BY record_date"
+    ).fetchall()
+    db.close()
+    dates, nums = [], []
+    for r in rows:
+        try:
+            n = int(r["source_number"])
+        except (ValueError, TypeError):
+            continue
+        if 1 <= n <= 49:
+            dates.append(r["record_date"])
+            nums.append(n)
+    return dates, nums
+
+
+def _random8_picks(round_no, seed=RANDOM8_SEED):
+    """按轮次号生成确定性随机8码（可复现）。"""
+    r = random.Random(seed * 100000 + round_no)
+    return sorted(r.sample(range(1, 50), RANDOM8_N))
+
+
+def _random8_backtest(seed=RANDOM8_SEED, per=1.0):
+    """随机8码·6期跟踪 回测：逐轮随机8码，跟踪6期，命中(8码中1个开出)即结束，6期未开止损。
+    落库 random8_round，返回汇总 + 最新一轮 + 下一轮预告。"""
+    dates, draws = _random8_load_draws()
+    if not dates:
+        return {"rounds": 0, "hits": 0, "stops": 0, "hit_rate": 0, "total_pnl": 0,
+                "avg_pnl": 0, "hit_dist": {}, "profit_rounds": 0, "loss_rounds": 0,
+                "detail": [], "latest": None, "next": None}
+    N = len(draws)
+    rounds = []
+    i = 0
+    round_no = 0
+    while i < N:
+        round_no += 1
+        picks = _random8_picks(round_no, seed)
+        picks_set = set(picks)
+        start_date = dates[i]
+        hit_period = 0
+        hit_number = 0
+        result = "stop"
+        max_periods = min(RANDOM8_K, N - i)
+        for k in range(1, max_periods + 1):
+            if draws[i + k - 1] in picks_set:
+                hit_period = k
+                hit_number = draws[i + k - 1]
+                result = "hit"
+                break
+        if result == "hit":
+            pnl = RANDOM8_ODDS * per - RANDOM8_N * per * hit_period
+            invest = RANDOM8_N * per * hit_period
+            end_date = dates[i + hit_period - 1]
+            rounds.append({"round": round_no, "start": start_date, "end": end_date,
+                           "picks": picks, "hit_period": hit_period, "hit_number": hit_number,
+                           "result": "hit", "invest": round(invest, 2), "pnl": round(pnl, 2)})
+            i += hit_period
+        else:
+            # 未命中
+            if max_periods < RANDOM8_K:
+                # 数据不足6期（最后一批数据），本轮进行中，未结束
+                invest = RANDOM8_N * per * max_periods
+                end_date = dates[i + max_periods - 1]
+                rounds.append({"round": round_no, "start": start_date, "end": end_date,
+                               "picks": picks, "hit_period": 0, "hit_number": 0,
+                               "result": "ongoing", "periods": max_periods,
+                               "invest": round(invest, 2), "pnl": round(-invest, 2)})
+            else:
+                # 完整6期未开，止损
+                pnl = -RANDOM8_N * per * max_periods
+                invest = RANDOM8_N * per * max_periods
+                end_date = dates[i + max_periods - 1]
+                rounds.append({"round": round_no, "start": start_date, "end": end_date,
+                               "picks": picks, "hit_period": 0, "hit_number": 0,
+                               "result": "stop", "invest": round(invest, 2), "pnl": round(pnl, 2)})
+            i += max_periods
+    # 落库
+    db = get_db()
+    db.execute("DELETE FROM random8_round")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for r in rounds:
+        db.execute(
+            "INSERT INTO random8_round (round_no, numbers_json, start_date, end_date, hit_period, hit_number, result, total_invest, pnl, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (r["round"], ",".join(str(n) for n in r["picks"]), r["start"], r["end"],
+             r["hit_period"], r["hit_number"], r["result"], r["invest"], r["pnl"], now))
+    db.commit()
+    db.close()
+    # 汇总
+    total = sum(r["pnl"] for r in rounds)
+    hits = sum(1 for r in rounds if r["result"] == "hit")
+    stops = sum(1 for r in rounds if r["result"] == "stop")
+    ongoing = sum(1 for r in rounds if r["result"] == "ongoing")
+    from collections import Counter
+    hit_dist = Counter(r["hit_period"] for r in rounds if r["hit_period"] > 0)
+    profit_rounds = sum(1 for r in rounds if r["pnl"] > 0)
+    loss_rounds = sum(1 for r in rounds if r["pnl"] <= 0)
+    latest = rounds[-1] if rounds else None
+    # 下一步预告
+    nxt = None
+    if latest:
+        if latest["result"] == "ongoing":
+            # 进行中：下一期继续同一组8码
+            nxt = {"type": "continue", "round": latest["round"], "picks": latest["picks"],
+                   "next_period": latest.get("periods", 0) + 1,
+                   "note": f"本轮进行中，第{latest.get('periods', 0)}期未开，继续买同一组8码"}
+        else:
+            # 已结束（命中/止损）：下一轮重新随机8码
+            next_round_no = round_no + 1
+            next_picks = _random8_picks(next_round_no, seed)
+            nxt = {"type": "new_round", "round": next_round_no, "picks": next_picks,
+                   "start_hint": latest["end"] + " 之后",
+                   "note": "上一轮已结束，下一轮重新随机8码"}
+    return {
+        "seed": seed, "K": RANDOM8_K, "N": RANDOM8_N, "odds": RANDOM8_ODDS, "per": per,
+        "date_range": f"{dates[0]} ~ {dates[-1]}", "total_days": N,
+        "rounds": len(rounds), "hits": hits, "stops": stops, "ongoing": ongoing,
+        "hit_rate": round(hits / (len(rounds) - ongoing) * 100, 2) if len(rounds) > ongoing else 0,
+        "total_pnl": round(total, 2),
+        "avg_pnl": round(total / len(rounds), 2) if rounds else 0,
+        "hit_dist": dict(sorted(hit_dist.items())),
+        "profit_rounds": profit_rounds, "loss_rounds": loss_rounds,
+        "detail": rounds, "latest": latest, "next": nxt,
+    }
+
+
+@app.get("/api/random8/overview")
+def random8_overview(user=Header(None, alias="authorization")):
+    """随机8码·6期跟踪 总览：回测汇总 + 最新一轮 + 下一轮预告。"""
+    require_user(user)
+    return _random8_backtest()
+
+
+@app.post("/api/random8/backtest")
+def random8_backtest(user=Header(None, alias="authorization")):
+    """手动触发回测（重新落库）。"""
+    require_admin(user)
+    return _random8_backtest()
 
 
 # ============================================================

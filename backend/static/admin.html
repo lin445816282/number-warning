@@ -303,6 +303,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='zodiac'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='zodiac';loadZodiacTrack()">肖跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling();loadGeneralize()">自主跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='random8'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='random8';loadRandom8()">8码6期</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1522,6 +1523,60 @@ table.data tr.warn td{background:var(--warnbg)}
             </div>
           </template>
 
+          <!-- tab: 8码6期 -->
+          <template v-if="dimTab==='random8'">
+            <!-- 是否可下期卡片 -->
+            <div class="card" v-if="random8.next" style="border:2px solid" :style="random8.next.type==='continue' ? 'border-color:#16a34a;background:linear-gradient(135deg,#f0fdf4,#ffffff)' : 'border-color:#f59e0b;background:linear-gradient(135deg,#fffbeb,#ffffff)'">
+              <div class="card-title" style="font-size:16px;font-weight:800">
+                {{ random8.next.type==='continue' ? '✅ 可下期 · 继续买同一组8码' : '⏳ 新轮待开始 · 重新随机8码' }}
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">{{ random8.next.note }}</div>
+              <div v-if="random8.next.type==='continue'" style="font-size:13px;color:#166534;margin-bottom:8px">当前第 {{ random8.next.next_period - 1 }} 期 → 下期第 {{ random8.next.next_period }} 期（共6期）</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span v-for="n in random8.next.picks" :key="n" style="background:#fff;border:2px solid #16a34a;color:#15803d;border-radius:8px;padding:6px 10px;font-size:16px;font-weight:800;font-family:Roboto Mono,monospace">{{ pad(n) }}</span>
+              </div>
+            </div>
+
+            <!-- 回测汇总 -->
+            <div class="card" v-if="random8.ready">
+              <div class="card-title">📊 回测汇总 · 随机8码·6期（{{ random8.date_range }}，共 {{ random8.total_days }} 天）</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ random8.rounds }}</div><div class="tracking-stat-label">总轮数</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ok)">{{ random8.hit_rate }}%</div><div class="tracking-stat-label">命中率</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" :style="random8.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ random8.total_pnl>=0?'+':'' }}{{ random8.total_pnl }}</div><div class="tracking-stat-label">总盈亏（1元/号）</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ random8.hits }} / {{ random8.stops }}</div><div class="tracking-stat-label">命中 / 止损</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ random8.profit_rounds }} / {{ random8.loss_rounds }}</div><div class="tracking-stat-label">盈利轮 / 亏损轮</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ink2)">{{ random8.avg_pnl }}</div><div class="tracking-stat-label">平均每轮</div></div>
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:10px">
+                <div>🎯 命中分布（第几期开）：<span v-for="(cnt, k) in random8.hit_dist" :key="k" style="margin-right:10px">第{{ k }}期 <b>{{ cnt }}</b> 次</span></div>
+                <div style="margin-top:6px">⚠️ 理论命中率 65.7%（8码×6期），实际 {{ random8.hit_rate }}%。总盈亏 <b :style="random8.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ random8.total_pnl }}</b> 元 = 结构性负期望（47赔率 &lt; 49号码 −4%）。</div>
+              </div>
+            </div>
+
+            <!-- 历史轮次表 -->
+            <div class="card" v-if="random8.detail && random8.detail.length">
+              <div class="card-title">📜 历史轮次（最近 {{ Math.min(random8.detail.length, 50) }} 轮）</div>
+              <div class="table-scroll" style="max-height:500px">
+                <table class="data">
+                  <thead><tr><th>轮次</th><th>开始</th><th>结束</th><th>8码</th><th>结果</th><th>盈亏</th></tr></thead>
+                  <tbody>
+                    <tr v-for="r in random8.detail.slice().reverse().slice(0, 50)" :key="r.round">
+                      <td><b>{{ r.round }}</b></td>
+                      <td style="font-family:Roboto Mono,monospace">{{ r.start }}</td>
+                      <td style="font-family:Roboto Mono,monospace">{{ r.end }}</td>
+                      <td style="white-space:normal;line-height:1.7"><span v-for="n in r.picks" :key="n" class="tag" style="font-family:Roboto Mono,monospace;font-size:11px" :style="r.hit_number===n?'background:#dcfce7;color:#166534;border:1px solid #86efac':'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0'">{{ pad(n) }}</span></td>
+                      <td :style="r.result==='hit'?'color:var(--ok);font-weight:700':r.result==='ongoing'?'color:#1e40af;font-weight:700':'color:#dc2626;font-weight:700'">
+                        {{ r.result==='hit' ? '第'+r.hit_period+'期开('+r.hit_number+')' : r.result==='ongoing' ? '进行中' : '6期未开止损' }}
+                      </td>
+                      <td :style="r.pnl>=0?'color:var(--ok);font-weight:700':'color:#dc2626;font-weight:700'">{{ r.pnl>0?'+':'' }}{{ r.pnl }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
           <!-- tab: 自主跟踪 -->
           <template v-if="dimTab==='autotrack'">
             <!-- 🔬 样本外验证（真实用户模拟下单） -->
@@ -2721,6 +2776,15 @@ createApp({
         await loadZodiacTrack();
       } catch (e) { alert('追加失败：' + (e.message || e)); }
     }
+    // ====== 随机8码·6期跟踪 ======
+    const random8 = ref({ ready: false, rounds: 0, hits: 0, stops: 0, ongoing: 0, hit_rate: 0, total_pnl: 0, avg_pnl: 0, hit_dist: {}, profit_rounds: 0, loss_rounds: 0, detail: [], latest: null, next: null, date_range: '', total_days: 0 });
+    async function loadRandom8() {
+      try {
+        const r = await api('GET', '/api/random8/overview');
+        r.ready = true;
+        random8.value = r;
+      } catch (e) { random8.value = { ready: false, rounds: 0, hits: 0, stops: 0, ongoing: 0, hit_rate: 0, total_pnl: 0, avg_pnl: 0, hit_dist: {}, profit_rounds: 0, loss_rounds: 0, detail: [], latest: null, next: null, date_range: '', total_days: 0 }; }
+    }
     function fwdOf(dim) {
       const w = dimForward.value.watch || [];
       return w.find(x => x.dim === dim) || {};
@@ -2949,6 +3013,7 @@ createApp({
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
+      random8, loadRandom8,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
