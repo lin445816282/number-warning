@@ -1606,6 +1606,7 @@ table.data tr.warn td{background:var(--warnbg)}
               <div style="font-size:12px;color:var(--ink2);margin-top:10px">
                 <div>🎯 命中分布（第几期开）：<span v-for="(cnt, k) in fixedOrder.hit_dist" :key="k" style="margin-right:10px">第{{ k }}期 <b>{{ cnt }}</b> 次</span></div>
                 <div style="margin-top:6px">⚠️ 倍投不改变负期望：总盈亏 <b :style="fixedOrder.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ fixedOrder.total_pnl }}</b> 元（47赔率 &lt; 49号码，结构性 −4%）。</div>
+                <div style="margin-top:4px;color:#b8b0a0">🔬 已穷举验证：8 种下注比例 × 3 周期 × 2 暂停 = 48 方案全负期望（越激进亏越多），换下注方式救不了。唯一盈利前提 = 赔率≥50 盘口或换数据源。</div>
               </div>
             </div>
 
