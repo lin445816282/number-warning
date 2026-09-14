@@ -4699,6 +4699,7 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
     last_seen = {z: -1 for z in DEFAULT_ZODIAC}
     nums = {z: len(DEFAULT_ZODIAC[z]) for z in DEFAULT_ZODIAC}
     positions = {}  # zodiac -> {"held": int, "invest": float}
+    cold6 = set()   # 当前事件的6肖全集（口径A：任意1个开出即结束）
     rounds = []     # 每事件一条
     equity = 0.0
     peak = 0.0
@@ -4712,10 +4713,12 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
         seq = i + 1
         # 空仓期扫描建仓（必须≥max_track个肖同时遗漏≥theta才触发，下单锁定最冷bet_n个）
         if not positions:
+            cold6 = set()   # 空仓先清空，防止残留上一轮6肖
             gap = {z: seq - last_seen[z] for z in DEFAULT_ZODIAC}
             cold = [z for z in DEFAULT_ZODIAC if gap[z] >= theta]
             cold.sort(key=lambda z: -gap[z])
             if len(cold) >= max_track:
+                cold6 = set(cold[:max_track])   # 6肖全集（买的最冷bet_n个 + 后3位）
                 for z in cold[:bet_n]:
                     positions[z] = {"held": 0, "invest": 0.0}
         # 推进：任意1个冷肖开出 → 整个事件结算
@@ -4739,6 +4742,22 @@ def _zodiac_backtest(theta=ZODIAC_TRACK_THRESHOLD, K=ZODIAC_TRACK_K, max_track=Z
                     event_pnl += -pos["invest"]
                 del positions[z]
             rounds.append({"zodiac": hit_z, "held": hit_held, "result": "hit",
+                           "pnl": round(event_pnl, 2), "date": r["record_date"]})
+        elif z_open in cold6:
+            # 口径A：6肖中后3位开出（未买）→ 持仓全部止损平仓
+            event_pnl = 0.0
+            end_held = None
+            for z in list(positions.keys()):
+                pos = positions[z]
+                pos["held"] += 1
+                N = nums[z]
+                cost = N * per
+                pos["invest"] += cost
+                equity -= cost
+                event_pnl += -pos["invest"]
+                end_held = pos["held"]
+                del positions[z]
+            rounds.append({"zodiac": z_open, "held": end_held, "result": "stop",
                            "pnl": round(event_pnl, 2), "date": r["record_date"]})
         else:
             for z in positions:
@@ -4937,6 +4956,14 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
         positions[p["zodiac"]] = {"id": p["id"], "held": p["held"] or 0,
                                   "invest": p["total_invest"] or 0.0,
                                   "enter_date": p["enter_date"] or ""}
+    # 重建 cold6（当前 active 源头的6肖全集，口径A：任意1个开出即结束）
+    cold6 = set()
+    for s in db.execute("SELECT zodiacs_json FROM zodiac_track_source WHERE status='active'").fetchall():
+        try:
+            for zitem in (json.loads(s["zodiacs_json"]) if s["zodiacs_json"] else []):
+                cold6.add(zitem["zodiac"])
+        except Exception:
+            pass
     capital = acc["capital"]
     per = acc["per"] or 4
     new_orders = 0
@@ -4952,10 +4979,12 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
         d = r["record_date"]
         # 空仓期扫描建仓（必须≥6肖同时遗漏≥阈值才触发，记录源头事件）
         if not positions:
+            cold6 = set()   # 空仓先清空，防止残留上一轮6肖
             gap = {z: seq - last_seen[z] for z in DEFAULT_ZODIAC}
             cold = [z for z in DEFAULT_ZODIAC if gap[z] >= ZODIAC_TRACK_THRESHOLD]
             cold.sort(key=lambda z: -gap[z])
             if len(cold) >= ZODIAC_MAX_TRACK:
+                cold6 = set(cold[:ZODIAC_MAX_TRACK])   # 6肖全集（买的最冷bet_n个 + 后3位）
                 source_zodiacs = [{"zodiac": z, "gap": gap[z], "nums": DEFAULT_ZODIAC.get(z, [])} for z in cold[:ZODIAC_MAX_TRACK]]
                 source_id = db.execute(
                     "INSERT INTO zodiac_track_source (source_date, zodiacs_json, status, create_time, update_time) VALUES (?,?,?,?,?)",
@@ -4965,9 +4994,9 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
                         "INSERT INTO zodiac_track_position (source_id, zodiac, enter_date, held, status, total_invest, create_time, update_time) VALUES (?,?,?,0,'holding',0,?,?)",
                         (source_id, z, d, now, now)).lastrowid
                     positions[z] = {"id": cur, "held": 0, "invest": 0.0, "enter_date": d, "source_id": source_id}
-        # 推进：每期买6肖全部号；任意1个冷肖开出 → 整个事件结算结束
+        # 推进：每期买6肖全部号；任意1个6肖开出 → 整个事件结算结束
         if z_open in positions:
-            # 本期开出冷肖 → 整个事件结束（命中1个 + 其余5个平仓）
+            # 本期开出买的冷肖 → 命中1个 + 其余平仓
             hit_z = z_open
             for z in list(positions.keys()):
                 pos = positions[z]
@@ -4991,6 +5020,25 @@ def zodiac_track_settle(user=Header(None, alias="authorization")):
                 db.execute(
                     "UPDATE zodiac_track_position SET held=?, status='closed', close_date=?, close_reason=?, total_invest=?, update_time=? WHERE id=?",
                     (held_now, d, result, round(pos["invest"], 2), now, pos["id"]))
+                new_orders += 1
+                del positions[z]
+        elif z_open in cold6:
+            # 口径A：6肖中后3位开出（未买）→ 持仓全部止损平仓
+            for z in list(positions.keys()):
+                pos = positions[z]
+                pos["held"] += 1
+                N = nums[z]
+                cost = N * per
+                pos["invest"] += cost
+                capital -= cost
+                held_now = pos["held"]
+                pnl = -pos["invest"]
+                db.execute(
+                    "INSERT INTO zodiac_track_order (bet_date, zodiac, nums_json, N, held, result, open_zodiac, pnl, capital_after, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (d, z, json.dumps(DEFAULT_ZODIAC.get(z, [])), N, held_now, "stop", z_open, round(pnl, 2), round(capital, 2), now))
+                db.execute(
+                    "UPDATE zodiac_track_position SET held=?, status='closed', close_date=?, close_reason='stop', total_invest=?, update_time=? WHERE id=?",
+                    (held_now, d, round(pos["invest"], 2), now, pos["id"]))
                 new_orders += 1
                 del positions[z]
         else:
