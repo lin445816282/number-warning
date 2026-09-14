@@ -1771,9 +1771,9 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
               <div v-else style="padding:6px 0;font-size:13px;color:#b8b0a0">⚠️ 今日信号未触发（各标签遗漏均未「憋到高位」），空仓不下注</div>
               <!-- 🩺 信号健康度（连空降半仓闭环） -->
-              <div v-if="consensus.health" style="margin-top:8px;padding:8px 10px;border-radius:4px" :style="consensus.health.health_status==='健康'?'background:#e8f5e9':(consensus.health.health_status==='警惕'?'background:#fff8e1':'background:#ffebee')">
+              <div v-if="consensus.health" style="margin-top:8px;padding:8px 10px;border-radius:4px" :style="consensus.health.health_status==='健康'?'background:#e8f5e9':(consensus.health.health_status==='注意'?'background:#e3f2fd':(consensus.health.health_status==='警惕'?'background:#fff8e1':(consensus.health.health_status==='走坏预警'?'background:#fff3e0':'background:#ffebee')))">
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                  <span style="font-weight:800;font-size:13px" :style="consensus.health.health_status==='健康'?'color:#2e7d32':(consensus.health.health_status==='警惕'?'color:#f57f17':'color:#c62828')">
+                  <span style="font-weight:800;font-size:13px" :style="consensus.health.health_status==='健康'?'color:#2e7d32':(consensus.health.health_status==='注意'?'color:#1565c0':(consensus.health.health_status==='警惕'?'color:#f57f17':(consensus.health.health_status==='走坏预警'?'color:#ef6c00':'color:#c62828')))">
                     ● {{ consensus.health.health_status }}
                   </span>
                   <span style="font-size:12px;color:var(--ink)">连空 <b>{{ consensus.health.current_streak }}</b> 期（历史最大 {{ consensus.health.max_streak }}）</span>
@@ -1791,16 +1791,14 @@ table.data tr.warn td{background:var(--warnbg)}
                   · 本金收益率 <b :style="consensus.health.capital.capital_roi>0?'color:var(--ok);font-weight:800':'color:var(--warn)'">+{{ consensus.health.capital.capital_roi }}%</b>
                   · 最大回撤 {{ consensus.health.capital.max_drawdown }} 元 · 下注收益率 +{{ consensus.health.capital.bet_roi }}%
                 </div>
-                <div v-if="consensus.health && (consensus.health.rolling_1y || consensus.health.rolling_2y)" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
-                  📉 走坏监测（滚动窗口）：
-                  <span v-if="consensus.health.rolling_1y">近1年 净盈亏 <b :style="consensus.health.rolling_1y.net_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1y.net_pnl>=0?'+':'' }}{{ consensus.health.rolling_1y.net_pnl }}</b> 元
-                    · 收益率 <b :style="consensus.health.rolling_1y.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1y.roi>=0?'+':'' }}{{ consensus.health.rolling_1y.roi }}%</b>
-                    · 超额 <b :style="consensus.health.rolling_1y.alpha>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1y.alpha>=0?'+':'' }}{{ consensus.health.rolling_1y.alpha }}%</b>
-                  </span>
-                  <span v-if="consensus.health.rolling_2y" style="margin-left:10px">近2年 净盈亏 <b :style="consensus.health.rolling_2y.net_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_2y.net_pnl>=0?'+':'' }}{{ consensus.health.rolling_2y.net_pnl }}</b> 元
-                    · 收益率 <b :style="consensus.health.rolling_2y.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_2y.roi>=0?'+':'' }}{{ consensus.health.rolling_2y.roi }}%</b>
-                    · 超额 <b :style="consensus.health.rolling_2y.alpha>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_2y.alpha>=0?'+':'' }}{{ consensus.health.rolling_2y.alpha }}%</b>
-                  </span>
+                <div v-if="consensus.health && (consensus.health.rolling_2y || consensus.health.rolling_3m || consensus.health.rolling_1m || consensus.health.rolling_1w)" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
+                  📉 走坏监测（依次：近2年 → 近3月 → 近一月 → 近一周）：
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+                    <span v-if="consensus.health.rolling_2y" style="padding:3px 6px;border-radius:3px;background:#f3efe5">近2年 <b :style="consensus.health.rolling_2y.net_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_2y.net_pnl>=0?'+':'' }}{{ consensus.health.rolling_2y.net_pnl }}</b> 元 · 收益 <b :style="consensus.health.rolling_2y.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_2y.roi>=0?'+':'' }}{{ consensus.health.rolling_2y.roi }}%</b> · 超额 <b :style="consensus.health.rolling_2y.alpha>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_2y.alpha>=0?'+':'' }}{{ consensus.health.rolling_2y.alpha }}%</b></span>
+                    <span v-if="consensus.health.rolling_3m" style="padding:3px 6px;border-radius:3px;background:#f3efe5">近3月 <b :style="consensus.health.rolling_3m.net_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_3m.net_pnl>=0?'+':'' }}{{ consensus.health.rolling_3m.net_pnl }}</b> 元 · 收益 <b :style="consensus.health.rolling_3m.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_3m.roi>=0?'+':'' }}{{ consensus.health.rolling_3m.roi }}%</b> · 超额 <b :style="consensus.health.rolling_3m.alpha>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_3m.alpha>=0?'+':'' }}{{ consensus.health.rolling_3m.alpha }}%</b></span>
+                    <span v-if="consensus.health.rolling_1m" style="padding:3px 6px;border-radius:3px;background:#f3efe5;border:1px solid var(--warn)">近一月 <b :style="consensus.health.rolling_1m.net_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1m.net_pnl>=0?'+':'' }}{{ consensus.health.rolling_1m.net_pnl }}</b> 元 · 收益 <b :style="consensus.health.rolling_1m.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1m.roi>=0?'+':'' }}{{ consensus.health.rolling_1m.roi }}%</b> · 超额 <b :style="consensus.health.rolling_1m.alpha>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1m.alpha>=0?'+':'' }}{{ consensus.health.rolling_1m.alpha }}%</b></span>
+                    <span v-if="consensus.health.rolling_1w" style="padding:3px 6px;border-radius:3px;background:#f3efe5">近一周 <b :style="consensus.health.rolling_1w.net_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1w.net_pnl>=0?'+':'' }}{{ consensus.health.rolling_1w.net_pnl }}</b> 元 · 收益 <b :style="consensus.health.rolling_1w.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1w.roi>=0?'+':'' }}{{ consensus.health.rolling_1w.roi }}%</b> · 超额 <b :style="consensus.health.rolling_1w.alpha>=0?'color:var(--ok)':'color:var(--warn)'">{{ consensus.health.rolling_1w.alpha>=0?'+':'' }}{{ consensus.health.rolling_1w.alpha }}%</b></span>
+                  </div>
                 </div>
                 <div v-if="consensus.monte_carlo" style="margin-top:6px;font-size:11px;color:var(--ink2);border-top:1px dashed #ddd;padding-top:4px">
                   🎲 概率化风险（2万次蒙特卡洛）：

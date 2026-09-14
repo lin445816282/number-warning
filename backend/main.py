@@ -3702,14 +3702,7 @@ def _consensus_health():
             break
         neg_streak += 1
 
-    if neg_streak >= 3:
-        status = "失效预警"
-    elif neg_streak >= 2:
-        status = "警惕"
-    else:
-        status = "健康"
-
-    # 走坏监测：近1年/近2年滚动窗口（用户要求：用近1-2年数据判信号是否走坏，而非全历史）
+    # 走坏监测：近2年→近3月→近一月→近一周，依次逻辑（从长到短判走坏等级）
     from datetime import timedelta
     latest_dt = datetime.strptime(rows[-1]["record_date"], "%Y-%m-%d")
 
@@ -3734,16 +3727,23 @@ def _consensus_health():
             "roi": round(pnl / total_n * 100, 2) if total_n else 0.0,
         }
 
-    rolling_1y = _roll(365)
     rolling_2y = _roll(730)
+    rolling_3m = _roll(90)
+    rolling_1m = _roll(30)
+    rolling_1w = _roll(7)
 
-    # 走坏综合判定：月度连续负 + 近1/2年滚动窗口（近1年转负=立即失效预警，近2年转负=警惕）
-    r1y_bad = rolling_1y is not None and (rolling_1y["roi"] < 0 or rolling_1y["alpha"] < 0)
-    r2y_bad = rolling_2y is not None and (rolling_2y["roi"] < 0 or rolling_2y["alpha"] < 0)
-    if neg_streak >= 3 or r1y_bad:
-        status = "失效预警"
-    elif neg_streak >= 2 or r2y_bad:
+    def _bad(r):
+        return r is not None and (r["roi"] < 0 or r["alpha"] < 0)
+
+    # 依次逻辑：近2年(长期基础)→近3月→近一月(重点监测)→近一周，越短越先暴露走坏
+    if _bad(rolling_2y):
+        status = "失效"
+    elif _bad(rolling_3m):
+        status = "走坏预警"
+    elif _bad(rolling_1m):
         status = "警惕"
+    elif _bad(rolling_1w):
+        status = "注意"
     else:
         status = "健康"
 
@@ -3775,8 +3775,10 @@ def _consensus_health():
         "health_status": status,
         "rolling_alpha": rolling_alpha,
         "rolling_periods": rolling_periods,
-        "rolling_1y": rolling_1y,
         "rolling_2y": rolling_2y,
+        "rolling_3m": rolling_3m,
+        "rolling_1m": rolling_1m,
+        "rolling_1w": rolling_1w,
         "capital": capital,
     }
 
