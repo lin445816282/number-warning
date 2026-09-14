@@ -1,0 +1,1362 @@
+{
+  "data_range": "2022-01-01~2026-09-14",
+  "total_periods": 1718,
+  "total_combos": 190,
+  "top30": [
+    {
+      "dims": [
+        "edge_color",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 865,
+        "hits": 438,
+        "hit_rate": 50.6,
+        "avg_n": 23.1,
+        "alpha": 3.53,
+        "net_pnl": 621,
+        "roi": 3.11
+      },
+      "front": {
+        "periods": 448,
+        "hits": 238,
+        "hit_rate": 53.1,
+        "avg_n": 23.5,
+        "alpha": 5.14,
+        "net_pnl": 652,
+        "roi": 6.19
+      },
+      "back": {
+        "periods": 417,
+        "hits": 200,
+        "hit_rate": 48.0,
+        "avg_n": 22.6,
+        "alpha": 1.81,
+        "net_pnl": -31,
+        "roi": -0.33
+      }
+    },
+    {
+      "dims": [
+        "wave_color",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 806,
+        "hits": 340,
+        "hit_rate": 42.2,
+        "avg_n": 19.3,
+        "alpha": 2.79,
+        "net_pnl": 423,
+        "roi": 2.72
+      },
+      "front": {
+        "periods": 409,
+        "hits": 169,
+        "hit_rate": 41.3,
+        "avg_n": 19.7,
+        "alpha": 1.18,
+        "net_pnl": -102,
+        "roi": -1.27
+      },
+      "back": {
+        "periods": 397,
+        "hits": 171,
+        "hit_rate": 43.1,
+        "avg_n": 18.9,
+        "alpha": 4.46,
+        "net_pnl": 525,
+        "roi": 6.99
+      }
+    },
+    {
+      "dims": [
+        "stroke_type",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 948,
+        "hits": 556,
+        "hit_rate": 58.6,
+        "avg_n": 27.4,
+        "alpha": 2.78,
+        "net_pnl": 180,
+        "roi": 0.69
+      },
+      "front": {
+        "periods": 465,
+        "hits": 283,
+        "hit_rate": 60.9,
+        "avg_n": 27.7,
+        "alpha": 4.3,
+        "net_pnl": 414,
+        "roi": 3.21
+      },
+      "back": {
+        "periods": 483,
+        "hits": 273,
+        "hit_rate": 56.5,
+        "avg_n": 27.0,
+        "alpha": 1.32,
+        "net_pnl": -234,
+        "roi": -1.79
+      }
+    },
+    {
+      "dims": [
+        "zodiac_seq",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 862,
+        "hits": 501,
+        "hit_rate": 58.1,
+        "avg_n": 27.1,
+        "alpha": 2.74,
+        "net_pnl": 155,
+        "roi": 0.66
+      },
+      "front": {
+        "periods": 462,
+        "hits": 282,
+        "hit_rate": 61.0,
+        "avg_n": 27.4,
+        "alpha": 5.08,
+        "net_pnl": 585,
+        "roi": 4.62
+      },
+      "back": {
+        "periods": 400,
+        "hits": 219,
+        "hit_rate": 54.8,
+        "avg_n": 26.8,
+        "alpha": 0.04,
+        "net_pnl": -430,
+        "roi": -4.01
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 851,
+        "hits": 490,
+        "hit_rate": 57.6,
+        "avg_n": 26.9,
+        "alpha": 2.73,
+        "net_pnl": 158,
+        "roi": 0.69
+      },
+      "front": {
+        "periods": 441,
+        "hits": 261,
+        "hit_rate": 59.2,
+        "avg_n": 27.0,
+        "alpha": 4.04,
+        "net_pnl": 351,
+        "roi": 2.95
+      },
+      "back": {
+        "periods": 410,
+        "hits": 229,
+        "hit_rate": 55.9,
+        "avg_n": 26.7,
+        "alpha": 1.32,
+        "net_pnl": -193,
+        "roi": -1.76
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 1115,
+        "hits": 457,
+        "hit_rate": 41.0,
+        "avg_n": 18.8,
+        "alpha": 2.7,
+        "net_pnl": 561,
+        "roi": 2.68
+      },
+      "front": {
+        "periods": 602,
+        "hits": 249,
+        "hit_rate": 41.4,
+        "avg_n": 18.9,
+        "alpha": 2.74,
+        "net_pnl": 309,
+        "roi": 2.71
+      },
+      "back": {
+        "periods": 513,
+        "hits": 208,
+        "hit_rate": 40.5,
+        "avg_n": 18.6,
+        "alpha": 2.66,
+        "net_pnl": 252,
+        "roi": 2.65
+      }
+    },
+    {
+      "dims": [
+        "stroke_type",
+        "season_type"
+      ],
+      "full": {
+        "periods": 1020,
+        "hits": 482,
+        "hit_rate": 47.3,
+        "avg_n": 22.0,
+        "alpha": 2.42,
+        "net_pnl": 246,
+        "roi": 1.1
+      },
+      "front": {
+        "periods": 498,
+        "hits": 216,
+        "hit_rate": 43.4,
+        "avg_n": 21.6,
+        "alpha": -0.68,
+        "net_pnl": -598,
+        "roi": -5.56
+      },
+      "back": {
+        "periods": 522,
+        "hits": 266,
+        "hit_rate": 51.0,
+        "avg_n": 22.3,
+        "alpha": 5.38,
+        "net_pnl": 844,
+        "roi": 7.24
+      }
+    },
+    {
+      "dims": [
+        "wave_color",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 868,
+        "hits": 431,
+        "hit_rate": 49.7,
+        "avg_n": 23.2,
+        "alpha": 2.36,
+        "net_pnl": 140,
+        "roi": 0.7
+      },
+      "front": {
+        "periods": 442,
+        "hits": 230,
+        "hit_rate": 52.0,
+        "avg_n": 23.8,
+        "alpha": 3.43,
+        "net_pnl": 283,
+        "roi": 2.69
+      },
+      "back": {
+        "periods": 426,
+        "hits": 201,
+        "hit_rate": 47.2,
+        "avg_n": 22.5,
+        "alpha": 1.24,
+        "net_pnl": -143,
+        "roi": -1.49
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 814,
+        "hits": 400,
+        "hit_rate": 49.1,
+        "avg_n": 22.9,
+        "alpha": 2.35,
+        "net_pnl": 137,
+        "roi": 0.73
+      },
+      "front": {
+        "periods": 413,
+        "hits": 201,
+        "hit_rate": 48.7,
+        "avg_n": 23.1,
+        "alpha": 1.6,
+        "net_pnl": -79,
+        "roi": -0.83
+      },
+      "back": {
+        "periods": 401,
+        "hits": 199,
+        "hit_rate": 49.6,
+        "avg_n": 22.8,
+        "alpha": 3.12,
+        "net_pnl": 216,
+        "roi": 2.36
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "stroke_type"
+      ],
+      "full": {
+        "periods": 918,
+        "hits": 528,
+        "hit_rate": 57.5,
+        "avg_n": 27.1,
+        "alpha": 2.16,
+        "net_pnl": -83,
+        "roi": -0.33
+      },
+      "front": {
+        "periods": 437,
+        "hits": 254,
+        "hit_rate": 58.1,
+        "avg_n": 27.4,
+        "alpha": 2.2,
+        "net_pnl": -36,
+        "roi": -0.3
+      },
+      "back": {
+        "periods": 481,
+        "hits": 274,
+        "hit_rate": 57.0,
+        "avg_n": 26.9,
+        "alpha": 2.13,
+        "net_pnl": -47,
+        "roi": -0.36
+      }
+    },
+    {
+      "dims": [
+        "sky_earth",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 843,
+        "hits": 478,
+        "hit_rate": 56.7,
+        "avg_n": 26.7,
+        "alpha": 2.14,
+        "net_pnl": -70,
+        "roi": -0.31
+      },
+      "front": {
+        "periods": 456,
+        "hits": 266,
+        "hit_rate": 58.3,
+        "avg_n": 26.8,
+        "alpha": 3.57,
+        "net_pnl": 265,
+        "roi": 2.17
+      },
+      "back": {
+        "periods": 387,
+        "hits": 212,
+        "hit_rate": 54.8,
+        "avg_n": 26.6,
+        "alpha": 0.47,
+        "net_pnl": -335,
+        "roi": -3.25
+      }
+    },
+    {
+      "dims": [
+        "sky_earth",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 828,
+        "hits": 407,
+        "hit_rate": 49.2,
+        "avg_n": 23.0,
+        "alpha": 2.13,
+        "net_pnl": 51,
+        "roi": 0.27
+      },
+      "front": {
+        "periods": 431,
+        "hits": 218,
+        "hit_rate": 50.6,
+        "avg_n": 23.5,
+        "alpha": 2.55,
+        "net_pnl": 102,
+        "roi": 1.01
+      },
+      "back": {
+        "periods": 397,
+        "hits": 189,
+        "hit_rate": 47.6,
+        "avg_n": 22.5,
+        "alpha": 1.68,
+        "net_pnl": -51,
+        "roi": -0.57
+      }
+    },
+    {
+      "dims": [
+        "season_type",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 956,
+        "hits": 350,
+        "hit_rate": 36.6,
+        "avg_n": 16.9,
+        "alpha": 2.12,
+        "net_pnl": 292,
+        "roi": 1.81
+      },
+      "front": {
+        "periods": 492,
+        "hits": 169,
+        "hit_rate": 34.3,
+        "avg_n": 17.0,
+        "alpha": -0.35,
+        "net_pnl": -423,
+        "roi": -5.06
+      },
+      "back": {
+        "periods": 464,
+        "hits": 181,
+        "hit_rate": 39.0,
+        "avg_n": 16.8,
+        "alpha": 4.74,
+        "net_pnl": 715,
+        "roi": 9.18
+      }
+    },
+    {
+      "dims": [
+        "sky_earth",
+        "season_type"
+      ],
+      "full": {
+        "periods": 929,
+        "hits": 416,
+        "hit_rate": 44.8,
+        "avg_n": 20.9,
+        "alpha": 2.08,
+        "net_pnl": 116,
+        "roi": 0.6
+      },
+      "front": {
+        "periods": 476,
+        "hits": 208,
+        "hit_rate": 43.7,
+        "avg_n": 21.5,
+        "alpha": -0.18,
+        "net_pnl": -459,
+        "roi": -4.48
+      },
+      "back": {
+        "periods": 453,
+        "hits": 208,
+        "hit_rate": 45.9,
+        "avg_n": 20.3,
+        "alpha": 4.46,
+        "net_pnl": 575,
+        "roi": 6.25
+      }
+    },
+    {
+      "dims": [
+        "edge_color",
+        "season_type"
+      ],
+      "full": {
+        "periods": 961,
+        "hits": 427,
+        "hit_rate": 44.4,
+        "avg_n": 20.8,
+        "alpha": 2.02,
+        "net_pnl": 98,
+        "roi": 0.49
+      },
+      "front": {
+        "periods": 502,
+        "hits": 232,
+        "hit_rate": 46.2,
+        "avg_n": 21.2,
+        "alpha": 2.89,
+        "net_pnl": 246,
+        "roi": 2.31
+      },
+      "back": {
+        "periods": 459,
+        "hits": 195,
+        "hit_rate": 42.5,
+        "avg_n": 20.3,
+        "alpha": 1.08,
+        "net_pnl": -148,
+        "roi": -1.59
+      }
+    },
+    {
+      "dims": [
+        "beauty_type",
+        "stroke_type"
+      ],
+      "full": {
+        "periods": 922,
+        "hits": 532,
+        "hit_rate": 57.7,
+        "avg_n": 27.3,
+        "alpha": 1.92,
+        "net_pnl": -198,
+        "roi": -0.79
+      },
+      "front": {
+        "periods": 411,
+        "hits": 229,
+        "hit_rate": 55.7,
+        "avg_n": 27.7,
+        "alpha": -0.77,
+        "net_pnl": -614,
+        "roi": -5.4
+      },
+      "back": {
+        "periods": 511,
+        "hits": 303,
+        "hit_rate": 59.3,
+        "avg_n": 27.1,
+        "alpha": 4.08,
+        "net_pnl": 416,
+        "roi": 3.01
+      }
+    },
+    {
+      "dims": [
+        "stroke_type",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 893,
+        "hits": 454,
+        "hit_rate": 50.8,
+        "avg_n": 24.0,
+        "alpha": 1.91,
+        "net_pnl": -72,
+        "roi": -0.34
+      },
+      "front": {
+        "periods": 421,
+        "hits": 212,
+        "hit_rate": 50.4,
+        "avg_n": 24.1,
+        "alpha": 1.14,
+        "net_pnl": -189,
+        "roi": -1.86
+      },
+      "back": {
+        "periods": 472,
+        "hits": 242,
+        "hit_rate": 51.3,
+        "avg_n": 23.8,
+        "alpha": 2.6,
+        "net_pnl": 117,
+        "roi": 1.04
+      }
+    },
+    {
+      "dims": [
+        "zodiac_seq",
+        "stroke_type"
+      ],
+      "full": {
+        "periods": 911,
+        "hits": 529,
+        "hit_rate": 58.1,
+        "avg_n": 27.5,
+        "alpha": 1.87,
+        "net_pnl": -225,
+        "roi": -0.9
+      },
+      "front": {
+        "periods": 443,
+        "hits": 260,
+        "hit_rate": 58.7,
+        "avg_n": 28.1,
+        "alpha": 1.37,
+        "net_pnl": -222,
+        "roi": -1.78
+      },
+      "back": {
+        "periods": 468,
+        "hits": 269,
+        "hit_rate": 57.5,
+        "avg_n": 27.0,
+        "alpha": 2.33,
+        "net_pnl": -3,
+        "roi": -0.02
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "wave_color"
+      ],
+      "full": {
+        "periods": 1126,
+        "hits": 367,
+        "hit_rate": 32.6,
+        "avg_n": 15.1,
+        "alpha": 1.85,
+        "net_pnl": 285,
+        "roi": 1.68
+      },
+      "front": {
+        "periods": 597,
+        "hits": 188,
+        "hit_rate": 31.5,
+        "avg_n": 15.3,
+        "alpha": 0.22,
+        "net_pnl": -312,
+        "roi": -3.41
+      },
+      "back": {
+        "periods": 529,
+        "hits": 179,
+        "hit_rate": 33.8,
+        "avg_n": 14.8,
+        "alpha": 3.68,
+        "net_pnl": 597,
+        "roi": 7.64
+      }
+    },
+    {
+      "dims": [
+        "beauty_type",
+        "season_type"
+      ],
+      "full": {
+        "periods": 970,
+        "hits": 427,
+        "hit_rate": 44.0,
+        "avg_n": 20.7,
+        "alpha": 1.85,
+        "net_pnl": 23,
+        "roi": 0.11
+      },
+      "front": {
+        "periods": 463,
+        "hits": 189,
+        "hit_rate": 40.8,
+        "avg_n": 20.3,
+        "alpha": -0.51,
+        "net_pnl": -494,
+        "roi": -5.27
+      },
+      "back": {
+        "periods": 507,
+        "hits": 238,
+        "hit_rate": 46.9,
+        "avg_n": 21.0,
+        "alpha": 4.0,
+        "net_pnl": 517,
+        "roi": 4.85
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "season_type"
+      ],
+      "full": {
+        "periods": 941,
+        "hits": 412,
+        "hit_rate": 43.8,
+        "avg_n": 20.6,
+        "alpha": 1.84,
+        "net_pnl": 23,
+        "roi": 0.12
+      },
+      "front": {
+        "periods": 472,
+        "hits": 198,
+        "hit_rate": 41.9,
+        "avg_n": 20.9,
+        "alpha": -0.67,
+        "net_pnl": -550,
+        "roi": -5.58
+      },
+      "back": {
+        "periods": 469,
+        "hits": 214,
+        "hit_rate": 45.6,
+        "avg_n": 20.2,
+        "alpha": 4.36,
+        "net_pnl": 573,
+        "roi": 6.04
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 1081,
+        "hits": 358,
+        "hit_rate": 33.1,
+        "avg_n": 15.3,
+        "alpha": 1.81,
+        "net_pnl": 243,
+        "roi": 1.47
+      },
+      "front": {
+        "periods": 569,
+        "hits": 182,
+        "hit_rate": 32.0,
+        "avg_n": 15.7,
+        "alpha": -0.1,
+        "net_pnl": -393,
+        "roi": -4.39
+      },
+      "back": {
+        "periods": 512,
+        "hits": 176,
+        "hit_rate": 34.4,
+        "avg_n": 14.9,
+        "alpha": 3.94,
+        "net_pnl": 636,
+        "roi": 8.33
+      }
+    },
+    {
+      "dims": [
+        "beauty_type",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 857,
+        "hits": 419,
+        "hit_rate": 48.9,
+        "avg_n": 23.1,
+        "alpha": 1.74,
+        "net_pnl": -109,
+        "roi": -0.55
+      },
+      "front": {
+        "periods": 398,
+        "hits": 184,
+        "hit_rate": 46.2,
+        "avg_n": 23.1,
+        "alpha": -0.93,
+        "net_pnl": -550,
+        "roi": -5.98
+      },
+      "back": {
+        "periods": 459,
+        "hits": 235,
+        "hit_rate": 51.2,
+        "avg_n": 23.1,
+        "alpha": 4.05,
+        "net_pnl": 441,
+        "roi": 4.16
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "stroke_type"
+      ],
+      "full": {
+        "periods": 1189,
+        "hits": 494,
+        "hit_rate": 41.5,
+        "avg_n": 19.5,
+        "alpha": 1.68,
+        "net_pnl": -12,
+        "roi": -0.05
+      },
+      "front": {
+        "periods": 604,
+        "hits": 235,
+        "hit_rate": 38.9,
+        "avg_n": 19.1,
+        "alpha": -0.17,
+        "net_pnl": -519,
+        "roi": -4.49
+      },
+      "back": {
+        "periods": 585,
+        "hits": 259,
+        "hit_rate": 44.3,
+        "avg_n": 19.9,
+        "alpha": 3.58,
+        "net_pnl": 507,
+        "roi": 4.35
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "season_type"
+      ],
+      "full": {
+        "periods": 1200,
+        "hits": 374,
+        "hit_rate": 31.2,
+        "avg_n": 14.5,
+        "alpha": 1.68,
+        "net_pnl": 237,
+        "roi": 1.37
+      },
+      "front": {
+        "periods": 625,
+        "hits": 185,
+        "hit_rate": 29.6,
+        "avg_n": 14.9,
+        "alpha": -0.82,
+        "net_pnl": -620,
+        "roi": -6.66
+      },
+      "back": {
+        "periods": 575,
+        "hits": 189,
+        "hit_rate": 32.9,
+        "avg_n": 14.0,
+        "alpha": 4.38,
+        "net_pnl": 857,
+        "roi": 10.68
+      }
+    },
+    {
+      "dims": [
+        "wave_color",
+        "he_sum"
+      ],
+      "full": {
+        "periods": 829,
+        "hits": 402,
+        "hit_rate": 48.5,
+        "avg_n": 22.9,
+        "alpha": 1.68,
+        "net_pnl": -121,
+        "roi": -0.64
+      },
+      "front": {
+        "periods": 420,
+        "hits": 201,
+        "hit_rate": 47.9,
+        "avg_n": 23.1,
+        "alpha": 0.68,
+        "net_pnl": -262,
+        "roi": -2.7
+      },
+      "back": {
+        "periods": 409,
+        "hits": 201,
+        "hit_rate": 49.1,
+        "avg_n": 22.8,
+        "alpha": 2.71,
+        "net_pnl": 141,
+        "roi": 1.52
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "zodiac_seq"
+      ],
+      "full": {
+        "periods": 822,
+        "hits": 467,
+        "hit_rate": 56.8,
+        "avg_n": 27.0,
+        "alpha": 1.63,
+        "net_pnl": -279,
+        "roi": -1.26
+      },
+      "front": {
+        "periods": 420,
+        "hits": 247,
+        "hit_rate": 58.8,
+        "avg_n": 27.6,
+        "alpha": 2.41,
+        "net_pnl": 1,
+        "roi": 0.01
+      },
+      "back": {
+        "periods": 402,
+        "hits": 220,
+        "hit_rate": 54.7,
+        "avg_n": 26.4,
+        "alpha": 0.81,
+        "net_pnl": -280,
+        "roi": -2.64
+      }
+    },
+    {
+      "dims": [
+        "wave_color",
+        "season_type"
+      ],
+      "full": {
+        "periods": 940,
+        "hits": 350,
+        "hit_rate": 37.2,
+        "avg_n": 17.5,
+        "alpha": 1.62,
+        "net_pnl": 46,
+        "roi": 0.28
+      },
+      "front": {
+        "periods": 473,
+        "hits": 167,
+        "hit_rate": 35.3,
+        "avg_n": 17.9,
+        "alpha": -1.27,
+        "net_pnl": -628,
+        "roi": -7.41
+      },
+      "back": {
+        "periods": 467,
+        "hits": 183,
+        "hit_rate": 39.2,
+        "avg_n": 17.0,
+        "alpha": 4.54,
+        "net_pnl": 674,
+        "roi": 8.5
+      }
+    },
+    {
+      "dims": [
+        "beauty_type",
+        "sky_earth"
+      ],
+      "full": {
+        "periods": 850,
+        "hits": 487,
+        "hit_rate": 57.3,
+        "avg_n": 27.3,
+        "alpha": 1.61,
+        "net_pnl": -303,
+        "roi": -1.31
+      },
+      "front": {
+        "periods": 424,
+        "hits": 239,
+        "hit_rate": 56.4,
+        "avg_n": 27.2,
+        "alpha": 0.9,
+        "net_pnl": -292,
+        "roi": -2.53
+      },
+      "back": {
+        "periods": 426,
+        "hits": 248,
+        "hit_rate": 58.2,
+        "avg_n": 27.4,
+        "alpha": 2.32,
+        "net_pnl": -11,
+        "roi": -0.09
+      }
+    },
+    {
+      "dims": [
+        "beauty_type",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 777,
+        "hits": 436,
+        "hit_rate": 56.1,
+        "avg_n": 26.7,
+        "alpha": 1.6,
+        "net_pnl": -261,
+        "roi": -1.26
+      },
+      "front": {
+        "periods": 388,
+        "hits": 221,
+        "hit_rate": 57.0,
+        "avg_n": 26.8,
+        "alpha": 2.19,
+        "net_pnl": -26,
+        "roi": -0.25
+      },
+      "back": {
+        "periods": 389,
+        "hits": 215,
+        "hit_rate": 55.3,
+        "avg_n": 26.6,
+        "alpha": 1.02,
+        "net_pnl": -235,
+        "roi": -2.27
+      }
+    }
+  ],
+  "passed": [
+    {
+      "dims": [
+        "edge_color",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 865,
+        "hits": 438,
+        "hit_rate": 50.6,
+        "avg_n": 23.1,
+        "alpha": 3.53,
+        "net_pnl": 621,
+        "roi": 3.11
+      },
+      "front": {
+        "periods": 448,
+        "hits": 238,
+        "hit_rate": 53.1,
+        "avg_n": 23.5,
+        "alpha": 5.14,
+        "net_pnl": 652,
+        "roi": 6.19
+      },
+      "back": {
+        "periods": 417,
+        "hits": 200,
+        "hit_rate": 48.0,
+        "avg_n": 22.6,
+        "alpha": 1.81,
+        "net_pnl": -31,
+        "roi": -0.33
+      }
+    },
+    {
+      "dims": [
+        "wave_color",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 806,
+        "hits": 340,
+        "hit_rate": 42.2,
+        "avg_n": 19.3,
+        "alpha": 2.79,
+        "net_pnl": 423,
+        "roi": 2.72
+      },
+      "front": {
+        "periods": 409,
+        "hits": 169,
+        "hit_rate": 41.3,
+        "avg_n": 19.7,
+        "alpha": 1.18,
+        "net_pnl": -102,
+        "roi": -1.27
+      },
+      "back": {
+        "periods": 397,
+        "hits": 171,
+        "hit_rate": 43.1,
+        "avg_n": 18.9,
+        "alpha": 4.46,
+        "net_pnl": 525,
+        "roi": 6.99
+      }
+    },
+    {
+      "dims": [
+        "stroke_type",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 948,
+        "hits": 556,
+        "hit_rate": 58.6,
+        "avg_n": 27.4,
+        "alpha": 2.78,
+        "net_pnl": 180,
+        "roi": 0.69
+      },
+      "front": {
+        "periods": 465,
+        "hits": 283,
+        "hit_rate": 60.9,
+        "avg_n": 27.7,
+        "alpha": 4.3,
+        "net_pnl": 414,
+        "roi": 3.21
+      },
+      "back": {
+        "periods": 483,
+        "hits": 273,
+        "hit_rate": 56.5,
+        "avg_n": 27.0,
+        "alpha": 1.32,
+        "net_pnl": -234,
+        "roi": -1.79
+      }
+    },
+    {
+      "dims": [
+        "zodiac_seq",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 862,
+        "hits": 501,
+        "hit_rate": 58.1,
+        "avg_n": 27.1,
+        "alpha": 2.74,
+        "net_pnl": 155,
+        "roi": 0.66
+      },
+      "front": {
+        "periods": 462,
+        "hits": 282,
+        "hit_rate": 61.0,
+        "avg_n": 27.4,
+        "alpha": 5.08,
+        "net_pnl": 585,
+        "roi": 4.62
+      },
+      "back": {
+        "periods": 400,
+        "hits": 219,
+        "hit_rate": 54.8,
+        "avg_n": 26.8,
+        "alpha": 0.04,
+        "net_pnl": -430,
+        "roi": -4.01
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 851,
+        "hits": 490,
+        "hit_rate": 57.6,
+        "avg_n": 26.9,
+        "alpha": 2.73,
+        "net_pnl": 158,
+        "roi": 0.69
+      },
+      "front": {
+        "periods": 441,
+        "hits": 261,
+        "hit_rate": 59.2,
+        "avg_n": 27.0,
+        "alpha": 4.04,
+        "net_pnl": 351,
+        "roi": 2.95
+      },
+      "back": {
+        "periods": 410,
+        "hits": 229,
+        "hit_rate": 55.9,
+        "avg_n": 26.7,
+        "alpha": 1.32,
+        "net_pnl": -193,
+        "roi": -1.76
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 1115,
+        "hits": 457,
+        "hit_rate": 41.0,
+        "avg_n": 18.8,
+        "alpha": 2.7,
+        "net_pnl": 561,
+        "roi": 2.68
+      },
+      "front": {
+        "periods": 602,
+        "hits": 249,
+        "hit_rate": 41.4,
+        "avg_n": 18.9,
+        "alpha": 2.74,
+        "net_pnl": 309,
+        "roi": 2.71
+      },
+      "back": {
+        "periods": 513,
+        "hits": 208,
+        "hit_rate": 40.5,
+        "avg_n": 18.6,
+        "alpha": 2.66,
+        "net_pnl": 252,
+        "roi": 2.65
+      }
+    },
+    {
+      "dims": [
+        "wave_color",
+        "edge_color"
+      ],
+      "full": {
+        "periods": 868,
+        "hits": 431,
+        "hit_rate": 49.7,
+        "avg_n": 23.2,
+        "alpha": 2.36,
+        "net_pnl": 140,
+        "roi": 0.7
+      },
+      "front": {
+        "periods": 442,
+        "hits": 230,
+        "hit_rate": 52.0,
+        "avg_n": 23.8,
+        "alpha": 3.43,
+        "net_pnl": 283,
+        "roi": 2.69
+      },
+      "back": {
+        "periods": 426,
+        "hits": 201,
+        "hit_rate": 47.2,
+        "avg_n": 22.5,
+        "alpha": 1.24,
+        "net_pnl": -143,
+        "roi": -1.49
+      }
+    },
+    {
+      "dims": [
+        "he_sum",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 814,
+        "hits": 400,
+        "hit_rate": 49.1,
+        "avg_n": 22.9,
+        "alpha": 2.35,
+        "net_pnl": 137,
+        "roi": 0.73
+      },
+      "front": {
+        "periods": 413,
+        "hits": 201,
+        "hit_rate": 48.7,
+        "avg_n": 23.1,
+        "alpha": 1.6,
+        "net_pnl": -79,
+        "roi": -0.83
+      },
+      "back": {
+        "periods": 401,
+        "hits": 199,
+        "hit_rate": 49.6,
+        "avg_n": 22.8,
+        "alpha": 3.12,
+        "net_pnl": 216,
+        "roi": 2.36
+      }
+    },
+    {
+      "dims": [
+        "sky_earth",
+        "zodiac_color_type"
+      ],
+      "full": {
+        "periods": 828,
+        "hits": 407,
+        "hit_rate": 49.2,
+        "avg_n": 23.0,
+        "alpha": 2.13,
+        "net_pnl": 51,
+        "roi": 0.27
+      },
+      "front": {
+        "periods": 431,
+        "hits": 218,
+        "hit_rate": 50.6,
+        "avg_n": 23.5,
+        "alpha": 2.55,
+        "net_pnl": 102,
+        "roi": 1.01
+      },
+      "back": {
+        "periods": 397,
+        "hits": 189,
+        "hit_rate": 47.6,
+        "avg_n": 22.5,
+        "alpha": 1.68,
+        "net_pnl": -51,
+        "roi": -0.57
+      }
+    },
+    {
+      "dims": [
+        "edge_color",
+        "season_type"
+      ],
+      "full": {
+        "periods": 961,
+        "hits": 427,
+        "hit_rate": 44.4,
+        "avg_n": 20.8,
+        "alpha": 2.02,
+        "net_pnl": 98,
+        "roi": 0.49
+      },
+      "front": {
+        "periods": 502,
+        "hits": 232,
+        "hit_rate": 46.2,
+        "avg_n": 21.2,
+        "alpha": 2.89,
+        "net_pnl": 246,
+        "roi": 2.31
+      },
+      "back": {
+        "periods": 459,
+        "hits": 195,
+        "hit_rate": 42.5,
+        "avg_n": 20.3,
+        "alpha": 1.08,
+        "net_pnl": -148,
+        "roi": -1.59
+      }
+    },
+    {
+      "dims": [
+        "five_element",
+        "wave_color"
+      ],
+      "full": {
+        "periods": 1126,
+        "hits": 367,
+        "hit_rate": 32.6,
+        "avg_n": 15.1,
+        "alpha": 1.85,
+        "net_pnl": 285,
+        "roi": 1.68
+      },
+      "front": {
+        "periods": 597,
+        "hits": 188,
+        "hit_rate": 31.5,
+        "avg_n": 15.3,
+        "alpha": 0.22,
+        "net_pnl": -312,
+        "roi": -3.41
+      },
+      "back": {
+        "periods": 529,
+        "hits": 179,
+        "hit_rate": 33.8,
+        "avg_n": 14.8,
+        "alpha": 3.68,
+        "net_pnl": 597,
+        "roi": 7.64
+      }
+    }
+  ]
+}
