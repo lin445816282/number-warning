@@ -3709,6 +3709,44 @@ def _consensus_health():
     else:
         status = "健康"
 
+    # 走坏监测：近1年/近2年滚动窗口（用户要求：用近1-2年数据判信号是否走坏，而非全历史）
+    from datetime import timedelta
+    latest_dt = datetime.strptime(rows[-1]["record_date"], "%Y-%m-%d")
+
+    def _roll(days):
+        if not daily:
+            return None
+        cutoff = (latest_dt - timedelta(days=days)).strftime("%Y-%m-%d")
+        sub = [(d, N, h) for d, N, h in daily if d >= cutoff]
+        if len(sub) < 5:
+            return None
+        n = len(sub)
+        hits = sum(1 for _, _, h in sub if h)
+        total_n = sum(N for _, N, _ in sub)
+        avg_n = total_n / n
+        pnl = sum((SCHEME_ODDS - N) if h else -N for _, N, h in sub)
+        return {
+            "days": days, "periods": n, "hits": hits,
+            "hit_rate": round(hits / n * 100, 1),
+            "avg_n": round(avg_n, 1),
+            "alpha": round((hits / n - avg_n / 49) * 100, 2),
+            "net_pnl": round(pnl, 1),
+            "roi": round(pnl / total_n * 100, 2) if total_n else 0.0,
+        }
+
+    rolling_1y = _roll(365)
+    rolling_2y = _roll(730)
+
+    # 走坏综合判定：月度连续负 + 近1/2年滚动窗口（近1年转负=立即失效预警，近2年转负=警惕）
+    r1y_bad = rolling_1y is not None and (rolling_1y["roi"] < 0 or rolling_1y["alpha"] < 0)
+    r2y_bad = rolling_2y is not None and (rolling_2y["roi"] < 0 or rolling_2y["alpha"] < 0)
+    if neg_streak >= 3 or r1y_bad:
+        status = "失效预警"
+    elif neg_streak >= 2 or r2y_bad:
+        status = "警惕"
+    else:
+        status = "健康"
+
     # 滚动 20 期超额（早期失效预警，比月度更及时；power 分析证明统计定论需3年，须靠软判断）
     W = 20
     recent_daily = daily[-W:]
@@ -3737,6 +3775,8 @@ def _consensus_health():
         "health_status": status,
         "rolling_alpha": rolling_alpha,
         "rolling_periods": rolling_periods,
+        "rolling_1y": rolling_1y,
+        "rolling_2y": rolling_2y,
         "capital": capital,
     }
 
