@@ -1,0 +1,7 @@
+{
+  "data_range": "2022-01-01~2026-09-14",
+  "total_periods": 1718,
+  "total_combos": 190,
+  "scipy": true,
+  "significant_q005": []
+}
