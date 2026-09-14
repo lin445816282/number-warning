@@ -319,6 +319,21 @@ CREATE TABLE IF NOT EXISTS random8_round (
   create_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_random8_round_no ON random8_round(round_no);
+CREATE TABLE IF NOT EXISTS fixed_order_round (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  round_no INTEGER,                 -- 轮次号（从1递增）
+  numbers_json TEXT DEFAULT '',     -- 随机8码（逗号分隔字符串）
+  start_date TEXT DEFAULT '',       -- 本轮开始日期
+  end_date TEXT DEFAULT '',         -- 结束日期（命中/止损/暂停解除日）
+  hit_period INTEGER DEFAULT 0,     -- 命中第几期(1~6)，0=未命中
+  hit_number INTEGER DEFAULT 0,     -- 命中号码
+  result TEXT DEFAULT '',           -- hit/stop/pause(暂停等待)
+  pause_len INTEGER DEFAULT 0,      -- 暂停等待期数（result=pause时）
+  total_invest REAL DEFAULT 0,      -- 累计投入（每号金额×8码×期数）
+  pnl REAL DEFAULT 0,               -- 盈亏（命中=47×该期每号金额-投入，止损=-投入）
+  create_time TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fixed_order_round_no ON fixed_order_round(round_no);
 """
 
 # 默认生肖映射（丙午马年 2026-02-17）
@@ -5296,6 +5311,163 @@ def random8_backtest(user=Header(None, alias="authorization")):
     """手动触发回测（重新落库）。"""
     require_admin(user)
     return _random8_backtest()
+
+
+# ============================================================
+# 十五·六、固定下单（随机8码，倍投10/10/10/20/20/20，6期周期，6期未中暂停等开出再继续）
+# ============================================================
+FIXED_SEED = 42          # 随机种子（固定，保证可复现）
+FIXED_K = 6              # 跟踪期数
+FIXED_N = 8              # 选号数
+FIXED_ODDS = 47          # 命中赔率
+FIXED_BET_PLAN = [10, 10, 10, 20, 20, 20]   # 每期每号下注金额
+FIXED_START_DATE = "2022-01-01"  # 回测起始日期
+
+
+def _fixed_order_picks(round_no, seed=FIXED_SEED):
+    """按轮次号生成确定性随机8码（可复现）。"""
+    r = random.Random(seed * 100000 + round_no)
+    return sorted(r.sample(range(1, 50), FIXED_N))
+
+
+def _fixed_order_backtest(seed=FIXED_SEED, start_date=FIXED_START_DATE):
+    """固定下单回测：随机8码，6期周期，倍投 10/10/10/20/20/20。
+
+    命中（6期内8码开出1个）→ 下一轮重新随机8码；
+    6期未中 → 止损，暂停等待这8码里开出1个 → 下一轮重新随机。
+    落库 fixed_order_round，返回汇总 + 最新一轮 + 下一轮预告。
+    """
+    dates, nums = _random8_load_draws()
+    if not dates:
+        return {"rounds": 0, "hits": 0, "stops": 0, "pauses": 0, "hit_rate": 0, "total_pnl": 0,
+                "avg_pnl": 0, "hit_dist": {}, "profit_rounds": 0, "loss_rounds": 0,
+                "detail": [], "latest": None, "next": None}
+    start_idx = 0
+    for i, d in enumerate(dates):
+        if d >= start_date:
+            start_idx = i
+            break
+    dates = dates[start_idx:]
+    nums = nums[start_idx:]
+    N = len(nums)
+
+    rounds = []
+    i = 0
+    round_no = 0
+    state = "NEW"   # NEW / TRACKING / PAUSED
+    picks = []
+    picks_set = set()
+    held = 0
+    invest = 0
+    start = None
+    last_stop_end = None
+    pause_count = 0
+
+    while i < N:
+        if state == "NEW":
+            round_no += 1
+            picks = _fixed_order_picks(round_no, seed)
+            picks_set = set(picks)
+            held = 0
+            invest = 0
+            start = dates[i]
+            state = "TRACKING"
+
+        if state == "TRACKING":
+            held += 1
+            bet = FIXED_BET_PLAN[held - 1]
+            invest += FIXED_N * bet
+            actual = nums[i]
+            if actual in picks_set:
+                pnl = FIXED_ODDS * bet - invest
+                rounds.append({"round": round_no, "start": start, "end": dates[i],
+                               "picks": picks, "hit_period": held, "hit_number": actual,
+                               "result": "hit", "invest": invest, "pnl": pnl})
+                state = "NEW"
+            elif held >= FIXED_K:
+                pnl = -invest
+                last_stop_end = dates[i]
+                rounds.append({"round": round_no, "start": start, "end": dates[i],
+                               "picks": picks, "hit_period": 0, "hit_number": 0,
+                               "result": "stop", "invest": invest, "pnl": pnl})
+                state = "PAUSED"
+                pause_count = 0
+            i += 1
+            continue
+
+        if state == "PAUSED":
+            pause_count += 1
+            if nums[i] in picks_set:
+                rounds.append({"round": round_no, "start": last_stop_end, "end": dates[i],
+                               "picks": picks, "hit_period": 0, "hit_number": nums[i],
+                               "result": "pause", "invest": 0, "pnl": 0,
+                               "pause_len": pause_count})
+                state = "NEW"
+            i += 1
+            continue
+
+    # 落库
+    db = get_db()
+    db.execute("DELETE FROM fixed_order_round")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for r in rounds:
+        db.execute(
+            "INSERT INTO fixed_order_round (round_no, numbers_json, start_date, end_date, hit_period, hit_number, result, pause_len, total_invest, pnl, create_time) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (r["round"], ",".join(f"{n:02d}" for n in r["picks"]), r["start"], r["end"],
+             r["hit_period"], r["hit_number"], r["result"], r.get("pause_len", 0),
+             r["invest"], r["pnl"], now))
+    db.commit()
+    db.close()
+
+    # 汇总
+    total = sum(r["pnl"] for r in rounds)
+    hits = sum(1 for r in rounds if r["result"] == "hit")
+    stops = sum(1 for r in rounds if r["result"] == "stop")
+    pauses = sum(1 for r in rounds if r["result"] == "pause")
+    from collections import Counter
+    hit_dist = Counter(r["hit_period"] for r in rounds if r["hit_period"] > 0)
+    profit_rounds = sum(1 for r in rounds if r["pnl"] > 0)
+    loss_rounds = sum(1 for r in rounds if r["pnl"] <= 0)
+    done = [r for r in rounds if r["result"] in ("hit", "stop")]
+    latest = rounds[-1] if rounds else None
+    nxt = None
+    if latest:
+        if latest["result"] == "hit":
+            nxt = {"type": "new_round", "round": round_no + 1,
+                   "picks": _fixed_order_picks(round_no + 1, seed),
+                   "note": "上一轮命中，下一轮重新随机8码"}
+        elif latest["result"] == "stop":
+            nxt = {"type": "pause", "round": round_no, "picks": latest["picks"],
+                   "note": "6期未中已止损，暂停等待这8码开出1个再继续"}
+        else:
+            nxt = {"type": "pause", "round": round_no, "picks": latest["picks"],
+                   "note": "暂停中，等待8码开出"}
+    return {
+        "seed": seed, "K": FIXED_K, "N": FIXED_N, "odds": FIXED_ODDS,
+        "bet_plan": FIXED_BET_PLAN,
+        "date_range": f"{dates[0]} ~ {dates[-1]}", "total_days": N,
+        "rounds": len(rounds), "hits": hits, "stops": stops, "pauses": pauses,
+        "hit_rate": round(hits / len(done) * 100, 2) if done else 0,
+        "total_pnl": round(total, 2),
+        "avg_pnl": round(total / len(done), 2) if done else 0,
+        "hit_dist": dict(sorted(hit_dist.items())),
+        "profit_rounds": profit_rounds, "loss_rounds": loss_rounds,
+        "detail": rounds, "latest": latest, "next": nxt,
+    }
+
+
+@app.get("/api/fixed-order/overview")
+def fixed_order_overview(user=Header(None, alias="authorization")):
+    """固定下单 总览：回测汇总 + 最新一轮 + 下一轮预告。"""
+    require_user(user)
+    return _fixed_order_backtest()
+
+
+@app.post("/api/fixed-order/backtest")
+def fixed_order_backtest(user=Header(None, alias="authorization")):
+    """手动触发固定下单回测（重新落库）。"""
+    require_admin(user)
+    return _fixed_order_backtest()
 
 
 # ============================================================

@@ -304,6 +304,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='zodiac'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='zodiac';loadZodiacTrack()">肖跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling();loadGeneralize()">自主跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='random8'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='random8';loadRandom8()">8码6期</button>
+          <button class="btn btn-sm" :style="dimTab==='fixedorder'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='fixedorder';loadFixedOrder()">固定下单</button>
         </div>
 
         <!-- tab1: 标签最高排位 -->
@@ -1577,6 +1578,61 @@ table.data tr.warn td{background:var(--warnbg)}
             </div>
           </template>
 
+          <!-- tab: 固定下单 -->
+          <template v-if="dimTab==='fixedorder'">
+            <!-- 是否可下期卡片 -->
+            <div class="card" v-if="fixedOrder.next" style="border:2px solid" :style="fixedOrder.next.type==='new_round' ? 'border-color:#16a34a;background:linear-gradient(135deg,#f0fdf4,#ffffff)' : 'border-color:#f59e0b;background:linear-gradient(135deg,#fffbeb,#ffffff)'">
+              <div class="card-title" style="font-size:16px;font-weight:800">
+                {{ fixedOrder.next.type==='new_round' ? '✅ 可下期 · 重新随机8码' : '⏸ 暂停中 · 等待8码开出1个' }}
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">{{ fixedOrder.next.note }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span v-for="n in fixedOrder.next.picks" :key="n" style="background:#fff;border:2px solid #16a34a;color:#15803d;border-radius:8px;padding:6px 10px;font-size:16px;font-weight:800;font-family:Roboto Mono,monospace">{{ pad(n) }}</span>
+              </div>
+            </div>
+
+            <!-- 回测汇总 -->
+            <div class="card" v-if="fixedOrder.ready">
+              <div class="card-title">📊 回测汇总 · 固定下单·随机8码·6期倍投（{{ fixedOrder.date_range }}，共 {{ fixedOrder.total_days }} 天）</div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">倍投方案：<span v-for="(b,i) in fixedOrder.bet_plan" :key="i" class="tag" style="font-family:Roboto Mono,monospace">{{ b }}</span></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ fixedOrder.rounds }}</div><div class="tracking-stat-label">总轮数</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ok)">{{ fixedOrder.hit_rate }}%</div><div class="tracking-stat-label">命中率</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" :style="fixedOrder.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ fixedOrder.total_pnl>=0?'+':'' }}{{ fixedOrder.total_pnl }}</div><div class="tracking-stat-label">总盈亏（元）</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value">{{ fixedOrder.hits }} / {{ fixedOrder.stops }}</div><div class="tracking-stat-label">命中 / 止损</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ink2)">{{ fixedOrder.pauses }}</div><div class="tracking-stat-label">暂停次数</div></div>
+                <div class="tracking-stat"><div class="tracking-stat-value" style="color:var(--ink2)">{{ fixedOrder.avg_pnl }}</div><div class="tracking-stat-label">平均每轮</div></div>
+              </div>
+              <div style="font-size:12px;color:var(--ink2);margin-top:10px">
+                <div>🎯 命中分布（第几期开）：<span v-for="(cnt, k) in fixedOrder.hit_dist" :key="k" style="margin-right:10px">第{{ k }}期 <b>{{ cnt }}</b> 次</span></div>
+                <div style="margin-top:6px">⚠️ 倍投不改变负期望：总盈亏 <b :style="fixedOrder.total_pnl>=0?'color:var(--ok)':'color:var(--warn)'">{{ fixedOrder.total_pnl }}</b> 元（47赔率 &lt; 49号码，结构性 −4%）。</div>
+              </div>
+            </div>
+
+            <!-- 历史轮次表 -->
+            <div class="card" v-if="fixedOrder.detail && fixedOrder.detail.length">
+              <div class="card-title">📜 历史轮次（最近 {{ Math.min(fixedOrder.detail.length, 80) }} 轮）</div>
+              <div class="table-scroll" style="max-height:500px">
+                <table class="data">
+                  <thead><tr><th>轮次</th><th>开始</th><th>结束</th><th>8码</th><th>结果</th><th>投入</th><th>盈亏</th></tr></thead>
+                  <tbody>
+                    <tr v-for="r in fixedOrder.detail.slice().reverse().slice(0, 80)" :key="r.round+'-'+r.result+'-'+r.start">
+                      <td><b>{{ r.round }}</b></td>
+                      <td style="font-family:Roboto Mono,monospace">{{ r.start }}</td>
+                      <td style="font-family:Roboto Mono,monospace">{{ r.end }}</td>
+                      <td style="white-space:normal;line-height:1.7"><span v-for="n in r.picks" :key="n" class="tag" style="font-family:Roboto Mono,monospace;font-size:11px" :style="r.hit_number===n?'background:#dcfce7;color:#166534;border:1px solid #86efac':'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0'">{{ pad(n) }}</span></td>
+                      <td :style="r.result==='hit'?'color:var(--ok);font-weight:700':r.result==='pause'?'color:#d97706;font-weight:700':'color:#dc2626;font-weight:700'">
+                        {{ r.result==='hit' ? '第'+r.hit_period+'期开('+pad(r.hit_number)+')' : r.result==='pause' ? '暂停等'+r.pause_len+'期('+pad(r.hit_number)+')' : '6期未开止损' }}
+                      </td>
+                      <td style="font-family:Roboto Mono,monospace">{{ r.invest }}</td>
+                      <td :style="r.pnl>0?'color:var(--ok);font-weight:700':r.pnl<0?'color:#dc2626;font-weight:700':'color:var(--ink2)'">{{ r.pnl>0?'+':'' }}{{ r.pnl }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
           <!-- tab: 自主跟踪 -->
           <template v-if="dimTab==='autotrack'">
             <!-- 🔬 样本外验证（真实用户模拟下单） -->
@@ -2778,12 +2834,20 @@ createApp({
     }
     // ====== 随机8码·6期跟踪 ======
     const random8 = ref({ ready: false, rounds: 0, hits: 0, stops: 0, ongoing: 0, hit_rate: 0, total_pnl: 0, avg_pnl: 0, hit_dist: {}, profit_rounds: 0, loss_rounds: 0, detail: [], latest: null, next: null, date_range: '', total_days: 0 });
+    const fixedOrder = ref({ ready: false, rounds: 0, hits: 0, stops: 0, pauses: 0, hit_rate: 0, total_pnl: 0, avg_pnl: 0, hit_dist: {}, profit_rounds: 0, loss_rounds: 0, detail: [], latest: null, next: null, date_range: '', total_days: 0, bet_plan: [] });
     async function loadRandom8() {
       try {
         const r = await api('GET', '/api/random8/overview');
         r.ready = true;
         random8.value = r;
       } catch (e) { random8.value = { ready: false, rounds: 0, hits: 0, stops: 0, ongoing: 0, hit_rate: 0, total_pnl: 0, avg_pnl: 0, hit_dist: {}, profit_rounds: 0, loss_rounds: 0, detail: [], latest: null, next: null, date_range: '', total_days: 0 }; }
+    }
+    async function loadFixedOrder() {
+      try {
+        const r = await api('GET', '/api/fixed-order/overview');
+        r.ready = true;
+        fixedOrder.value = r;
+      } catch (e) { fixedOrder.value = { ready: false, rounds: 0, hits: 0, stops: 0, pauses: 0, hit_rate: 0, total_pnl: 0, avg_pnl: 0, hit_dist: {}, profit_rounds: 0, loss_rounds: 0, detail: [], latest: null, next: null, date_range: '', total_days: 0, bet_plan: [] }; }
     }
     function fwdOf(dim) {
       const w = dimForward.value.watch || [];
@@ -3013,7 +3077,7 @@ createApp({
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
-      random8, loadRandom8,
+      random8, loadRandom8, fixedOrder, loadFixedOrder,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
