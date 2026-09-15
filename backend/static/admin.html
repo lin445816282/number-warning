@@ -2028,6 +2028,43 @@ table.data tr.warn td{background:var(--warnbg)}
         </div>
       </template>
 
+      <template v-if="cur==='/predictsite'">
+        <div class="topbar"><h2>预测采集 · 4家预测数据来源</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <div class="card-title">🌐 采集站点配置
+            <button class="btn btn-sm" @click="fetchAllSites" style="float:right;padding:4px 12px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:8px">⚡ 一键采集全部</button>
+          </div>
+          <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">每行一个预测网站，配置网址+定时采集时间（HH:MM）后点「保存」；点「一键采集」立即抓取并入库到多组汇总。</div>
+          <div v-for="s in predictSites" :key="s.site_key" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
+            <span style="font-weight:700;min-width:70px">{{ s.site_name }}<span style="color:#b8b0a0;font-weight:400;font-size:11px">({{ s.family }})</span></span>
+            <input v-model="s.url" placeholder="采集网址 https://..." style="flex:1;min-width:240px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <span style="font-size:12px;color:var(--ink2)">⏰</span>
+            <input v-model="s.fetch_time" placeholder="21:00" style="width:70px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" v-model="s.enabled">启用</label>
+            <button class="btn btn-sm" @click="savePredictSite(s)" style="padding:6px 14px;background:#f3efe5;border:1px solid var(--line);border-radius:8px;font-size:12px">保存</button>
+            <button class="btn btn-sm" @click="fetchSite(s.site_key)" style="padding:6px 14px;background:var(--warn);color:#fff;border:none;border-radius:8px;font-size:12px">一键采集</button>
+            <span style="font-size:11px;color:#b8b0a0" v-if="s.last_fetch_time">{{ s.last_status==='ok'?'✅':'❌' }} {{ s.last_fetch_time }}</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📜 采集日志 <button class="btn btn-sm" @click="loadFetchLogs()" style="float:right;font-size:12px">🔄 刷新</button></div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr><th>时间</th><th>站点</th><th>状态</th><th>详情</th></tr></thead>
+              <tbody>
+                <tr v-for="l in fetchLogs" :key="l.id">
+                  <td style="font-family:'Roboto Mono',monospace">{{ l.fetch_time }}</td>
+                  <td>{{ l.site_name }}</td>
+                  <td><span :style="l.status==='ok'?'color:var(--ok)':'color:var(--warn)'">{{ l.status==='ok'?'成功':'失败' }}</span></td>
+                  <td style="white-space:normal">{{ l.detail || l.error_msg }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!fetchLogs.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无采集日志</div>
+        </div>
+      </template>
+
       <template v-if="cur==='/signaltrack'">
         <div class="topbar"><h2>预警信号跟踪（触发 → 后续开出）</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card">
@@ -2583,6 +2620,43 @@ createApp({
     }
     function loadMultiGroupPage(){ loadMultiGroupMeta(); loadMultiGroup(); loadMultiGroupHit(); }
 
+    // ====== 预测采集（4家预测数据来源）======
+    const predictSites = ref([]);
+    const fetchLogs = ref([]);
+    const fetchLogTotal = ref(0);
+    const fetchLogPage = ref(1);
+    async function loadPredictSites(){
+      try {
+        const d = await api('GET', '/api/predictSite/config');
+        predictSites.value = (d.sites || []).map(s => ({ ...s, enabled: !!s.enabled }));
+      } catch(e){}
+    }
+    async function savePredictSite(s){
+      try { await api('POST', '/api/predictSite/save', s); toast('已保存，定时已更新'); loadPredictSites(); } catch(e){ toast(e.message); }
+    }
+    async function fetchSite(siteKey){
+      try {
+        const r = await api('POST', '/api/predictSite/fetch', { site_key: siteKey });
+        toast(r.status === 'ok' ? r.detail : r.error);
+        loadPredictSites(); loadFetchLogs();
+      } catch(e){ toast(e.message); }
+    }
+    async function fetchAllSites(){
+      try {
+        const r = await api('POST', '/api/predictSite/fetchAll');
+        toast('采集完成：成功 ' + r.ok + ' / ' + r.total);
+        loadPredictSites(); loadFetchLogs();
+      } catch(e){ toast(e.message); }
+    }
+    async function loadFetchLogs(){
+      try {
+        const d = await api('GET', '/api/predictSite/logs?page=' + fetchLogPage.value);
+        fetchLogs.value = d.rows || [];
+        fetchLogTotal.value = d.total || 0;
+      } catch(e){}
+    }
+    function loadPredictSitePage(){ loadPredictSites(); loadFetchLogs(); }
+
     function routeLoad(){
       if (cur.value === '/dashboard') loadDash();
       else if (cur.value === '/records') loadRecords();
@@ -2590,6 +2664,7 @@ createApp({
       else if (cur.value === '/history') loadHistory();
       else if (cur.value === '/dimstats') loadDimStats();
       else if (cur.value === '/multigroup') loadMultiGroupPage();
+      else if (cur.value === '/predictsite') loadPredictSitePage();
       else if (cur.value === '/signaltrack') loadSignalTrack();
       else if (cur.value === '/config') loadConfig();
       else if (cur.value === '/users') loadUsers();
@@ -3201,6 +3276,7 @@ createApp({
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       random8, loadRandom8, fixedOrder, loadFixedOrder,
       mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage,
+      predictSites, fetchLogs, fetchLogTotal, fetchLogPage, loadPredictSites, savePredictSite, fetchSite, fetchAllSites, loadFetchLogs,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

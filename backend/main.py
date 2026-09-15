@@ -3,12 +3,14 @@
 import os
 import json
 import re
+import ssl
 import hmac
 import hashlib
 import base64
 import sqlite3
 import time
 import random
+import urllib.request
 from datetime import datetime, date
 from typing import Optional
 
@@ -335,6 +337,30 @@ CREATE TABLE IF NOT EXISTS fixed_order_round (
   create_time TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_fixed_order_round_no ON fixed_order_round(round_no);
+CREATE TABLE IF NOT EXISTS predict_site_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_key TEXT UNIQUE NOT NULL,      -- 唯一标识 gui/dajia/zhuge/haoyun
+  site_name TEXT DEFAULT '',          -- 网站名 鬼谷/大家/诸葛/好运
+  family TEXT DEFAULT '',             -- 对应多组汇总的家：鬼/大家/诸葛/好运
+  url TEXT DEFAULT '',                -- 采集网址
+  parser_type TEXT DEFAULT 'auto',    -- 解析类型 auto/html/iframe
+  enabled INTEGER DEFAULT 1,          -- 是否启用采集
+  fetch_time TEXT DEFAULT '21:00',    -- 定时采集时间 HH:MM（空=不定时）
+  last_fetch_time TEXT DEFAULT '',    -- 上次采集时间
+  last_status TEXT DEFAULT '',        -- success/fail
+  last_result TEXT DEFAULT '',        -- 上次采集结果摘要
+  create_time TEXT,
+  update_time TEXT
+);
+CREATE TABLE IF NOT EXISTS predict_fetch_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_key TEXT DEFAULT '',
+  site_name TEXT DEFAULT '',
+  fetch_time TEXT DEFAULT '',
+  status TEXT DEFAULT '',             -- success/fail
+  detail TEXT DEFAULT '',             -- 结果摘要
+  error_msg TEXT DEFAULT ''
+);
 """
 
 # 默认生肖映射（丙午马年 2026-02-17）
@@ -426,6 +452,7 @@ MENUS = [
     (7, 0, "用户管理", 1, "/users", "user:view", 7),
     (8, 0, "角色权限", 1, "/roles", "role:view", 8),
     (9, 0, "信号跟踪", 1, "/signaltrack", "signal:view", 9),
+    (11, 0, "预测采集", 1, "/predictsite", "predictsite:view", 11),
 ]
 
 def _sha256(pwd):
@@ -512,6 +539,17 @@ def init_db():
                ("engine_min_per", "10", "投入引擎最少单号金额(元)，低于则不再扩信号"))
     db.execute("INSERT OR IGNORE INTO sys_config (config_key, config_value, remark) VALUES (?,?,?)",
                ("engine_hit_floor", "70", "投入引擎命中率红线(%)，低于此维度的信号不投"))
+
+    # 采集站点配置（4家预测数据来源，网址待页面配置）
+    predict_sites = [
+        ("gui", "鬼谷", "鬼"),
+        ("dajia", "大家", "大家"),
+        ("zhuge", "诸葛", "诸葛"),
+        ("haoyun", "好运", "好运"),
+    ]
+    for sk, sn, fam in predict_sites:
+        db.execute("INSERT OR IGNORE INTO predict_site_config (site_key, site_name, family, enabled, fetch_time, create_time) VALUES (?,?,?,1,'21:00',?)",
+                   (sk, sn, fam, now))
 
     # 生肖周期配置：辛丑牛年(2021) / 壬寅虎年(2022) / 癸卯兔年(2023) / 甲辰龙年(2024) / 乙巳蛇年(2025) / 丙午马年(2026)
     ox_map = _build_zodiac_mapping(_ZODIAC_SEQ[5:] + _ZODIAC_SEQ[:5])      # 牛年：1号=牛
@@ -5806,6 +5844,282 @@ def multi_group_hit_rate(user=Header(None, alias="authorization")):
         result.append({"family": fam, "cols": cols})
     db.close()
     return {"families": result, "matched_periods": matched_periods}
+
+
+# ============================================================
+# 十八、预测数据采集器（一键采集 + 定时采集）
+# ============================================================
+
+_FETCH_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0'
+
+
+def _http_get(url, timeout=20):
+    """urllib GET，禁用 SSL 验证（预测站用自签证书）。返回 (text, final_url)。"""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    req = urllib.request.Request(url, headers={'User-Agent': _FETCH_UA})
+    resp = urllib.request.urlopen(req, timeout=timeout, context=ctx)
+    raw = resp.read()
+    final_url = resp.geturl()
+    head = raw[:2000].decode('utf-8', errors='ignore').lower()
+    m = re.search(r'charset=["\']?([\w-]+)', head)
+    enc = m.group(1) if m else 'utf-8'
+    try:
+        return raw.decode(enc, errors='replace'), final_url
+    except Exception:
+        return raw.decode('utf-8', errors='replace'), final_url
+
+
+def _follow_refresh(html, base_url):
+    """提取 meta refresh 跳转 URL，返回绝对 URL 或 None。"""
+    m = re.search(r'url\s*=\s*["\']?([^"\'\s>]+)', html, re.I)
+    if not m:
+        return None
+    target = m.group(1).strip().strip('"\'')
+    if target.startswith('http'):
+        return target
+    from urllib.parse import urljoin
+    return urljoin(base_url, target)
+
+
+def _extract_iframe(html):
+    """提取 iframe src（含 document.writeln 里的转义 iframe）。"""
+    m = re.search(r'<iframe[^>]+src=["\']([^"\']+)["\']', html, re.I)
+    if m:
+        return m.group(1)
+    m2 = re.search(r'src=\\\\?["\']([^"\'\\\\]+)\\\\?["\']', html)
+    if m2:
+        return m2.group(1)
+    return None
+
+
+def _html_to_text(html):
+    text = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL | re.I)
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.I)
+    text = re.sub(r'<[^>]+>', '\n', text)
+    text = re.sub(r'\n\s*\n', '\n', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    return text.strip()
+
+
+def _fetch_site_html(url, max_hops=3):
+    """采集流程：GET → 跟随 meta refresh（最多3跳）→ 提取 iframe → 返回最终 HTML。"""
+    from urllib.parse import urljoin
+    cur = url
+    html = ''
+    for _ in range(max_hops):
+        text, final = _http_get(cur)
+        html = text
+        nxt = _follow_refresh(text, final)
+        if nxt and nxt != cur:
+            cur = nxt
+            continue
+        break
+    iframe = _extract_iframe(html)
+    if iframe:
+        try:
+            itext, _ = _http_get(urljoin(cur, iframe))
+            html = itext
+        except Exception:
+            pass
+    return html
+
+
+# ── 站点解析器注册表：site_key → 函数(html_text) → {draw_date, period, field: value} ──
+# 精确解析逻辑待网站网址确认后填充（每个站一个 parser）
+SITE_PARSERS = {}
+
+
+def _parse_site_predict(site_key, html_text):
+    """调用站点解析器提取预测数据。返回 {draw_date, period, field: value} 或 None。"""
+    parser = SITE_PARSERS.get(site_key)
+    if not parser:
+        return None
+    return parser(html_text)
+
+
+def _save_multi_group(db, data):
+    """data = {draw_date, period, field: value, ...} 写入 multi_group_summary。"""
+    draw_date = data.get("draw_date")
+    period = data.get("period", "")
+    if not draw_date:
+        return {"status": "fail", "error": "解析结果缺 draw_date"}
+    fields = [f for f, _, _, _, _ in MULTI_GROUP_COLS if f in data and str(data[f]).strip() != ""]
+    if not fields:
+        return {"status": "fail", "error": "解析结果无有效预测字段"}
+    cols = ", ".join(fields)
+    ph = ",".join("?" * len(fields))
+    db.execute(
+        f"INSERT OR REPLACE INTO multi_group_summary (draw_date, period, {cols}) VALUES (?, ?, {ph})",
+        [draw_date, period] + [data[f] for f in fields],
+    )
+    db.commit()
+    return {"status": "ok", "period": period, "fields": len(fields)}
+
+
+def _log_fetch(db, site_key, site_name, status, detail, error=""):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT INTO predict_fetch_log (site_key, site_name, fetch_time, status, detail, error_msg) VALUES (?,?,?,?,?,?)",
+               (site_key, site_name, now, status, detail, error))
+    db.execute("UPDATE predict_site_config SET last_fetch_time=?, last_status=?, last_result=? WHERE site_key=?",
+               (now, status, (detail or error)[:200], site_key))
+    db.commit()
+
+
+def fetch_site(site_key):
+    """一键采集：读配置 → 采集 → parser → 入库 → 记日志。"""
+    db = get_db()
+    cfg = db.execute("SELECT * FROM predict_site_config WHERE site_key=?", (site_key,)).fetchone()
+    if not cfg:
+        db.close()
+        return {"status": "fail", "site_key": site_key, "error": f"站点 {site_key} 未配置"}
+    if not (cfg["url"] or "").strip():
+        _log_fetch(db, site_key, cfg["site_name"], "fail", "", f"{cfg['site_name']} 网址未配置")
+        db.close()
+        return {"status": "fail", "site_key": site_key, "error": f"{cfg['site_name']} 网址未配置"}
+    try:
+        html = _fetch_site_html(cfg["url"].strip())
+        if not html or len(html.strip()) < 50:
+            raise ValueError("采集内容为空或过短")
+        data = _parse_site_predict(site_key, html)
+        if not data:
+            _log_fetch(db, site_key, cfg["site_name"], "fail", "", "解析器待实现（请先配置网址+解析规则）")
+            db.close()
+            return {"status": "fail", "site_key": site_key, "error": "解析器待实现（请先提供网址，我来补解析规则）"}
+        r = _save_multi_group(db, data)
+        detail = f"入库成功 期数={r.get('period')} 字段={r.get('fields')}"
+        _log_fetch(db, site_key, cfg["site_name"], r["status"], detail, r.get("error", ""))
+        db.close()
+        return {"status": r["status"], "site_key": site_key, "detail": detail, "error": r.get("error", "")}
+    except Exception as e:
+        _log_fetch(db, site_key, cfg["site_name"], "fail", "", str(e))
+        db.close()
+        return {"status": "fail", "site_key": site_key, "error": f"{type(e).__name__}: {e}"}
+
+
+# ── 定时采集（apscheduler，随 main.py 启动）──
+_scheduler = None
+
+
+def _scheduled_fetch(site_keys):
+    """定时批量采集。"""
+    for sk in site_keys:
+        try:
+            fetch_site(sk)
+        except Exception:
+            pass
+
+
+def reload_scheduler():
+    """按 predict_site_config 的 enabled+fetch_time 重建定时任务。"""
+    global _scheduler
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from zoneinfo import ZoneInfo
+        _tz = ZoneInfo("Asia/Shanghai")
+    except Exception:
+        return {"ok": False, "msg": "apscheduler/zoneinfo 不可用，定时采集禁用（一键采集仍可用）"}
+    if _scheduler:
+        try:
+            _scheduler.shutdown(wait=False)
+        except Exception:
+            pass
+    db = get_db()
+    sites = db.execute("SELECT site_key, fetch_time FROM predict_site_config WHERE enabled=1").fetchall()
+    db.close()
+    _scheduler = BackgroundScheduler(timezone=_tz)
+    time_sites = {}
+    for s in sites:
+        ft = (s["fetch_time"] or "").strip()
+        if re.match(r'^\d{1,2}:\d{2}$', ft):
+            time_sites.setdefault(ft, []).append(s["site_key"])
+    for ft, keys in time_sites.items():
+        hh, mm = ft.split(":")
+        try:
+            _scheduler.add_job(lambda ks=list(keys): _scheduled_fetch(ks), 'cron',
+                               hour=int(hh), minute=int(mm), id=f"pf_{ft.replace(':', '')}", replace_existing=True)
+        except Exception:
+            pass
+    _scheduler.start()
+    return {"ok": True, "jobs": len(time_sites), "times": sorted(time_sites.keys())}
+
+
+@app.on_event("startup")
+def _startup_scheduler():
+    reload_scheduler()
+
+
+@app.get("/api/predictSite/config")
+def predict_site_config(user=Header(None, alias="authorization")):
+    """采集站点配置列表。"""
+    require_user(user)
+    db = get_db()
+    rows = db.execute("SELECT * FROM predict_site_config ORDER BY id").fetchall()
+    db.close()
+    return {"sites": [dict(r) for r in rows]}
+
+
+@app.post("/api/predictSite/save")
+def predict_site_save(body: dict, user=Header(None, alias="authorization")):
+    """保存站点配置（url/site_name/fetch_time/enabled/parser_type）。"""
+    require_user(user)
+    db = get_db()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    site_key = body.get("site_key", "").strip()
+    if not site_key:
+        db.close()
+        raise HTTPException(400, "缺 site_key")
+    exists = db.execute("SELECT id FROM predict_site_config WHERE site_key=?", (site_key,)).fetchone()
+    if exists:
+        db.execute("""UPDATE predict_site_config SET url=?, site_name=?, family=?, parser_type=?, enabled=?, fetch_time=?, update_time=? WHERE site_key=?""",
+                   (body.get("url", "").strip(), body.get("site_name", "").strip(), body.get("family", "").strip(),
+                    body.get("parser_type", "auto").strip(), 1 if body.get("enabled", 1) else 0,
+                    body.get("fetch_time", "21:00").strip(), now, site_key))
+    else:
+        db.execute("""INSERT INTO predict_site_config (site_key, site_name, family, url, parser_type, enabled, fetch_time, create_time, update_time)
+                      VALUES (?,?,?,?,?,?,?,?,?)""",
+                   (site_key, body.get("site_name", "").strip(), body.get("family", "").strip(), body.get("url", "").strip(),
+                    body.get("parser_type", "auto").strip(), 1 if body.get("enabled", 1) else 0,
+                    body.get("fetch_time", "21:00").strip(), now, now))
+    db.commit()
+    db.close()
+    reload_scheduler()
+    return {"ok": True}
+
+
+@app.post("/api/predictSite/fetch")
+def predict_site_fetch(body: dict, user=Header(None, alias="authorization")):
+    """一键采集指定站点。body: {site_key}。"""
+    require_user(user)
+    site_key = body.get("site_key", "").strip()
+    if not site_key:
+        raise HTTPException(400, "缺 site_key")
+    return fetch_site(site_key)
+
+
+@app.post("/api/predictSite/fetchAll")
+def predict_site_fetch_all(user=Header(None, alias="authorization")):
+    """一键采集所有启用站点。"""
+    require_user(user)
+    db = get_db()
+    sites = db.execute("SELECT site_key FROM predict_site_config WHERE enabled=1").fetchall()
+    db.close()
+    results = [fetch_site(s["site_key"]) for s in sites]
+    ok = sum(1 for r in results if r.get("status") == "ok")
+    return {"ok": ok, "total": len(results), "results": results}
+
+
+@app.get("/api/predictSite/logs")
+def predict_site_logs(page: int = 1, size: int = 20, user=Header(None, alias="authorization")):
+    """采集日志（分页）。"""
+    require_user(user)
+    db = get_db()
+    total = db.execute("SELECT COUNT(*) FROM predict_fetch_log").fetchone()[0]
+    rows = db.execute("SELECT * FROM predict_fetch_log ORDER BY id DESC LIMIT ? OFFSET ?",
+                      (size, (max(1, page) - 1) * size)).fetchall()
+    db.close()
+    return {"rows": [dict(r) for r in rows], "total": total, "page": page, "size": size}
 
 
 # ============================================================
