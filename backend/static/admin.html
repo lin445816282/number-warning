@@ -1960,6 +1960,57 @@ table.data tr.warn td{background:var(--warnbg)}
           </template>
 
       </template>
+
+      <!-- 多组汇总 -->
+      <template v-if="cur==='/multigroup'">
+        <div class="topbar"><h2>多组汇总 · 4家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card">
+          <div class="card-title">📊 汇总多组 · 鬼 / 大家 / 诸葛 / 好运（共 {{ mgTotal }} 期）</div>
+          <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:12px">
+            <button v-for="f in mgFamilies" :key="f.key" class="btn btn-sm" :style="mgFamily===f.key?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="mgFamily=f.key;mgPage=1;loadMultiGroup()">{{ f.key }}</button>
+          </div>
+          <div style="font-size:12px;color:var(--ink2);margin-bottom:10px;line-height:1.8">
+            ⚙️ <b>字段约束</b>：号码 <b style="color:var(--warn)">1-49</b> · 尾数 <b style="color:var(--warn)">0-9</b> · 生肖 <b style="color:var(--warn)">12生肖</b> · 波色 <b style="color:var(--warn)">红/蓝/绿</b> · 大小 <b style="color:var(--warn)">大/小</b> · 单双 <b style="color:var(--warn)">单/双</b>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">🔍 期数</span>
+            <input type="text" v-model="mgPeriod" placeholder="如 124" style="width:80px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <span style="font-size:13px;color:var(--ink)">📅 起</span>
+            <input type="date" v-model="mgDateFrom" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <span style="font-size:13px;color:var(--ink)">至</span>
+            <input type="date" v-model="mgDateTo" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <button class="btn btn-sm" @click="mgPage=1;loadMultiGroup()" style="padding:6px 16px;font-size:13px;background:var(--warn);color:#fff;border:none;border-radius:8px">查询</button>
+            <button class="btn btn-sm" @click="mgPeriod='';mgDateFrom='';mgDateTo='';mgPage=1;loadMultiGroup()" style="padding:6px 14px;font-size:13px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:8px">重置</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>日期</th><th>期数</th>
+                <th v-for="c in mgCols" :key="c.field">{{ c.label }}<span v-if="c.expect" style="color:#b8b0a0;font-size:10px">({{ c.expect }})</span></th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="r in mgRows" :key="r.period">
+                  <td style="font-family:'Roboto Mono',monospace">{{ r.draw_date }}</td>
+                  <td><b>{{ r.period }}</b></td>
+                  <td v-for="c in mgCols" :key="c.field" style="white-space:normal">
+                    <span v-if="c.type==='codes'" style="font-family:'Roboto Mono',monospace;font-size:11px">{{ r[c.field] }}</span>
+                    <span v-else>{{ r[c.field] }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!mgRows.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无数据</div>
+          <div class="pager" v-if="mgPages > 1">
+            <button @click="mgPage=1;loadMultiGroup()" :disabled="mgPage<=1">首页</button>
+            <button @click="mgPage--;loadMultiGroup()" :disabled="mgPage<=1">上一页</button>
+            <span class="info">第 {{ mgPage }} / {{ mgPages }} 页 · 共 {{ mgTotal }} 期</span>
+            <button @click="mgPage++;loadMultiGroup()" :disabled="mgPage>=mgPages">下一页</button>
+            <button @click="mgPage=mgPages;loadMultiGroup()" :disabled="mgPage>=mgPages">末页</button>
+          </div>
+        </div>
+      </template>
+
       <template v-if="cur==='/signaltrack'">
         <div class="topbar"><h2>预警信号跟踪（触发 → 后续开出）</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card">
@@ -2472,12 +2523,47 @@ createApp({
     function doLogout(){ localStorage.removeItem('nw_token'); token.value=''; user.value={}; role.value={}; menus.value=[]; }
 
     function go(path){ cur.value = path; routeLoad(); }
+    // ====== 多组汇总（4家预测数据）======
+    const mgFamily = ref('鬼');
+    const mgFamilies = ref([]);
+    const mgConstraints = ref({});
+    const mgCols = ref([]);
+    const mgRows = ref([]);
+    const mgTotal = ref(0);
+    const mgPage = ref(1);
+    const mgPages = ref(0);
+    const mgPeriod = ref('');
+    const mgDateFrom = ref('');
+    const mgDateTo = ref('');
+    async function loadMultiGroupMeta(){
+      try {
+        const d = await api('GET', '/api/multiGroup/meta');
+        mgFamilies.value = d.families || [];
+        mgConstraints.value = d.constraints || {};
+      } catch(e){}
+    }
+    async function loadMultiGroup(){
+      const p = new URLSearchParams({ family: mgFamily.value, page: mgPage.value, size: 20 });
+      if (mgPeriod.value) p.set('period', mgPeriod.value);
+      if (mgDateFrom.value) p.set('date_from', mgDateFrom.value);
+      if (mgDateTo.value) p.set('date_to', mgDateTo.value);
+      try {
+        const d = await api('GET', '/api/multiGroup/list?' + p.toString());
+        mgRows.value = d.rows || [];
+        mgCols.value = d.cols || [];
+        mgTotal.value = d.total || 0;
+        mgPages.value = d.pages || 0;
+      } catch(e){}
+    }
+    function loadMultiGroupPage(){ loadMultiGroupMeta(); loadMultiGroup(); }
+
     function routeLoad(){
       if (cur.value === '/dashboard') loadDash();
       else if (cur.value === '/records') loadRecords();
       else if (cur.value === '/cycles') loadCycles();
       else if (cur.value === '/history') loadHistory();
       else if (cur.value === '/dimstats') loadDimStats();
+      else if (cur.value === '/multigroup') loadMultiGroupPage();
       else if (cur.value === '/signaltrack') loadSignalTrack();
       else if (cur.value === '/config') loadConfig();
       else if (cur.value === '/users') loadUsers();
@@ -3088,6 +3174,7 @@ createApp({
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       random8, loadRandom8, fixedOrder, loadFixedOrder,
+      mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, loadMultiGroup, loadMultiGroupPage,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,

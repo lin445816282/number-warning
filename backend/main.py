@@ -5580,6 +5580,93 @@ def role_menu_save(body: dict, user=Header(None, alias="authorization")):
     return {"ok": True}
 
 # ============================================================
+# 十七·五、多组汇总（4家预测数据：鬼/大家/诸葛/好运）
+# ============================================================
+MULTI_GROUP_COLS = [
+    ("gui_zodiac5", "鬼五肖", "鬼", "zodiac", 5),
+    ("gui_tail5", "鬼5尾", "鬼", "tail", 5),
+    ("gui_size", "鬼大小", "鬼", "size", 1),
+    ("gui_wave1", "鬼波1", "鬼", "wave", 1),
+    ("gui_wave2", "鬼波2", "鬼", "wave", 1),
+    ("gui_oddeven", "鬼单双", "鬼", "oddeven", 1),
+    ("gui_codes10", "鬼十码", "鬼", "codes", 10),
+    ("dajia_zodiac6", "大家六肖", "大家", "zodiac", 6),
+    ("dajia_codes10", "大家十码", "大家", "codes", 10),
+    ("dajia_tail6", "大家六尾", "大家", "tail", 6),
+    ("zhuge_wave1", "诸葛波1", "诸葛", "wave", 1),
+    ("zhuge_wave2", "诸葛波2", "诸葛", "wave", 1),
+    ("zhuge_tail4", "诸葛四尾", "诸葛", "tail", 4),
+    ("zhuge_tail2", "诸葛二尾", "诸葛", "tail", 2),
+    ("zhuge_zodiac2", "诸葛二肖", "诸葛", "zodiac", 2),
+    ("zhuge_codes4", "诸葛四码", "诸葛", "codes", 4),
+    ("zhuge_zodiac6", "诸葛六肖", "诸葛", "zodiac", 6),
+    ("zhuge_codes10", "诸葛十码", "诸葛", "codes", 10),
+    ("haoyun_81", "好运八一", "好运", "codes", 8),
+    ("haoyun_82", "好运八二", "好运", "codes", 8),
+    ("haoyun_83", "好运八三", "好运", "codes", 8),
+    ("haoyun_84", "好运八四", "好运", "codes", 8),
+    ("haoyun_tail6", "好运六尾", "好运", "tail", 6),
+]
+
+MULTI_GROUP_CONSTRAINTS = {
+    "zodiac": "12生肖（鼠牛虎兔龙蛇马羊猴鸡狗猪）",
+    "tail": "尾数 0-9",
+    "codes": "号码 1-49",
+    "size": "大 / 小",
+    "wave": "红 / 蓝 / 绿",
+    "oddeven": "单 / 双",
+}
+
+
+@app.get("/api/multiGroup/meta")
+def multi_group_meta(user=Header(None, alias="authorization")):
+    """多组汇总：4家列定义 + 约束规则。"""
+    require_user(user)
+    fam_map = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+        fam_map.setdefault(fam, []).append({"field": f, "label": cname, "type": ctype, "expect": expect})
+    families = [{"key": fam, "cols": cols} for fam, cols in fam_map.items()]
+    return {"families": families, "constraints": MULTI_GROUP_CONSTRAINTS}
+
+
+@app.get("/api/multiGroup/list")
+def multi_group_list(family: str = "鬼", page: int = 1, size: int = 20, period: str = "",
+                     date_from: str = "", date_to: str = "", user=Header(None, alias="authorization")):
+    """多组汇总：按家分页查询，支持期数/日期范围筛选。"""
+    require_user(user)
+    db = get_db()
+    cols = [c[0] for c in MULTI_GROUP_COLS if c[2] == family]
+    if not cols:
+        cols = [c[0] for c in MULTI_GROUP_COLS if c[2] == "鬼"]
+    where = ["1=1"]
+    args = []
+    if period:
+        where.append("period LIKE ?")
+        args.append(f"%{period}%")
+    if date_from:
+        where.append("draw_date >= ?")
+        args.append(date_from)
+    if date_to:
+        where.append("draw_date <= ?")
+        args.append(date_to)
+    w = " AND ".join(where)
+    total = db.execute(f"SELECT COUNT(*) FROM multi_group_summary WHERE {w}", args).fetchone()[0]
+    select_cols = "draw_date, period, " + ", ".join(cols)
+    offset = (max(1, page) - 1) * size
+    rows = db.execute(
+        f"SELECT {select_cols} FROM multi_group_summary WHERE {w} ORDER BY draw_date DESC LIMIT ? OFFSET ?",
+        args + [size, offset]).fetchall()
+    db.close()
+    col_meta = [{"field": c[0], "label": c[1], "type": c[3], "expect": c[4]} for c in MULTI_GROUP_COLS if c[2] == family]
+    return {
+        "rows": [dict(r) for r in rows],
+        "cols": col_meta,
+        "total": total, "page": page, "size": size,
+        "pages": (total + size - 1) // size if size else 0,
+    }
+
+
+# ============================================================
 # 十七、静态文件 + SPA
 # ============================================================
 @app.get("/")
