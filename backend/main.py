@@ -2,6 +2,7 @@
 """号码知识库全维度智能预警系统 — FastAPI + SQLite 单文件后端"""
 import os
 import json
+import re
 import hmac
 import hashlib
 import base64
@@ -617,6 +618,26 @@ def match_labels(source_number, zodiac_mapping):
         "tail_number": str(num % 10),   # 尾数（个位）
     }
     return labels
+
+# 预测数据标签值 → 系统口径归一化（多组汇总预测项用简称，系统 match_labels 用全称）
+_TAG_ALIAS = {
+    "odd_even": {"单": "单数", "双": "双数"},
+    "big_small": {"大": "大数", "小": "小数"},
+    "wave_color": {"红": "红波", "蓝": "蓝波", "绿": "绿波"},
+}
+
+def tag_to_nums(dim, tag, zodiac_map=None):
+    """通用维度标签 → 号码列表（1-49）。
+    dim: 维度 key（如 zodiac/tail_number/wave_color/big_small/odd_even/five_element...）
+    tag: 标签值，自动归一化预测口径（单/双→单数/双数、红→红波、大→大数）。
+    zodiac_map: 生肖映射，缺省 DEFAULT_ZODIAC；生肖及生肖衍生维度依赖它（年份错位）。"""
+    zm = zodiac_map or DEFAULT_ZODIAC
+    tag = _TAG_ALIAS.get(dim, {}).get(tag, tag)
+    return [n for n in range(1, 50) if match_labels(n, zm).get(dim) == tag]
+
+def tag_to_num_count(dim, tag, zodiac_map=None):
+    """标签覆盖的号码数（随机基准 = 该数/49）。"""
+    return len(tag_to_nums(dim, tag, zodiac_map))
 
 # ============================================================
 # 五、统计表维护 + 预警引擎
@@ -5617,6 +5638,34 @@ MULTI_GROUP_CONSTRAINTS = {
     "oddeven": "单 / 双",
 }
 
+# ── 多组汇总预测值解析（命中判定用，与 import_multi_group.py 清洗口径一致）──
+def _parse_codes(v):
+    """号码列 '35.47.21' → [35,47,21]"""
+    if not v:
+        return []
+    s = str(v).strip().replace(" ", "").replace("，", ".").replace(",", ".")
+    nums = []
+    for tok in re.split(r"[.\-、]+", s):
+        tok = tok.strip()
+        if tok.isdigit():
+            n = int(tok)
+            if 1 <= n <= 49:
+                nums.append(n)
+    return nums
+
+def _parse_tails(v):
+    """尾数列 '0-7-8' 或 '2.4.9' → [0,7,8]"""
+    if not v:
+        return []
+    return [int(t) for t in re.findall(r"\d+", str(v)) if 0 <= int(t) <= 9]
+
+def _parse_zodiacs(v):
+    """生肖列 '兔龙狗鸡蛇' → ['兔','龙','狗','鸡','蛇']"""
+    if not v:
+        return []
+    return [c for c in str(v).strip() if c in "鼠牛虎兔龙蛇马羊猴鸡狗猪"]
+
+
 
 @app.get("/api/multiGroup/meta")
 def multi_group_meta(user=Header(None, alias="authorization")):
@@ -5664,6 +5713,99 @@ def multi_group_list(family: str = "鬼", page: int = 1, size: int = 20, period:
         "total": total, "page": page, "size": size,
         "pages": (total + size - 1) // size if size else 0,
     }
+
+
+@app.get("/api/multiGroup/hitRate")
+def multi_group_hit_rate(user=Header(None, alias="authorization")):
+    """多组汇总：4家23预测项历史命中率 + 随机基准对比。
+    口径：预测项转号码集合 → 开奖号是否命中；随机基准按均匀分布（生肖 N/12、尾数 N/10、
+    号码 N/49、大小/单双 1/2、波色 1/3）。超额 = 命中率 - 随机基准。"""
+    require_user(user)
+    db = get_db()
+    cycle_maps = _load_cycle_maps(db)
+    # 开奖号映射：date → (号码, cycle_id)
+    open_map = {}
+    for r in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[r["record_date"]] = (int(r["source_number"]), r["cycle_id"])
+        except Exception:
+            pass
+
+    rows = db.execute("SELECT * FROM multi_group_summary ORDER BY draw_date").fetchall()
+
+    # 统计容器：fam → field → {hit,total}
+    fam_cols = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+        fam_cols.setdefault(fam, []).append({
+            "field": f, "label": cname, "type": ctype, "expect": expect,
+            "hit": 0, "total": 0,
+        })
+
+    matched_periods = 0
+    for r in rows:
+        d = r["draw_date"]
+        if d not in open_map:
+            continue
+        matched_periods += 1
+        open_num, cycle_id = open_map[d]
+        zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+        open_labels = match_labels(open_num, zm)
+
+        for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+            raw = r[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            col = next(c for c in fam_cols[fam] if c["field"] == f)
+            col["total"] += 1
+            hit = False
+            if ctype == "codes":
+                hit = open_num in _parse_codes(raw)
+            elif ctype == "zodiac":
+                hit = open_labels["zodiac"] in _parse_zodiacs(raw)
+            elif ctype == "tail":
+                hit = (open_num % 10) in _parse_tails(raw)
+            elif ctype == "size":
+                hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(str(raw).strip(), str(raw).strip())
+            elif ctype == "wave":
+                hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(str(raw).strip(), str(raw).strip())
+            elif ctype == "oddeven":
+                hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(str(raw).strip(), str(raw).strip())
+            if hit:
+                col["hit"] += 1
+
+    # 随机基准（均匀分布）
+    def _rand_rate(ctype, expect):
+        if ctype == "codes":
+            return (expect or 0) / 49.0
+        if ctype == "zodiac":
+            return (expect or 0) / 12.0
+        if ctype == "tail":
+            return (expect or 0) / 10.0
+        if ctype == "size":
+            return 25.0 / 49.0
+        if ctype == "oddeven":
+            return 25.0 / 49.0
+        if ctype == "wave":
+            return 17.0 / 49.0
+        return 0.0
+
+    result = []
+    for fam in ["鬼", "大家", "诸葛", "好运"]:
+        cols = []
+        for c in fam_cols.get(fam, []):
+            total = c["total"]
+            rate = (c["hit"] / total) if total else 0.0
+            rr = _rand_rate(c["type"], c["expect"])
+            cols.append({
+                "field": c["field"], "label": c["label"], "type": c["type"], "expect": c["expect"],
+                "hit": c["hit"], "total": total,
+                "rate": round(rate, 4),
+                "random_rate": round(rr, 4),
+                "excess": round(rate - rr, 4),
+            })
+        result.append({"family": fam, "cols": cols})
+    db.close()
+    return {"families": result, "matched_periods": matched_periods}
 
 
 # ============================================================

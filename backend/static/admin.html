@@ -1964,6 +1964,23 @@ table.data tr.warn td{background:var(--warnbg)}
       <!-- 多组汇总 -->
       <template v-if="cur==='/multigroup'">
         <div class="topbar"><h2>多组汇总 · 4家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">🎯 命中率统计 · 历史 {{ mgHitPeriods }} 期 vs 开奖号 <span style="font-size:11px;color:var(--ink2);font-weight:400">超额 = 命中率 − 随机基准（号码N/49·生肖N/12·尾数N/10·大小单双1/2·波色1/3），<b style="color:#2e9e4f">+5%以上跑赢</b> / <b style="color:#d84343">−5%以下跑输</b></span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            <div v-for="fam in mgHitFamilies" :key="fam.family" style="background:#fbf8f1;border:1px solid var(--line);border-radius:10px;padding:10px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--ink)">{{ fam.family }}</div>
+              <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:#b8b0a0;border-bottom:1px solid var(--line)">
+                <span style="width:52px">项目</span><span style="width:44px;text-align:right">命中</span><span style="width:44px;text-align:right">命中率</span><span style="width:46px;text-align:right">超额</span>
+              </div>
+              <div v-for="c in fam.cols" :key="c.field" style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px dashed #eee;font-size:12px">
+                <span style="color:var(--ink2);width:52px">{{ c.label }}</span>
+                <span style="color:#b8b0a0;font-size:11px;width:44px;text-align:right">{{ c.hit }}/{{ c.total }}</span>
+                <span :style="{color: c.excess>0.05 ? '#2e9e4f' : (c.excess<-0.05 ? '#d84343' : 'var(--ink)'), fontWeight:600, width:'44px', textAlign:'right'}">{{ (c.rate*100).toFixed(1) }}%</span>
+                <span :style="{color: c.excess>0.05 ? '#2e9e4f' : (c.excess<-0.05 ? '#d84343' : '#b8b0a0'), fontWeight:700, width:'46px', textAlign:'right'}">{{ c.excess>0?'+':'' }}{{ (c.excess*100).toFixed(1) }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="card">
           <div class="card-title">📊 汇总多组 · 鬼 / 大家 / 诸葛 / 好运（共 {{ mgTotal }} 期）</div>
           <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:12px">
@@ -2535,6 +2552,8 @@ createApp({
     const mgPeriod = ref('');
     const mgDateFrom = ref('');
     const mgDateTo = ref('');
+    const mgHitFamilies = ref([]);
+    const mgHitPeriods = ref(0);
     async function loadMultiGroupMeta(){
       try {
         const d = await api('GET', '/api/multiGroup/meta');
@@ -2555,7 +2574,14 @@ createApp({
         mgPages.value = d.pages || 0;
       } catch(e){}
     }
-    function loadMultiGroupPage(){ loadMultiGroupMeta(); loadMultiGroup(); }
+    async function loadMultiGroupHit(){
+      try {
+        const d = await api('GET', '/api/multiGroup/hitRate');
+        mgHitFamilies.value = d.families || [];
+        mgHitPeriods.value = d.matched_periods || 0;
+      } catch(e){}
+    }
+    function loadMultiGroupPage(){ loadMultiGroupMeta(); loadMultiGroup(); loadMultiGroupHit(); }
 
     function routeLoad(){
       if (cur.value === '/dashboard') loadDash();
@@ -3174,7 +3200,7 @@ createApp({
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       random8, loadRandom8, fixedOrder, loadFixedOrder,
-      mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, loadMultiGroup, loadMultiGroupPage,
+      mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
