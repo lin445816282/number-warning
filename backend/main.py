@@ -11,7 +11,7 @@ import sqlite3
 import time
 import random
 import urllib.request
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Header, Request
@@ -5904,7 +5904,8 @@ def _html_to_text(html):
 
 
 def _fetch_site_html(url, max_hops=3):
-    """采集流程：GET → 跟随 meta refresh（最多3跳）→ 提取 iframe → 返回最终 HTML。"""
+    """采集流程：GET → 跟随 meta refresh（最多3跳）→ 提取 iframe → 返回最终 HTML。
+    这些预测站的 iframe 常由 eval 混淆 JS 动态注入，标准提取会失败，故加常见路径兜底。"""
     from urllib.parse import urljoin
     cur = url
     html = ''
@@ -5916,11 +5917,21 @@ def _fetch_site_html(url, max_hops=3):
             cur = nxt
             continue
         break
+    # 1. 标准 iframe 提取
     iframe = _extract_iframe(html)
     if iframe:
         try:
             itext, _ = _http_get(urljoin(cur, iframe))
-            html = itext
+            if len(itext) > 5000:
+                return itext
+        except Exception:
+            pass
+    # 2. 常见 iframe 路径兜底（同一套系统，路径固定）
+    for path in ("/yjjy/index.html", "/zy/index.html", "/i/index.html"):
+        try:
+            itext, _ = _http_get(urljoin(cur, path))
+            if len(itext) > 5000:
+                return itext
         except Exception:
             pass
     return html
@@ -5929,6 +5940,185 @@ def _fetch_site_html(url, max_hops=3):
 # ── 站点解析器注册表：site_key → 函数(html_text) → {draw_date, period, field: value} ──
 # 精确解析逻辑待网站网址确认后填充（每个站一个 parser）
 SITE_PARSERS = {}
+
+
+def _period_to_date(period):
+    """期数 → 日期（124期=2026-05-04 基准，每天一期，与多组汇总历史数据对齐）。"""
+    return (date(2026, 5, 4) + timedelta(days=period - 124)).strftime("%Y-%m-%d")
+
+
+def _extract_rows(html_text, name):
+    """按 <tr> 分块提取 'X期;...name...【值】'，避免跨期错配。返回 [(期数, 值文本), ...]。"""
+    def clean(s):
+        return re.sub(r'<[^>]+>', '', s).strip()
+    rows = []
+    for tr in re.findall(r'<tr>.*?</tr>', html_text, re.DOTALL):
+        m = re.search(rf'(\d+)期.*?{re.escape(name)}.*?【(.*?)】', tr, re.DOTALL)
+        if m:
+            rows.append((int(m.group(1)), clean(m.group(2))))
+    return rows
+
+
+def _parse_guiguzi(html_text):
+    """鬼谷子站点 parser（/yjjy/index.html）：提取最新一期有实际预测值的各字段。"""
+    def clean(s):
+        return re.sub(r'<[^>]+>', '', s).strip()
+
+    result = {}
+    max_period = 0
+
+    def take(pairs, field, val_transform):
+        nonlocal max_period
+        if not pairs:
+            return
+        p, v = max(pairs, key=lambda x: x[0])
+        max_period = max(max_period, p)
+        result[field] = val_transform(v)
+
+    # 1. 五尾中特：X期;五尾中特【8-5-6-2-3尾】
+    tails = []
+    for p, v in _extract_rows(html_text, '五尾中特'):
+        nums = re.findall(r'\d+', v)
+        if nums and all(0 <= int(n) <= 9 for n in nums) and '?' not in v:
+            tails.append((p, nums))
+    take(tails, 'gui_tail5', lambda v: '.'.join(v))
+
+    # 2. 大小中特：X期;大小中特【大数大数】
+    sizes = []
+    for p, v in _extract_rows(html_text, '大小中特'):
+        if '大数' in v:
+            sizes.append((p, '大'))
+        elif '小数' in v:
+            sizes.append((p, '小'))
+    take(sizes, 'gui_size', lambda v: v)
+
+    # 3. 单双中特：X期;单双中特【双数双数】
+    oddeven = []
+    for p, v in _extract_rows(html_text, '单双中特'):
+        if '单数' in v:
+            oddeven.append((p, '单'))
+        elif '双数' in v:
+            oddeven.append((p, '双'))
+    take(oddeven, 'gui_oddeven', lambda v: v)
+
+    # 4. 两波中特：X期;特码波色【红波+绿波】
+    waves = []
+    for p, v in _extract_rows(html_text, '特码波色'):
+        ws = re.findall(r'(红波|蓝波|绿波)', v)
+        if len(ws) == 2:
+            waves.append((p, ws))
+    take(waves, 'gui_wave1', lambda v: v[0].replace('波', ''))
+    if waves:
+        p, v = max(waves, key=lambda x: x[0])
+        result['gui_wave2'] = v[1].replace('波', '')
+
+    # 5. 五肖中特：X期;五肖中特【生肖】
+    zodiacs = []
+    for p, v in _extract_rows(html_text, '五肖中特'):
+        zs = [c for c in v if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+        if zs:
+            zodiacs.append((p, zs))
+    take(zodiacs, 'gui_zodiac5', lambda v: ''.join(v))
+
+    # 6. 极限12码：X期-Y期 〖极限12码〗 号码
+    codes = []
+    for m in re.findall(r'(\d+)期-(\d+)期</font>.*?〖极限12码〗.*?<br>\s*<span class="zl">\s*(.*?)\s*</span>', html_text, re.DOTALL):
+        p1, p2, v = int(m[0]), int(m[1]), clean(m[2])
+        nums = [n for n in re.split(r'[.\s]+', v) if n.isdigit() and 1 <= int(n) <= 49]
+        if nums:
+            codes.append((p1, nums))
+    take(codes, 'gui_codes10', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    if not result or max_period == 0:
+        return None
+    result['period'] = f"{max_period}期"
+    result['draw_date'] = _period_to_date(max_period)
+    return result
+
+
+SITE_PARSERS["gui"] = _parse_guiguzi
+
+
+def _parse_zhuge(html_text):
+    """诸葛亮站点 parser（/yjjy/index.html）：提取最新一期有实际预测值的各字段。"""
+    def clean(s):
+        return re.sub(r'<[^>]+>', '', s).strip()
+
+    result = {}
+    max_period = 0
+
+    def take(pairs, field, transform):
+        nonlocal max_period
+        if not pairs:
+            return
+        p, v = max(pairs, key=lambda x: x[0])
+        max_period = max(max_period, p)
+        result[field] = transform(v)
+
+    # 1. 特码波色：X期;特码波色【红波+蓝波】
+    waves = []
+    for p, v in _extract_rows(html_text, '特码波色'):
+        ws = re.findall(r'(红波|蓝波|绿波)', v)
+        if len(ws) == 2:
+            waves.append((p, ws))
+    take(waves, 'zhuge_wave1', lambda v: v[0].replace('波', ''))
+    if waves:
+        p, v = max(waves, key=lambda x: x[0])
+        result['zhuge_wave2'] = v[1].replace('波', '')
+
+    # 2. 神算四尾：X期;神算四尾【3-4-5-6尾】
+    t4 = []
+    for p, v in _extract_rows(html_text, '神算四尾'):
+        nums = [n for n in re.findall(r'\d+', v) if 0 <= int(n) <= 9]
+        if len(nums) == 4:
+            t4.append((p, nums))
+    take(t4, 'zhuge_tail4', lambda v: '.'.join(v))
+
+    # 3. 稳杀②尾：X期;稳杀②尾【2-3尾】
+    t2 = []
+    for p, v in _extract_rows(html_text, '稳杀②尾'):
+        nums = [n for n in re.findall(r'\d+', v) if 0 <= int(n) <= 9]
+        if len(nums) == 2:
+            t2.append((p, nums))
+    take(t2, 'zhuge_tail2', lambda v: '.'.join(v))
+
+    # 4. 二肖防四码：X期-内部资料〈马狗〉防：32.44.19.43
+    z2c4 = []
+    for m in re.finditer(r'(\d+)期-内部资料', html_text):
+        p = int(m.group(1))
+        seg = html_text[m.start():m.start() + 800]
+        zs_match = re.search(r'〈(.*?)〉', seg)
+        zs = clean(zs_match.group(1)) if zs_match else ''
+        zs_list = [c for c in zs if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+        f_match = re.search(r'防：\s*(.*?)(?=</p>|<tr>|期-内部资料|独家)', seg, re.DOTALL)
+        codes = []
+        if f_match:
+            codes_raw = clean(f_match.group(1))
+            codes = [n for n in re.split(r'[.\s]+', codes_raw) if n.isdigit() and 1 <= int(n) <= 49]
+        if len(zs_list) == 2 and len(codes) >= 4:
+            z2c4.append((p, (zs_list, codes[:4])))
+    if z2c4:
+        p, (zs, codes) = max(z2c4, key=lambda x: x[0])
+        max_period = max(max_period, p)
+        result['zhuge_zodiac2'] = ''.join(zs)
+        result['zhuge_codes4'] = '.'.join(f"{int(n):02d}" for n in codes)
+
+    # 5. 必中六肖：X期;必中六肖【虎牛猪龙鸡蛇】
+    z6 = []
+    for p, v in _extract_rows(html_text, '必中六肖'):
+        zs = [c for c in v if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+        if len(zs) >= 4:
+            z6.append((p, zs))
+    take(z6, 'zhuge_zodiac6', lambda v: ''.join(v))
+
+    if not result or max_period == 0:
+        return None
+    result['period'] = f"{max_period}期"
+    result['draw_date'] = _period_to_date(max_period)
+    return result
+
+
+SITE_PARSERS["zhuge"] = _parse_zhuge
 
 
 def _parse_site_predict(site_key, html_text):
@@ -5950,8 +6140,10 @@ def _save_multi_group(db, data):
         return {"status": "fail", "error": "解析结果无有效预测字段"}
     cols = ", ".join(fields)
     ph = ",".join("?" * len(fields))
+    update = ", ".join([f"{f}=excluded.{f}" for f in fields] + ["period=excluded.period"])
     db.execute(
-        f"INSERT OR REPLACE INTO multi_group_summary (draw_date, period, {cols}) VALUES (?, ?, {ph})",
+        f"INSERT INTO multi_group_summary (draw_date, period, {cols}) VALUES (?, ?, {ph}) "
+        f"ON CONFLICT(draw_date) DO UPDATE SET {update}",
         [draw_date, period] + [data[f] for f in fields],
     )
     db.commit()
