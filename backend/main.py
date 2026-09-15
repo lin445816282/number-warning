@@ -1075,6 +1075,24 @@ def login(body: LoginBody):
 def logout(user=Header(None, alias="authorization")):
     return {"ok": True}
 
+@app.get("/api/system/myMenus")
+def my_menus(authorization: Optional[str] = Header(None)):
+    """按当前登录 token 返回该角色的最新菜单（供前端刷新时重新拉取，避免 localStorage 旧缓存导致新菜单不显示）"""
+    payload = require_user(authorization)
+    db = get_db()
+    user = db.execute("SELECT * FROM sys_user WHERE id=?", (payload.get("user_id"),)).fetchone()
+    if user is None:
+        # 兼容旧 token（仅含 username 无 user_id）
+        user = db.execute("SELECT * FROM sys_user WHERE username=?", (payload.get("username"),)).fetchone()
+    if user is None:
+        db.close()
+        raise HTTPException(401, "用户不存在")
+    menus = [dict(m) for m in db.execute(
+        "SELECT m.* FROM sys_menu m JOIN sys_role_menu rm ON m.id=rm.menu_id WHERE rm.role_id=? ORDER BY m.sort",
+        (user["role_id"],)).fetchall()]
+    db.close()
+    return {"menus": menus}
+
 # ============================================================
 # 八、API — 外部数据接收（无需鉴权）
 # ============================================================

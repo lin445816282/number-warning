@@ -3260,9 +3260,21 @@ createApp({
           const seen = new Set();
           menus.value = cachedMenus.filter(m => { const k = (m.id != null ? m.id : m.path); if (seen.has(k)) return false; seen.add(k); return true; });
           loadDash();
+          // 刷新菜单：重新拉取后端最新菜单（避免 localStorage 旧缓存导致新增菜单不显示）
+          refreshMenus();
         } catch(e){ doLogout(); }
       }
     });
+
+    async function refreshMenus(){
+      try {
+        const data = await api('GET', '/api/system/myMenus');
+        if (data && Array.isArray(data.menus) && data.menus.length){
+          menus.value = data.menus;
+          localStorage.setItem('nw_menus', JSON.stringify(data.menus));
+        }
+      } catch(e){ /* 静默失败，保留本地缓存 */ }
+    }
 
     return {
       token, user, role, menus, cur, loginForm, logging, isAdmin, canOperate,
