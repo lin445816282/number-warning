@@ -5944,9 +5944,18 @@ def _html_to_text(html):
     return text.strip()
 
 
+def _has_predict(html):
+    """判断页面是否含预测数据（含「期」且含预测字段关键词）。用于 iframe/兜底路径筛选，避免误返回框架页。"""
+    if '期' not in html:
+        return False
+    return any(k in html for k in ('肖', '码', '尾', '波', '单双', '大小'))
+
+
 def _fetch_site_html(url, max_hops=3):
-    """采集流程：GET → 跟随 meta refresh（最多3跳）→ 提取 iframe → 返回最终 HTML。
-    这些预测站的 iframe 常由 eval 混淆 JS 动态注入，标准提取会失败，故加常见路径兜底。"""
+    """采集流程：GET → 跟随 meta refresh（最多3跳）→ 提取数据页 → 返回最终 HTML。
+    三类站：① 好运通（/chajie/*.js document.write 注入）② 框架站（主页→Top.html→数据页 iframe）
+    ③ 直接数据页（/yjjy/index.html）。"""
+
     from urllib.parse import urljoin
     cur = url
     html = ''
@@ -5958,20 +5967,39 @@ def _fetch_site_html(url, max_hops=3):
             cur = nxt
             continue
         break
-    # 1. 标准 iframe 提取
-    iframe = _extract_iframe(html)
-    if iframe:
+
+    # 1. 好运通类 JS 注入站：优先采集 /chajie/*.js 拼接（主页 iframe 是直播页，勿被它抢先）
+    if '/chajie/' in html and 'document.write' in html:
+        parts = [html]
+        for js in ("/chajie/6w.js", "/chajie/qylg.js", "/chajie/4x8m.js", "/chajie/ss6m.js"):
+            try:
+                jt, _ = _http_get(urljoin(cur, js))
+                if len(jt) > 100:
+                    parts.append(f"\n<!--JS:{js}-->\n{jt}")
+            except Exception:
+                pass
+        return "\n".join(parts)
+
+    # 2. 递归 iframe（最多2层，框架站如大家：主页→Top.html→/yjjy/am.html），找到含预测数据的页
+    for _ in range(2):
+        iframe = _extract_iframe(html)
+        if not iframe:
+            break
         try:
             itext, _ = _http_get(urljoin(cur, iframe))
             if len(itext) > 5000:
-                return itext
+                html = itext
+                cur = urljoin(cur, iframe)
+                if _has_predict(itext):
+                    return itext
         except Exception:
-            pass
-    # 2. 常见 iframe 路径兜底（同一套系统，路径固定）
-    for path in ("/yjjy/index.html", "/zy/index.html", "/i/index.html"):
+            break
+
+    # 3. 常见路径兜底（同一套系统，路径固定）
+    for path in ("/yjjy/index.html", "/yjjy/am.html", "/zy/index.html", "/i/index.html"):
         try:
             itext, _ = _http_get(urljoin(cur, path))
-            if len(itext) > 5000:
+            if len(itext) > 5000 and _has_predict(itext):
                 return itext
         except Exception:
             pass
@@ -6160,6 +6188,135 @@ def _parse_zhuge(html_text):
 
 
 SITE_PARSERS["zhuge"] = _parse_zhuge
+
+
+def _parse_dajia(html_text):
+    """大家站点 parser（/yjjy/am.html）：提取最新一期六肖/六尾/十码。
+    六肖「X期;六肖〖生肖〗」、六尾「X期;⑥尾～开:…【尾数】」、十码「X期;十码 表格」。
+    十码栏目仅保留最新一期，当期未更新则采不到（历史期不保留）。"""
+    def clean(s):
+        return re.sub(r'<[^>]+>', '', s).strip()
+
+    result = {}
+    max_period = 0
+
+    def take(pairs, field, transform):
+        nonlocal max_period
+        if not pairs:
+            return
+        p, v = max(pairs, key=lambda x: x[0])
+        max_period = max(max_period, p)
+        result[field] = transform(v)
+
+    # 1. 六肖：X期;六肖〖生肖〗（过滤「资料正在更新」）
+    zodiacs = []
+    for m in re.finditer(r'(\d+)期;六肖.*?〖(.*?)〗', html_text, re.DOTALL):
+        p = int(m.group(1))
+        v = clean(m.group(2))
+        zs = [c for c in v if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+        if len(zs) >= 4 and '更新' not in v:
+            zodiacs.append((p, zs))
+    take(zodiacs, 'dajia_zodiac6', lambda v: ''.join(v))
+
+    # 2. 六尾：X期;⑥尾～开:…【尾数】
+    tails = []
+    for m in re.finditer(r'(\d+)期;⑥尾～开:.*?【(.*?)】', html_text, re.DOTALL):
+        p = int(m.group(1))
+        v = clean(m.group(2))
+        if '？' in v:
+            continue
+        nums = [n for n in re.findall(r'\d+', v) if 0 <= int(n) <= 9]
+        if len(nums) == 6:
+            tails.append((p, nums))
+    take(tails, 'dajia_tail6', lambda v: '.'.join(v))
+
+    # 3. 十码：X期;十码 表格（过滤「感谢您的支持」未更新标记）
+    codes = []
+    for m in re.finditer(r'(\d+)期;十码', html_text):
+        p = int(m.group(1))
+        seg_clean = clean(html_text[m.start():m.start() + 800])
+        if '感谢' in seg_clean or '敬请关注' in seg_clean:
+            continue
+        nums = [n for n in re.split(r'[.\s]+', seg_clean) if n.isdigit() and 1 <= int(n) <= 49]
+        if len(nums) >= 10:
+            codes.append((p, nums[:10]))
+    take(codes, 'dajia_codes10', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    if not result or max_period == 0:
+        return None
+    result['period'] = f"{max_period}期"
+    result['draw_date'] = _period_to_date(max_period)
+    return result
+
+
+SITE_PARSERS["dajia"] = _parse_dajia
+
+
+def _parse_haoyun(html_text):
+    """好运通站点 parser：数据由 /chajie/*.js 的 document.write 注入（已由 _fetch_site_html 拼接进 html_text，
+    以 <!--JS:路径--> 分隔）。六尾(6w)、八码1(qylg 一肖一码)、八码2(4x8m 四肖八码)、八码3(ss6m 神算八码)。
+    注：历史 xlsx 有 haoyun_84（第四个八码），新网址无对应栏目，暂不采集。"""
+    def clean(s):
+        return re.sub(r'<[^>]+>', '', s).strip()
+
+    result = {}
+    max_period = 0
+
+    def take(pairs, field, transform):
+        nonlocal max_period
+        if not pairs:
+            return
+        p, v = max(pairs, key=lambda x: x[0])
+        max_period = max(max_period, p)
+        result[field] = transform(v)
+
+    def seg(name):
+        m = re.search(rf'<!--JS:/chajie/{re.escape(name)}\.js-->(.*?)(?=<!--JS:|$)', html_text, re.DOTALL)
+        return m.group(1) if m else ''
+
+    def nums8(s):
+        return [n for n in re.split(r'[.\s、,，]+', s) if n.isdigit() and 1 <= int(n) <= 49]
+
+    # 1. 六尾（6w.js）：原始 JS 里「X期</td>…<span>尾数</span>」（尾数与期数分属不同 document.writeln，须用原始 HTML 结构提取）
+    tails = []
+    for m in re.finditer(r'(\d+)期</td>.*?<span[^>]*>([\d\-]+)</span>', seg('6w'), re.DOTALL):
+        nums = [n for n in re.findall(r'\d+', m.group(2)) if 0 <= int(n) <= 9]
+        if len(nums) == 6:
+            tails.append((int(m.group(1)), nums))
+    take(tails, 'haoyun_tail6', lambda v: '-'.join(v))
+
+    # 2. 八码1（qylg.js）：X期八码：号码
+    c1 = []
+    for m in re.finditer(r'(\d+)期八码[：:]\s*([\d.]+)', clean(seg('qylg'))):
+        nums = nums8(m.group(2))
+        if len(nums) == 8:
+            c1.append((int(m.group(1)), nums))
+    take(c1, 'haoyun_81', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    # 3. 八码2（4x8m.js）：X期四肖…八码:号码
+    c2 = []
+    for m in re.finditer(r'(\d+)期四肖.*?八码[：:]\s*([\d.]+)', clean(seg('4x8m')), re.DOTALL):
+        nums = nums8(m.group(2))
+        if len(nums) == 8:
+            c2.append((int(m.group(1)), nums))
+    take(c2, 'haoyun_82', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    # 4. 八码3（ss6m.js）：X期:（号码）
+    c3 = []
+    for m in re.finditer(r'(\d+)期[：:]\s*[（(]([\d.]+)[)）]', clean(seg('ss6m'))):
+        nums = nums8(m.group(2))
+        if len(nums) == 8:
+            c3.append((int(m.group(1)), nums))
+    take(c3, 'haoyun_83', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    if not result or max_period == 0:
+        return None
+    result['period'] = f"{max_period}期"
+    result['draw_date'] = _period_to_date(max_period)
+    return result
+
+
+SITE_PARSERS["haoyun"] = _parse_haoyun
 
 
 def _parse_site_predict(site_key, html_text):
