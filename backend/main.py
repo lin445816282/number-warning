@@ -5771,6 +5771,29 @@ def multi_group_list(family: str = "鬼", page: int = 1, size: int = 20, period:
     }
 
 
+@app.post("/api/multiGroup/update")
+def multi_group_update(body: dict, user=Header(None, alias="authorization")):
+    """多组汇总：按 draw_date + field 更新单个单元格预测值。"""
+    require_user(user)
+    draw_date = (body.get("draw_date") or "").strip()
+    field = (body.get("field") or "").strip()
+    value = body.get("value", "")
+    if not draw_date or not field:
+        raise HTTPException(400, "参数缺失：需 draw_date + field")
+    valid_fields = {c[0] for c in MULTI_GROUP_COLS}
+    if field not in valid_fields:
+        raise HTTPException(400, "非法字段")
+    db = get_db()
+    row = db.execute("SELECT 1 FROM multi_group_summary WHERE draw_date=?", (draw_date,)).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(404, "该期数据不存在")
+    db.execute(f"UPDATE multi_group_summary SET {field}=? WHERE draw_date=?", (value, draw_date))
+    db.commit()
+    db.close()
+    return {"ok": True}
+
+
 @app.get("/api/multiGroup/hitRate")
 def multi_group_hit_rate(user=Header(None, alias="authorization")):
     """多组汇总：4家23预测项历史命中率 + 随机基准对比。

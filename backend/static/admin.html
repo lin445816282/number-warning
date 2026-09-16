@@ -2010,8 +2010,13 @@ table.data tr.warn td{background:var(--warnbg)}
                   <td style="font-family:'Roboto Mono',monospace">{{ r.draw_date }}</td>
                   <td><b>{{ r.period }}</b></td>
                   <td v-for="c in mgCols" :key="c.field" style="white-space:normal">
-                    <span v-if="c.type==='codes'" style="font-family:'Roboto Mono',monospace;font-size:11px">{{ r[c.field] }}</span>
-                    <span v-else>{{ r[c.field] }}</span>
+                    <template v-if="mgEditing && mgEditing.field===c.field && mgEditing.draw_date===r.draw_date">
+                      <input id="mg-edit-input" v-model="mgEditVal" @blur="mgSaveEdit" @keyup.enter="mgSaveEdit" @keyup.esc="mgCancelEdit" style="width:100%;padding:4px 6px;border:2px solid var(--warn);border-radius:6px;font-size:12px;font-family:'Roboto Mono',monospace;background:#fff">
+                    </template>
+                    <template v-else>
+                      <span v-if="c.type==='codes'" @click="mgStartEdit(r,c)" style="font-family:'Roboto Mono',monospace;font-size:11px;cursor:pointer" :title="'点击修改 ' + c.label">{{ r[c.field] }}</span>
+                      <span v-else @click="mgStartEdit(r,c)" style="cursor:pointer" :title="'点击修改 ' + c.label">{{ r[c.field] }}</span>
+                    </template>
                   </td>
                 </tr>
               </tbody>
@@ -2320,7 +2325,7 @@ table.data tr.warn td{background:var(--warnbg)}
 </div>
 
 <script>
-const { createApp, ref, reactive, computed, onMounted } = Vue;
+const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
 const API = window.location.pathname.startsWith('/number-warning') ? '/number-warning' : '';
 
 const dimLabels = {
@@ -2591,6 +2596,8 @@ createApp({
     const mgDateTo = ref('');
     const mgHitFamilies = ref([]);
     const mgHitPeriods = ref(0);
+    const mgEditing = ref(null);   // { draw_date, field } 正在编辑的单元格
+    const mgEditVal = ref('');
     async function loadMultiGroupMeta(){
       try {
         const d = await api('GET', '/api/multiGroup/meta');
@@ -2619,6 +2626,27 @@ createApp({
       } catch(e){}
     }
     function loadMultiGroupPage(){ loadMultiGroupMeta(); loadMultiGroup(); loadMultiGroupHit(); }
+
+    function mgStartEdit(r, c){
+      mgEditing.value = { draw_date: r.draw_date, field: c.field };
+      mgEditVal.value = r[c.field] || '';
+      nextTick(() => {
+        const el = document.getElementById('mg-edit-input');
+        if (el){ el.focus(); el.select(); }
+      });
+    }
+    async function mgSaveEdit(){
+      if (!mgEditing.value) return;
+      const { draw_date, field } = mgEditing.value;
+      try {
+        await api('POST', '/api/multiGroup/update', { draw_date, field, value: mgEditVal.value });
+        toast('已保存');
+        mgEditing.value = null;
+        loadMultiGroup();
+        loadMultiGroupHit();
+      } catch(e){ toast(e.message); }
+    }
+    function mgCancelEdit(){ mgEditing.value = null; }
 
     // ====== 预测采集（4家预测数据来源）======
     const predictSites = ref([]);
@@ -3287,7 +3315,7 @@ createApp({
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       random8, loadRandom8, fixedOrder, loadFixedOrder,
-      mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage,
+      mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage, mgEditing, mgEditVal, mgStartEdit, mgSaveEdit, mgCancelEdit,
       predictSites, fetchLogs, fetchLogTotal, fetchLogPage, loadPredictSites, savePredictSite, fetchSite, fetchAllSites, loadFetchLogs,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
