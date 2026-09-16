@@ -2014,8 +2014,8 @@ table.data tr.warn td{background:var(--warnbg)}
                       <input id="mg-edit-input" v-model="mgEditVal" @blur="mgSaveEdit" @keyup.enter="mgSaveEdit" @keyup.esc="mgCancelEdit" style="width:100%;padding:4px 6px;border:2px solid var(--warn);border-radius:6px;font-size:12px;font-family:'Roboto Mono',monospace;background:#fff">
                     </template>
                     <template v-else>
-                      <span v-if="c.type==='codes'" @click="mgStartEdit(r,c)" style="font-family:'Roboto Mono',monospace;font-size:11px;cursor:pointer" :title="'点击修改 ' + c.label">{{ r[c.field] }}</span>
-                      <span v-else @click="mgStartEdit(r,c)" style="cursor:pointer" :title="'点击修改 ' + c.label">{{ r[c.field] }}</span>
+                      <span v-if="c.type==='codes'" @click="mgStartEdit(r,c)" style="font-family:'Roboto Mono',monospace;font-size:11px;cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r[c.field] ? {} : {color:'#c8c0b0'}" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
+                      <span v-else @click="mgStartEdit(r,c)" style="cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r[c.field] ? {} : {color:'#c8c0b0'}" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
                     </template>
                   </td>
                 </tr>
