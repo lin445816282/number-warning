@@ -104,6 +104,11 @@ table.data tr.warn td{background:var(--warnbg)}
   .menu-item{white-space:nowrap;border-left:none;border-bottom:2px solid transparent;padding:10px 14px}
   .menu-item.active{border-bottom-color:var(--warn);background:transparent}
   .main{padding:14px}
+  .card{padding:12px}
+  .topbar h2{font-size:16px}
+  table.data{font-size:12px}
+  table.data th,table.data td{padding:7px 6px}
+  .table-scroll{-webkit-overflow-scrolling:touch}
 }
 </style>
 </head>
@@ -1966,7 +1971,7 @@ table.data tr.warn td{background:var(--warnbg)}
         <div class="topbar"><h2>多组汇总 · 4家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card" style="margin-bottom:12px">
           <div class="card-title">🎯 命中率统计 · 历史 {{ mgHitPeriods }} 期 vs 开奖号 <span style="font-size:11px;color:var(--ink2);font-weight:400">超额 = 命中率 − 随机基准（号码N/49·生肖N/12·尾数N/10·大小单双1/2·波色1/3），<b style="color:#2e9e4f">+5%以上跑赢</b> / <b style="color:#d84343">−5%以下跑输</b></span></div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
             <div v-for="fam in mgHitFamilies" :key="fam.family" style="background:#fbf8f1;border:1px solid var(--line);border-radius:10px;padding:10px">
               <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--ink)">{{ fam.family }}</div>
               <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:#b8b0a0;border-bottom:1px solid var(--line)">
@@ -2014,8 +2019,8 @@ table.data tr.warn td{background:var(--warnbg)}
                       <input id="mg-edit-input" v-model="mgEditVal" @blur="mgSaveEdit" @keyup.enter="mgSaveEdit" @keyup.esc="mgCancelEdit" style="width:100%;padding:4px 6px;border:2px solid var(--warn);border-radius:6px;font-size:12px;font-family:'Roboto Mono',monospace;background:#fff">
                     </template>
                     <template v-else>
-                      <span v-if="c.type==='codes'" @click="mgStartEdit(r,c)" style="font-family:'Roboto Mono',monospace;font-size:11px;cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r[c.field] ? {} : {color:'#c8c0b0'}" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
-                      <span v-else @click="mgStartEdit(r,c)" style="cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r[c.field] ? {} : {color:'#c8c0b0'}" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
+                      <span v-if="c.type==='codes'" @click="mgStartEdit(r,c)" style="font-family:'Roboto Mono',monospace;font-size:11px;cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r._hits && r._hits[c.field] ? {color:'#1890ff',fontWeight:700} : (r[c.field] ? {} : {color:'#c8c0b0'})" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
+                      <span v-else @click="mgStartEdit(r,c)" style="cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r._hits && r._hits[c.field] ? {color:'#1890ff',fontWeight:700} : (r[c.field] ? {} : {color:'#c8c0b0'})" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
                     </template>
                   </td>
                 </tr>
@@ -2033,6 +2038,78 @@ table.data tr.warn td{background:var(--warnbg)}
         </div>
       </template>
 
+      <!-- 多组汇总2 -->
+      <template v-if="cur==='/multigroup2'">
+        <div class="topbar"><h2>多组汇总2 · 5家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">🎯 命中率统计 · 历史 {{ mg2HitPeriods }} 期 vs 开奖号 <span style="font-size:11px;color:var(--ink2);font-weight:400">超额 = 命中率 − 随机基准（号码N/49·生肖N/12·尾数N/10·大小单双25/49·波色17/49），<b style="color:#2e9e4f">+5%以上跑赢</b> / <b style="color:#d84343">−5%以下跑输</b></span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
+            <div v-for="fam in mg2HitFamilies" :key="fam.family" style="background:#fbf8f1;border:1px solid var(--line);border-radius:10px;padding:10px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--ink)">{{ fam.family }}</div>
+              <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:#b8b0a0;border-bottom:1px solid var(--line)">
+                <span style="width:52px">项目</span><span style="width:44px;text-align:right">命中</span><span style="width:44px;text-align:right">命中率</span><span style="width:46px;text-align:right">超额</span>
+              </div>
+              <div v-for="c in fam.cols" :key="c.field" style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px dashed #eee;font-size:12px">
+                <span style="color:var(--ink2);width:52px">{{ c.label }}</span>
+                <span style="color:#b8b0a0;font-size:11px;width:44px;text-align:right">{{ c.hit }}/{{ c.total }}</span>
+                <span :style="{color: c.excess>0.05 ? '#2e9e4f' : (c.excess<-0.05 ? '#d84343' : 'var(--ink)'), fontWeight:600, width:'44px', textAlign:'right'}">{{ (c.rate*100).toFixed(1) }}%</span>
+                <span :style="{color: c.excess>0.05 ? '#2e9e4f' : (c.excess<-0.05 ? '#d84343' : '#b8b0a0'), fontWeight:700, width:'46px', textAlign:'right'}">{{ c.excess>0?'+':'' }}{{ (c.excess*100).toFixed(1) }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📊 汇总多组2 · 哪吒 / 中特 / 金算 / 聚宝 / 米老（共 {{ mg2Total }} 期）</div>
+          <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:12px">
+            <button v-for="f in mg2Families" :key="f.key" class="btn btn-sm" :style="mg2Family===f.key?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="mg2Family=f.key;mg2Page=1;loadMultiGroup2()">{{ f.key }}</button>
+          </div>
+          <div style="font-size:12px;color:var(--ink2);margin-bottom:10px;line-height:1.8">
+            ⚙️ <b>字段约束</b>：号码 <b style="color:var(--warn)">1-49</b> · 尾数 <b style="color:var(--warn)">0-9</b> · 生肖 <b style="color:var(--warn)">12生肖</b> · 波色 <b style="color:var(--warn)">红/蓝/绿</b> · 大小 <b style="color:var(--warn)">大/小</b> · 单双 <b style="color:var(--warn)">单/双</b>　·　<span style="color:#b8b0a0">金算六肖 / 聚宝六肖 为「生肖+号码」双口径拆分（肖 / 码）</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">🔍 期数</span>
+            <input type="text" v-model="mg2Period" placeholder="如 124" style="width:80px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <span style="font-size:13px;color:var(--ink)">📅 起</span>
+            <input type="date" v-model="mg2DateFrom" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <span style="font-size:13px;color:var(--ink)">至</span>
+            <input type="date" v-model="mg2DateTo" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <button class="btn btn-sm" @click="mg2Page=1;loadMultiGroup2()" style="padding:6px 16px;font-size:13px;background:var(--warn);color:#fff;border:none;border-radius:8px">查询</button>
+            <button class="btn btn-sm" @click="mg2Period='';mg2DateFrom='';mg2DateTo='';mg2Page=1;loadMultiGroup2()" style="padding:6px 14px;font-size:13px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:8px">重置</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>日期</th><th>期数</th>
+                <th v-for="c in mg2Cols" :key="c.field">{{ c.label }}<span v-if="c.expect" style="color:#b8b0a0;font-size:10px">({{ c.expect }})</span></th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="r in mg2Rows" :key="r.period">
+                  <td style="font-family:'Roboto Mono',monospace">{{ r.draw_date }}</td>
+                  <td><b>{{ r.period }}</b></td>
+                  <td v-for="c in mg2Cols" :key="c.field" style="white-space:normal">
+                    <template v-if="mg2Editing && mg2Editing.field===c.field && mg2Editing.draw_date===r.draw_date">
+                      <input id="mg2-edit-input" v-model="mg2EditVal" @blur="mg2SaveEdit" @keyup.enter="mg2SaveEdit" @keyup.esc="mg2CancelEdit" style="width:100%;padding:4px 6px;border:2px solid var(--warn);border-radius:6px;font-size:12px;font-family:'Roboto Mono',monospace;background:#fff">
+                    </template>
+                    <template v-else>
+                      <span v-if="c.type==='codes'" @click="mg2StartEdit(r,c)" style="font-family:'Roboto Mono',monospace;font-size:11px;cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r._hits && r._hits[c.field] ? {color:'#1890ff',fontWeight:700} : (r[c.field] ? {} : {color:'#c8c0b0'})" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
+                      <span v-else @click="mg2StartEdit(r,c)" style="cursor:pointer;display:inline-block;min-width:24px;min-height:18px;padding:2px 4px;border-radius:4px" :style="r._hits && r._hits[c.field] ? {color:'#1890ff',fontWeight:700} : (r[c.field] ? {} : {color:'#c8c0b0'})" :title="'点击修改 ' + c.label">{{ r[c.field] || '—' }}</span>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!mg2Rows.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无数据</div>
+          <div class="pager" v-if="mg2Pages > 1">
+            <button @click="mg2Page=1;loadMultiGroup2()" :disabled="mg2Page<=1">首页</button>
+            <button @click="mg2Page--;loadMultiGroup2()" :disabled="mg2Page<=1">上一页</button>
+            <span class="info">第 {{ mg2Page }} / {{ mg2Pages }} 页 · 共 {{ mg2Total }} 期</span>
+            <button @click="mg2Page++;loadMultiGroup2()" :disabled="mg2Page>=mg2Pages">下一页</button>
+            <button @click="mg2Page=mg2Pages;loadMultiGroup2()" :disabled="mg2Page>=mg2Pages">末页</button>
+          </div>
+        </div>
+      </template>
+
       <template v-if="cur==='/predictsite'">
         <div class="topbar"><h2>预测采集 · 4家预测数据来源</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card">
@@ -2045,9 +2122,10 @@ table.data tr.warn td{background:var(--warnbg)}
             <input v-model="s.url" placeholder="采集网址 https://..." style="flex:1;min-width:240px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
             <span style="font-size:12px;color:var(--ink2)">⏰</span>
             <input v-model="s.fetch_time" placeholder="21:00" style="width:70px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <input v-model="s.fetch_period" placeholder="期号(空=最新)" title="指定期号采集，留空采最新一期" style="width:110px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
             <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" v-model="s.enabled">启用</label>
             <button class="btn btn-sm" @click="savePredictSite(s)" style="padding:6px 14px;background:#f3efe5;border:1px solid var(--line);border-radius:8px;font-size:12px">保存</button>
-            <button class="btn btn-sm" @click="fetchSite(s.site_key)" style="padding:6px 14px;background:var(--warn);color:#fff;border:none;border-radius:8px;font-size:12px">一键采集</button>
+            <button class="btn btn-sm" @click="fetchSite(s.site_key, s.fetch_period)" style="padding:6px 14px;background:var(--warn);color:#fff;border:none;border-radius:8px;font-size:12px">一键采集</button>
             <span style="font-size:11px;color:#b8b0a0" v-if="s.last_fetch_time">{{ s.last_status==='ok'?'✅':'❌' }} {{ s.last_fetch_time }}</span>
           </div>
         </div>
@@ -2648,6 +2726,71 @@ createApp({
     }
     function mgCancelEdit(){ mgEditing.value = null; }
 
+    // ====== 多组汇总2（5家预测数据：哪吒/中特/金算/聚宝/米老）======
+    const mg2Family = ref('哪吒');
+    const mg2Families = ref([]);
+    const mg2Constraints = ref({});
+    const mg2Cols = ref([]);
+    const mg2Rows = ref([]);
+    const mg2Total = ref(0);
+    const mg2Page = ref(1);
+    const mg2Pages = ref(0);
+    const mg2Period = ref('');
+    const mg2DateFrom = ref('');
+    const mg2DateTo = ref('');
+    const mg2HitFamilies = ref([]);
+    const mg2HitPeriods = ref(0);
+    const mg2Editing = ref(null);
+    const mg2EditVal = ref('');
+    async function loadMultiGroup2Meta(){
+      try {
+        const d = await api('GET', '/api/multiGroup2/meta');
+        mg2Families.value = d.families || [];
+        mg2Constraints.value = d.constraints || {};
+      } catch(e){}
+    }
+    async function loadMultiGroup2(){
+      const p = new URLSearchParams({ family: mg2Family.value, page: mg2Page.value, size: 20 });
+      if (mg2Period.value) p.set('period', mg2Period.value);
+      if (mg2DateFrom.value) p.set('date_from', mg2DateFrom.value);
+      if (mg2DateTo.value) p.set('date_to', mg2DateTo.value);
+      try {
+        const d = await api('GET', '/api/multiGroup2/list?' + p.toString());
+        mg2Rows.value = d.rows || [];
+        mg2Cols.value = d.cols || [];
+        mg2Total.value = d.total || 0;
+        mg2Pages.value = d.pages || 0;
+      } catch(e){}
+    }
+    async function loadMultiGroup2Hit(){
+      try {
+        const d = await api('GET', '/api/multiGroup2/hitRate');
+        mg2HitFamilies.value = d.families || [];
+        mg2HitPeriods.value = d.matched_periods || 0;
+      } catch(e){}
+    }
+    function loadMultiGroup2Page(){ loadMultiGroup2Meta(); loadMultiGroup2(); loadMultiGroup2Hit(); }
+    function mg2StartEdit(r, c){
+      mg2Editing.value = { draw_date: r.draw_date, field: c.field };
+      mg2EditVal.value = r[c.field] || '';
+      nextTick(() => {
+        const el = document.getElementById('mg2-edit-input');
+        if (el){ el.focus(); el.select(); }
+      });
+    }
+    async function mg2SaveEdit(){
+      if (!mg2Editing.value) return;
+      const { draw_date, field } = mg2Editing.value;
+      try {
+        await api('POST', '/api/multiGroup2/update', { draw_date, field, value: mg2EditVal.value });
+        toast('已保存');
+        mg2Editing.value = null;
+        loadMultiGroup2();
+        loadMultiGroup2Hit();
+      } catch(e){ toast(e.message); }
+    }
+    function mg2CancelEdit(){ mg2Editing.value = null; }
+
     // ====== 预测采集（4家预测数据来源）======
     const predictSites = ref([]);
     const fetchLogs = ref([]);
@@ -2656,15 +2799,17 @@ createApp({
     async function loadPredictSites(){
       try {
         const d = await api('GET', '/api/predictSite/config');
-        predictSites.value = (d.sites || []).map(s => ({ ...s, enabled: !!s.enabled }));
+        predictSites.value = (d.sites || []).map(s => ({ ...s, enabled: !!s.enabled, fetch_period: '' }));
       } catch(e){}
     }
     async function savePredictSite(s){
       try { await api('POST', '/api/predictSite/save', s); toast('已保存，定时已更新'); loadPredictSites(); } catch(e){ toast(e.message); }
     }
-    async function fetchSite(siteKey){
+    async function fetchSite(siteKey, period){
       try {
-        const r = await api('POST', '/api/predictSite/fetch', { site_key: siteKey });
+        const body = { site_key: siteKey };
+        if (period && String(period).trim()) body.period = String(period).trim();
+        const r = await api('POST', '/api/predictSite/fetch', body);
         toast(r.status === 'ok' ? r.detail : r.error);
         loadPredictSites(); loadFetchLogs();
       } catch(e){ toast(e.message); }
@@ -2692,6 +2837,7 @@ createApp({
       else if (cur.value === '/history') loadHistory();
       else if (cur.value === '/dimstats') loadDimStats();
       else if (cur.value === '/multigroup') loadMultiGroupPage();
+      else if (cur.value === '/multigroup2') loadMultiGroup2Page();
       else if (cur.value === '/predictsite') loadPredictSitePage();
       else if (cur.value === '/signaltrack') loadSignalTrack();
       else if (cur.value === '/config') loadConfig();
@@ -3316,6 +3462,7 @@ createApp({
       zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       random8, loadRandom8, fixedOrder, loadFixedOrder,
       mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage, mgEditing, mgEditVal, mgStartEdit, mgSaveEdit, mgCancelEdit,
+      mg2Family, mg2Families, mg2Constraints, mg2Cols, mg2Rows, mg2Total, mg2Page, mg2Pages, mg2Period, mg2DateFrom, mg2DateTo, mg2HitFamilies, mg2HitPeriods, loadMultiGroup2, loadMultiGroup2Page, mg2Editing, mg2EditVal, mg2StartEdit, mg2SaveEdit, mg2CancelEdit,
       predictSites, fetchLogs, fetchLogTotal, fetchLogPage, loadPredictSites, savePredictSite, fetchSite, fetchAllSites, loadFetchLogs,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,

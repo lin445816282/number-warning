@@ -5683,6 +5683,35 @@ MULTI_GROUP_COLS = [
     ("haoyun_83", "好运八三", "好运", "codes", 8),
     ("haoyun_84", "好运八四", "好运", "codes", 8),
     ("haoyun_tail6", "好运六尾", "好运", "tail", 6),
+    # ── 采集器新增字段（页面额外预测栏目，2026-09-16）──
+    ("gui_pingte_zodiac1", "鬼谷平特一肖", "鬼", "zodiac", 1),
+    ("gui_pingte_tail", "鬼谷平特一尾", "鬼", "tail", 5),
+    ("gui_tail6", "鬼谷六尾中特", "鬼", "tail", 6),
+    ("gui_zodiac4", "鬼谷内部四肖", "鬼", "zodiac", 4),
+    ("zhuge_zodiac9", "诸葛九肖", "诸葛", "zodiac", 9),
+    ("zhuge_zodiac7", "诸葛七肖", "诸葛", "zodiac", 7),
+    ("zhuge_zodiac5", "诸葛五肖", "诸葛", "zodiac", 5),
+    ("zhuge_zodiac3", "诸葛三肖", "诸葛", "zodiac", 3),
+    ("zhuge_pingte_tail", "诸葛平特一尾", "诸葛", "tail", 5),
+    ("zhuge_size", "诸葛大小中特", "诸葛", "size", 1),
+    ("zhuge_oddeven", "诸葛单双中特", "诸葛", "oddeven", 1),
+    ("dajia_pingte_zodiac1", "大家平特一肖", "大家", "zodiac", 1),
+    ("dajia_pingte_tail", "大家平特一尾", "大家", "tail", 5),
+    ("haoyun_zodiac7", "好运七肖", "好运", "zodiac", 7),
+    ("haoyun_zodiac5", "好运五肖", "好运", "zodiac", 5),
+    ("haoyun_zodiac1", "好运一肖", "好运", "zodiac", 1),
+    ("haoyun_codes6", "好运六码", "好运", "codes", 6),
+    ("haoyun_codes5", "好运五码", "好运", "codes", 5),
+    # ── 采集器新增字段（第二轮，2026-09-17）──
+    ("gui_zodiac4_3q", "鬼谷三期四肖", "鬼", "zodiac", 4),
+    ("gui_codes12", "鬼谷极限12码", "鬼", "codes", 12),
+    ("dajia_codes24", "大家24码", "大家", "codes", 24),
+    ("dajia_jaye", "大家家野", "大家", "jaye", 1),
+    ("dajia_sixiao3q", "大家三期四肖", "大家", "zodiac", 4),
+    ("haoyun_zodiac6", "好运六肖", "好运", "zodiac", 6),
+    ("haoyun_codes24", "好运24码", "好运", "codes", 24),
+    ("haoyun_codes16", "好运16码", "好运", "codes", 16),
+    ("haoyun_santou", "好运三头", "好运", "head", 3),
 ]
 
 MULTI_GROUP_CONSTRAINTS = {
@@ -5761,10 +5790,54 @@ def multi_group_list(family: str = "鬼", page: int = 1, size: int = 20, period:
     rows = db.execute(
         f"SELECT {select_cols} FROM multi_group_summary WHERE {w} ORDER BY draw_date DESC LIMIT ? OFFSET ?",
         args + [size, offset]).fetchall()
-    db.close()
     col_meta = [{"field": c[0], "label": c[1], "type": c[3], "expect": c[4]} for c in MULTI_GROUP_COLS if c[2] == family]
+
+    # 加命中状态：每行每字段是否命中当期开奖号（前端列表命中显示蓝色）
+    cycle_maps = _load_cycle_maps(db)
+    open_map = {}
+    for rr in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[rr["record_date"]] = (int(rr["source_number"]), rr["cycle_id"])
+        except Exception:
+            pass
+    db.close()
+
+    result_rows = []
+    for r in rows:
+        row = dict(r)
+        d = row["draw_date"]
+        if d in open_map:
+            open_num, cycle_id = open_map[d]
+            zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+            open_labels = match_labels(open_num, zm)
+            row["_open_num"] = open_num
+            hits = {}
+            for c in col_meta:
+                field = c["field"]
+                raw = row.get(field)
+                if raw is None or not str(raw).strip():
+                    continue
+                ctype = c["type"]
+                hit = False
+                if ctype == "codes":
+                    hit = open_num in _parse_codes(raw)
+                elif ctype == "zodiac":
+                    hit = open_labels["zodiac"] in _parse_zodiacs(raw)
+                elif ctype == "tail":
+                    hit = (open_num % 10) in _parse_tails(raw)
+                elif ctype == "size":
+                    hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(str(raw).strip(), str(raw).strip())
+                elif ctype == "wave":
+                    hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(str(raw).strip(), str(raw).strip())
+                elif ctype == "oddeven":
+                    hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(str(raw).strip(), str(raw).strip())
+                if hit:
+                    hits[field] = True
+            row["_hits"] = hits
+        result_rows.append(row)
+
     return {
-        "rows": [dict(r) for r in rows],
+        "rows": result_rows,
         "cols": col_meta,
         "total": total, "page": page, "size": size,
         "pages": (total + size - 1) // size if size else 0,
@@ -5837,18 +5910,27 @@ def multi_group_hit_rate(user=Header(None, alias="authorization")):
             col = next(c for c in fam_cols[fam] if c["field"] == f)
             col["total"] += 1
             hit = False
+            raw_s = str(raw).strip()
             if ctype == "codes":
                 hit = open_num in _parse_codes(raw)
             elif ctype == "zodiac":
                 hit = open_labels["zodiac"] in _parse_zodiacs(raw)
             elif ctype == "tail":
                 hit = (open_num % 10) in _parse_tails(raw)
+            elif ctype == "head":
+                hit = (open_num - 1) // 10 in _parse_tails(raw)
+            elif ctype == "jaye":
+                z = open_labels["zodiac"]
+                is_beast = z in "鼠虎兔龙蛇猴"
+                hit = (raw_s == "野兽" and is_beast) or (raw_s == "家畜" and not is_beast)
+            elif ctype == "heshu":
+                hit = ((open_num // 10 + open_num % 10) >= 8) == (raw_s == "大")
             elif ctype == "size":
-                hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(str(raw).strip(), str(raw).strip())
+                hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(raw_s, raw_s)
             elif ctype == "wave":
-                hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(str(raw).strip(), str(raw).strip())
+                hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(raw_s, raw_s)
             elif ctype == "oddeven":
-                hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(str(raw).strip(), str(raw).strip())
+                hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(raw_s, raw_s)
             if hit:
                 col["hit"] += 1
 
@@ -5866,6 +5948,12 @@ def multi_group_hit_rate(user=Header(None, alias="authorization")):
             return 25.0 / 49.0
         if ctype == "wave":
             return 17.0 / 49.0
+        if ctype == "head":
+            return (expect or 0) / 5.0
+        if ctype == "jaye":
+            return 0.5
+        if ctype == "heshu":
+            return 20.0 / 49.0
         return 0.0
 
     result = []
@@ -5875,6 +5963,304 @@ def multi_group_hit_rate(user=Header(None, alias="authorization")):
             total = c["total"]
             rate = (c["hit"] / total) if total else 0.0
             rr = _rand_rate(c["type"], c["expect"])
+            cols.append({
+                "field": c["field"], "label": c["label"], "type": c["type"], "expect": c["expect"],
+                "hit": c["hit"], "total": total,
+                "rate": round(rate, 4),
+                "random_rate": round(rr, 4),
+                "excess": round(rate - rr, 4),
+            })
+        result.append({"family": fam, "cols": cols})
+    db.close()
+    return {"families": result, "matched_periods": matched_periods}
+
+
+# ============================================================
+# 十七·六、多组汇总2（5家预测数据：哪吒/中特/金算/聚宝/米老）
+# ============================================================
+MULTI_GROUP2_COLS = [
+    ("nezha_zodiac8", "哪吒八肖", "哪吒", "zodiac", 8),
+    ("nezha_tail5", "哪吒五尾", "哪吒", "tail", 5),
+    ("zhongte_wave1", "中特波一", "中特", "wave", 1),
+    ("zhongte_wave2", "中特波二", "中特", "wave", 1),
+    ("zhongte_codes6", "中特六码", "中特", "codes", 6),
+    ("zhongte_tail5", "中特五尾", "中特", "tail", 5),
+    ("jinsuan_zodiac6", "金算六肖·肖", "金算", "zodiac", 6),
+    ("jinsuan_zodiac6_codes", "金算六肖·码", "金算", "codes", 6),
+    ("jinsuan_codes6", "金算六码", "金算", "codes", 6),
+    ("jinsuan_tail5", "金算五尾", "金算", "tail", 5),
+    ("jubao_zodiac8", "聚宝八肖", "聚宝", "zodiac", 8),
+    ("jubao_zodiac6", "聚宝六肖·肖", "聚宝", "zodiac", 6),
+    ("jubao_zodiac6_codes", "聚宝六肖·码", "聚宝", "codes", 6),
+    ("jubao_wave1", "聚宝波一", "聚宝", "wave", 1),
+    ("jubao_wave2", "聚宝波二", "聚宝", "wave", 1),
+    ("jubao_tail6", "聚宝六尾", "聚宝", "tail", 6),
+    ("milao_wanghong7", "米老网红七肖", "米老", "zodiac", 7),
+    ("milao_zodiac7", "米老七肖", "米老", "zodiac", 7),
+    ("milao_zodiac2", "米老二肖", "米老", "zodiac", 2),
+    ("milao_wave1", "米老波一", "米老", "wave", 1),
+    ("milao_wave2", "米老波二", "米老", "wave", 1),
+    ("milao_oddeven", "米老单双", "米老", "oddeven", 1),
+    ("milao_size", "米老大小", "米老", "size", 1),
+    ("milao_codes12", "米老十二码", "米老", "codes", 12),
+    # ── 米老采集器新增字段（页面额外预测栏目）──
+    ("milao_wei7", "米老七尾", "米老", "tail", 7),
+    ("milao_pingte", "米老平特", "米老", "zodiac", 1),
+    ("milao_daxiao", "米老大小肖", "米老", "zodiac", 8),
+    ("milao_codes24", "米老内部24码", "米老", "codes", 24),
+    ("milao_pingte2", "米老两期平特", "米老", "zodiac", 1),
+    ("milao_sibao4", "米老四肖爆特", "米老", "zodiac", 4),
+    ("milao_codes1", "米老一码", "米老", "codes", 1),
+    ("milao_codes4", "米老四码", "米老", "codes", 4),
+    ("milao_codes8", "米老八码", "米老", "codes", 8),
+    ("milao_zodiac1", "米老一肖", "米老", "zodiac", 1),
+    ("milao_zodiac3", "米老三肖", "米老", "zodiac", 3),
+    ("milao_zodiac4", "米老四肖", "米老", "zodiac", 4),
+    ("milao_zodiac6", "米老六肖", "米老", "zodiac", 6),
+    ("milao_zodiac9", "米老九肖", "米老", "zodiac", 9),
+    ("milao_juesha3", "米老绝杀三肖", "米老", "zodiac", 3),
+    # ── 采集器新增字段（页面额外预测栏目）──
+    ("zhongte_zodiac6", "中特六肖", "中特", "zodiac", 6),
+    ("zhongte_zodiac4", "中特四肖", "中特", "zodiac", 4),
+    ("zhongte_zodiac2", "中特二肖", "中特", "zodiac", 2),
+    ("zhongte_codes4", "中特四码", "中特", "codes", 4),
+    ("zhongte_codes2", "中特二码", "中特", "codes", 2),
+    ("zhongte_codes8", "中特八码", "中特", "codes", 8),
+    ("zhongte_codes12", "中特精选12码", "中特", "codes", 12),
+    ("zhongte_oddeven", "中特单双", "中特", "oddeven", 1),
+    ("zhongte_size", "中特大小", "中特", "size", 1),
+    ("jinsuan_zodiac5", "金算五肖", "金算", "zodiac", 5),
+    ("jinsuan_zodiac3", "金算三肖", "金算", "zodiac", 3),
+    ("jinsuan_zodiac1", "金算平特一肖", "金算", "zodiac", 1),
+    ("jinsuan_codes4", "金算四码", "金算", "codes", 4),
+    ("jinsuan_codes2", "金算二码", "金算", "codes", 2),
+    ("jinsuan_codes3", "金算三码", "金算", "codes", 3),
+    ("jinsuan_codes10", "金算精选10码", "金算", "codes", 10),
+    ("jubao_zodiac7", "聚宝七肖", "聚宝", "zodiac", 7),
+    ("jubao_zodiac4", "聚宝四肖", "聚宝", "zodiac", 4),
+    ("jubao_zodiac2", "聚宝二肖", "聚宝", "zodiac", 2),
+    ("jubao_codes7", "聚宝七码", "聚宝", "codes", 7),
+    ("jubao_codes5", "聚宝五码", "聚宝", "codes", 5),
+    ("jubao_codes3", "聚宝三码", "聚宝", "codes", 3),
+    # ── 采集器新增字段（第二轮，2026-09-17）──
+    ("zhongte_codes13", "中特十三码", "中特", "codes", 13),
+    ("zhongte_zodiac4_3q", "中特三期四肖", "中特", "zodiac", 4),
+    ("jubao_jaye", "聚宝家野", "聚宝", "jaye", 1),
+    ("jubao_boduan", "聚宝波段", "聚宝", "wave", 1),
+    ("jubao_danshuang", "聚宝单双", "聚宝", "oddeven", 1),
+    ("jubao_sanqi12", "聚宝三期十六码", "聚宝", "codes", 16),
+    ("jubao_heshu", "聚宝合数", "聚宝", "heshu", 1),
+    ("jubao_sixiao3q", "聚宝三期四肖", "聚宝", "zodiac", 4),
+    ("jubao_codes12", "聚宝12码", "聚宝", "codes", 12),
+    ("jubao_santou", "聚宝三头", "聚宝", "head", 3),
+    ("jubao_codes16", "聚宝16码", "聚宝", "codes", 16),
+]
+
+# 随机基准：生肖按实际覆盖生肖数/12、号码按实际号码数/49、尾数按实际尾数/10；
+# 大小/单双 = 25/49、波色 = 17/49（与 V1 口径一致）。
+MULTI_GROUP2_FAMILIES = ["哪吒", "中特", "金算", "聚宝", "米老"]
+
+
+@app.get("/api/multiGroup2/meta")
+def multi_group2_meta(user=Header(None, alias="authorization")):
+    """多组汇总2：5家列定义 + 约束规则。"""
+    require_user(user)
+    fam_map = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+        fam_map.setdefault(fam, []).append({"field": f, "label": cname, "type": ctype, "expect": expect})
+    families = [{"key": fam, "cols": cols} for fam, cols in fam_map.items()]
+    return {"families": families, "constraints": MULTI_GROUP_CONSTRAINTS}
+
+
+@app.get("/api/multiGroup2/list")
+def multi_group2_list(family: str = "哪吒", page: int = 1, size: int = 20, period: str = "",
+                      date_from: str = "", date_to: str = "", user=Header(None, alias="authorization")):
+    """多组汇总2：按家分页查询，支持期数/日期范围筛选。"""
+    require_user(user)
+    db = get_db()
+    cols = [c[0] for c in MULTI_GROUP2_COLS if c[2] == family]
+    if not cols:
+        cols = [c[0] for c in MULTI_GROUP2_COLS if c[2] == "哪吒"]
+    where = ["1=1"]
+    args = []
+    if period:
+        where.append("period LIKE ?")
+        args.append(f"%{period}%")
+    if date_from:
+        where.append("draw_date >= ?")
+        args.append(date_from)
+    if date_to:
+        where.append("draw_date <= ?")
+        args.append(date_to)
+    w = " AND ".join(where)
+    total = db.execute(f"SELECT COUNT(*) FROM multi_group_summary2 WHERE {w}", args).fetchone()[0]
+    select_cols = "draw_date, period, " + ", ".join(cols)
+    offset = (max(1, page) - 1) * size
+    rows = db.execute(
+        f"SELECT {select_cols} FROM multi_group_summary2 WHERE {w} ORDER BY draw_date DESC LIMIT ? OFFSET ?",
+        args + [size, offset]).fetchall()
+    col_meta = [{"field": c[0], "label": c[1], "type": c[3], "expect": c[4]} for c in MULTI_GROUP2_COLS if c[2] == family]
+
+    # 加命中状态：每行每字段是否命中当期开奖号（前端列表命中显示蓝色）
+    cycle_maps = _load_cycle_maps(db)
+    open_map = {}
+    for rr in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[rr["record_date"]] = (int(rr["source_number"]), rr["cycle_id"])
+        except Exception:
+            pass
+    db.close()
+
+    result_rows = []
+    for r in rows:
+        row = dict(r)
+        d = row["draw_date"]
+        if d in open_map:
+            open_num, cycle_id = open_map[d]
+            zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+            open_labels = match_labels(open_num, zm)
+            row["_open_num"] = open_num
+            hits = {}
+            for c in col_meta:
+                field = c["field"]
+                raw = row.get(field)
+                if raw is None or not str(raw).strip():
+                    continue
+                ctype = c["type"]
+                hit = False
+                if ctype == "codes":
+                    hit = open_num in _parse_codes(raw)
+                elif ctype == "zodiac":
+                    hit = open_labels["zodiac"] in _parse_zodiacs(raw)
+                elif ctype == "tail":
+                    hit = (open_num % 10) in _parse_tails(raw)
+                elif ctype == "size":
+                    hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(str(raw).strip(), str(raw).strip())
+                elif ctype == "wave":
+                    hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(str(raw).strip(), str(raw).strip())
+                elif ctype == "oddeven":
+                    hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(str(raw).strip(), str(raw).strip())
+                if hit:
+                    hits[field] = True
+            row["_hits"] = hits
+        result_rows.append(row)
+
+    return {
+        "rows": result_rows,
+        "cols": col_meta,
+        "total": total, "page": page, "size": size,
+        "pages": (total + size - 1) // size if size else 0,
+    }
+
+
+@app.post("/api/multiGroup2/update")
+def multi_group2_update(body: dict, user=Header(None, alias="authorization")):
+    """多组汇总2：按 draw_date + field 更新单个单元格预测值。"""
+    require_user(user)
+    draw_date = (body.get("draw_date") or "").strip()
+    field = (body.get("field") or "").strip()
+    value = body.get("value", "")
+    if not draw_date or not field:
+        raise HTTPException(400, "参数缺失：需 draw_date + field")
+    valid_fields = {c[0] for c in MULTI_GROUP2_COLS}
+    if field not in valid_fields:
+        raise HTTPException(400, "非法字段")
+    db = get_db()
+    row = db.execute("SELECT 1 FROM multi_group_summary2 WHERE draw_date=?", (draw_date,)).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(404, "该期数据不存在")
+    db.execute(f"UPDATE multi_group_summary2 SET {field}=? WHERE draw_date=?", (value, draw_date))
+    db.commit()
+    db.close()
+    return {"ok": True}
+
+
+@app.get("/api/multiGroup2/hitRate")
+def multi_group2_hit_rate(user=Header(None, alias="authorization")):
+    """多组汇总2：5家预测项历史命中率 + 随机基准对比。
+    随机基准：号码=实际号码数/49、生肖=实际生肖数/12、尾数=实际尾数/10、
+    大小/单双=25/49、波色=17/49。超额 = 命中率 − 随机基准。"""
+    require_user(user)
+    db = get_db()
+    cycle_maps = _load_cycle_maps(db)
+    open_map = {}
+    for r in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[r["record_date"]] = (int(r["source_number"]), r["cycle_id"])
+        except Exception:
+            pass
+
+    rows = db.execute("SELECT * FROM multi_group_summary2 ORDER BY draw_date").fetchall()
+
+    fam_cols = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+        fam_cols.setdefault(fam, []).append({
+            "field": f, "label": cname, "type": ctype, "expect": expect,
+            "hit": 0, "total": 0, "rand_expect": 0.0,
+        })
+
+    matched_periods = 0
+    for r in rows:
+        d = r["draw_date"]
+        if d not in open_map:
+            continue
+        matched_periods += 1
+        open_num, cycle_id = open_map[d]
+        zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+        open_labels = match_labels(open_num, zm)
+
+        for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+            raw = r[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            col = next(c for c in fam_cols[fam] if c["field"] == f)
+            col["total"] += 1
+            hit = False
+            raw_s = str(raw).strip()
+            if ctype == "codes":
+                nums = _parse_codes(raw)
+                col["rand_expect"] += len(nums) / 49.0
+                hit = open_num in nums
+            elif ctype == "zodiac":
+                zs = _parse_zodiacs(raw)
+                col["rand_expect"] += len(zs) / 12.0
+                hit = open_labels["zodiac"] in zs
+            elif ctype == "tail":
+                tails = _parse_tails(raw)
+                col["rand_expect"] += len(tails) / 10.0
+                hit = (open_num % 10) in tails
+            elif ctype == "head":
+                heads = _parse_tails(raw)
+                col["rand_expect"] += len(heads) / 5.0
+                hit = (open_num - 1) // 10 in heads
+            elif ctype == "jaye":
+                col["rand_expect"] += 0.5
+                z = open_labels["zodiac"]
+                is_beast = z in "鼠虎兔龙蛇猴"
+                hit = (raw_s == "野兽" and is_beast) or (raw_s == "家畜" and not is_beast)
+            elif ctype == "heshu":
+                col["rand_expect"] += 20.0 / 49.0
+                hit = ((open_num // 10 + open_num % 10) >= 8) == (raw_s == "大")
+            elif ctype == "size":
+                col["rand_expect"] += 25.0 / 49.0
+                hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(raw_s, raw_s)
+            elif ctype == "wave":
+                col["rand_expect"] += 17.0 / 49.0
+                hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(raw_s, raw_s)
+            elif ctype == "oddeven":
+                col["rand_expect"] += 25.0 / 49.0
+                hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(raw_s, raw_s)
+            if hit:
+                col["hit"] += 1
+
+    result = []
+    for fam in MULTI_GROUP2_FAMILIES:
+        cols = []
+        for c in fam_cols.get(fam, []):
+            total = c["total"]
+            rate = (c["hit"] / total) if total else 0.0
+            rr = (c["rand_expect"] / total) if total else 0.0
             cols.append({
                 "field": c["field"], "label": c["label"], "type": c["type"], "expect": c["expect"],
                 "hit": c["hit"], "total": total,
@@ -5971,7 +6357,8 @@ def _fetch_site_html(url, max_hops=3):
     # 1. 好运通类 JS 注入站：优先采集 /chajie/*.js 拼接（主页 iframe 是直播页，勿被它抢先）
     if '/chajie/' in html and 'document.write' in html:
         parts = [html]
-        for js in ("/chajie/6w.js", "/chajie/qylg.js", "/chajie/4x8m.js", "/chajie/ss6m.js"):
+        for js in ("/chajie/6w.js", "/chajie/qylg.js", "/chajie/4x8m.js", "/chajie/ss6m.js",
+                   "/chajie/6xiao.js", "/chajie/24ma.js", "/chajie/16ma.js", "/chajie/3t.js"):
             try:
                 jt, _ = _http_get(urljoin(cur, js))
                 if len(jt) > 100:
@@ -6012,8 +6399,14 @@ SITE_PARSERS = {}
 
 
 def _period_to_date(period):
-    """期数 → 日期（124期=2026-05-04 基准，每天一期，与多组汇总历史数据对齐）。"""
+    """期数 → 日期（124期=2026-05-04 基准，每天一期。今天 9-17 对应 260期）。"""
     return (date(2026, 5, 4) + timedelta(days=period - 124)).strftime("%Y-%m-%d")
+
+
+def _period_ceiling():
+    """采集期号上限 = 今天对应期号（今天 9-17 = 260期，防止采到未来期）。"""
+    today = date.today()
+    return (today - date(2026, 5, 4)).days + 124
 
 
 def _extract_rows(html_text, name):
@@ -6028,7 +6421,19 @@ def _extract_rows(html_text, name):
     return rows
 
 
-def _parse_guiguzi(html_text):
+def _pick_period(pairs, target_period):
+    """从 [(期数, 值), ...] 中按 target_period 选取：指定则精确匹配（否则取最接近），未指定取最大期。"""
+    if not pairs:
+        return None
+    if target_period:
+        exact = [x for x in pairs if x[0] == target_period]
+        if exact:
+            return exact[0]
+        return min(pairs, key=lambda x: abs(x[0] - target_period))
+    return max(pairs, key=lambda x: x[0])
+
+
+def _parse_guiguzi(html_text, target_period=None):
     """鬼谷子站点 parser（/yjjy/index.html）：提取最新一期有实际预测值的各字段。"""
     def clean(s):
         return re.sub(r'<[^>]+>', '', s).strip()
@@ -6038,9 +6443,10 @@ def _parse_guiguzi(html_text):
 
     def take(pairs, field, val_transform):
         nonlocal max_period
-        if not pairs:
+        picked = _pick_period(pairs, target_period)
+        if not picked:
             return
-        p, v = max(pairs, key=lambda x: x[0])
+        p, v = picked
         max_period = max(max_period, p)
         result[field] = val_transform(v)
 
@@ -6089,26 +6495,86 @@ def _parse_guiguzi(html_text):
             zodiacs.append((p, zs))
     take(zodiacs, 'gui_zodiac5', lambda v: ''.join(v))
 
-    # 6. 极限12码：X期-Y期 〖极限12码〗 号码
-    codes = []
-    for m in re.findall(r'(\d+)期-(\d+)期</font>.*?〖极限12码〗.*?<br>\s*<span class="zl">\s*(.*?)\s*</span>', html_text, re.DOTALL):
-        p1, p2, v = int(m[0]), int(m[1]), clean(m[2])
-        nums = [n for n in re.split(r'[.\s]+', v) if n.isdigit() and 1 <= int(n) <= 49]
-        if nums:
-            codes.append((p1, nums))
-    take(codes, 'gui_codes10', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+    # 6. 必出特码数字：X期-Y期必出特码数字【号码】（10码管10期，独立收集，不参与 max_period 更新）
+    code_ranges = []
+    for m in re.finditer(r'(\d+)期-(\d+)期必出特码数字.*?【(.*?)】', html_text, re.DOTALL):
+        x, y = int(m.group(1)), int(m.group(2))
+        nums = [n for n in re.findall(r'\d+', m.group(3)) if 1 <= int(n) <= 49]
+        if len(nums) == 10:
+            code_ranges.append((x, y, nums))
+
+    # 7. 平特一肖：X期;平特①肖【生肖】（重复强调，取唯一生肖）
+    pz1 = []
+    for p, v in _extract_rows(html_text, '平特①肖'):
+        zs = [c for c in v if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+        if zs:
+            pz1.append((p, zs[0]))
+    take(pz1, 'gui_pingte_zodiac1', lambda v: v)
+
+    # 8. 平特一尾：X期;平特一尾【数字】（值如"33333"→尾3，取首个数字字符）
+    pt = []
+    for p, v in _extract_rows(html_text, '平特一尾'):
+        digits = [c for c in v if c.isdigit() and 0 <= int(c) <= 9]
+        if digits:
+            pt.append((p, digits[0]))
+    take(pt, 'gui_pingte_tail', lambda v: v)
+
+    # 9. 六尾中特：X期;六尾中特【尾数】
+    t6 = []
+    for p, v in _extract_rows(html_text, '六尾中特'):
+        nums = [n for n in re.findall(r'\d+', v) if 0 <= int(n) <= 9]
+        if len(nums) >= 4:
+            t6.append((p, nums))
+    take(t6, 'gui_tail6', lambda v: '.'.join(v))
+
+    # 10. 内部四肖：X期;内部四肖【生肖】
+    z4 = []
+    for p, v in _extract_rows(html_text, '内部四肖'):
+        zs = [c for c in v if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+        if len(zs) >= 3:
+            z4.append((p, zs))
+    take(z4, 'gui_zodiac4', lambda v: ''.join(v))
+
+    # 11. 必出特码数字：找覆盖目标期的组（10码管10期）
+    _ref = target_period or max_period
+    if code_ranges and _ref:
+        covering = [c for c in code_ranges if c[0] <= _ref <= c[1]]
+        cand = covering or [c for c in code_ranges if c[0] <= _ref]
+        if cand:
+            _, _, nums = max(cand, key=lambda c: c[0])
+            result['gui_codes10'] = '.'.join(f"{int(n):02d}" for n in nums)
+
+    # 12. 四肖（三期内必开）：247期 248期 249期 狗猪马羊 开:...（期号/值有标签，先 clean）
+    _gtxt = re.sub(r'<[^>]+>', ' ', html_text)
+    s4 = []
+    for m in re.finditer(r'(\d+)期\s+(\d+)期\s+(\d+)期\s+([鼠牛虎兔龙蛇马羊猴鸡狗猪\s]{3,8})\s+开', _gtxt):
+        p = int(m.group(3))
+        zs = ''.join(c for c in m.group(4) if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪')
+        if len(zs) >= 3:
+            s4.append((p, zs))
+    take(s4, 'gui_zodiac4_3q', lambda v: v)
+
+    # 13. 12码（极限12码）：260期-261期〖极限12码〗号码（"更新中"跳过）
+    c12 = []
+    for m in re.finditer(r'(\d+)期-(\d+)期\s*〖极限12码〗([\d\s.]+)', _gtxt):
+        p = int(m.group(2))
+        nums = [n for n in re.findall(r'\d+', m.group(3)) if 1 <= int(n) <= 49]
+        if len(nums) == 12:
+            c12.append((p, nums))
+    take(c12, 'gui_codes12', lambda v: '.'.join(f"{int(n):02d}" for n in v))
 
     if not result or max_period == 0:
         return None
-    result['period'] = f"{max_period}期"
-    result['draw_date'] = _period_to_date(max_period)
+    final_period = target_period or max_period
+    result['period'] = f"{final_period}期"
+    result['draw_date'] = _period_to_date(final_period)
     return result
 
 
 SITE_PARSERS["gui"] = _parse_guiguzi
 
 
-def _parse_zhuge(html_text):
+def _parse_zhuge(html_text, target_period=None):
     """诸葛亮站点 parser（/yjjy/index.html）：提取最新一期有实际预测值的各字段。"""
     def clean(s):
         return re.sub(r'<[^>]+>', '', s).strip()
@@ -6118,9 +6584,10 @@ def _parse_zhuge(html_text):
 
     def take(pairs, field, transform):
         nonlocal max_period
-        if not pairs:
+        picked = _pick_period(pairs, target_period)
+        if not picked:
             return
-        p, v = max(pairs, key=lambda x: x[0])
+        p, v = picked
         max_period = max(max_period, p)
         result[field] = transform(v)
 
@@ -6131,9 +6598,9 @@ def _parse_zhuge(html_text):
         if len(ws) == 2:
             waves.append((p, ws))
     take(waves, 'zhuge_wave1', lambda v: v[0].replace('波', ''))
-    if waves:
-        p, v = max(waves, key=lambda x: x[0])
-        result['zhuge_wave2'] = v[1].replace('波', '')
+    _wp = _pick_period(waves, target_period)
+    if _wp:
+        result['zhuge_wave2'] = _wp[1][1].replace('波', '')
 
     # 2. 神算四尾：X期;神算四尾【3-4-5-6尾】
     t4 = []
@@ -6166,8 +6633,9 @@ def _parse_zhuge(html_text):
             codes = [n for n in re.split(r'[.\s]+', codes_raw) if n.isdigit() and 1 <= int(n) <= 49]
         if len(zs_list) == 2 and len(codes) >= 4:
             z2c4.append((p, (zs_list, codes[:4])))
-    if z2c4:
-        p, (zs, codes) = max(z2c4, key=lambda x: x[0])
+    _zp = _pick_period(z2c4, target_period)
+    if _zp:
+        p, (zs, codes) = _zp
         max_period = max(max_period, p)
         result['zhuge_zodiac2'] = ''.join(zs)
         result['zhuge_codes4'] = '.'.join(f"{int(n):02d}" for n in codes)
@@ -6180,17 +6648,73 @@ def _parse_zhuge(html_text):
             z6.append((p, zs))
     take(z6, 'zhuge_zodiac6', lambda v: ''.join(v))
 
+    # 5.4 九肖/七肖/五肖/三肖：横向表格 "X期;九肖 <生肖>"（值在后续 td，须按 <tr> 分块去标签后匹配；
+    #     占位"记住本站永久域名 开？00"无生肖字符，自然跳过）
+    for _name, _field in [('九肖', 'zhuge_zodiac9'), ('七肖', 'zhuge_zodiac7'),
+                          ('五肖', 'zhuge_zodiac5'), ('三肖', 'zhuge_zodiac3')]:
+        zs_rows = []
+        for tr in re.findall(r'<tr>.*?</tr>', html_text, re.DOTALL):
+            text = clean(tr)
+            m = re.search(rf'(\d+)期;\s*{_name}\s*([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)', text)
+            if m:
+                zs_rows.append((int(m.group(1)), m.group(2)))
+        take(zs_rows, _field, lambda v: v)
+
+    # 5.5 十码三期必开：X-Y期 【10码三期必开】 【号码】（10码管3期，独立收集，不参与 max_period）
+    code_ranges10 = []
+    for m in re.finditer(r'(\d+)-(\d+)期.*?【10码三期必开】.*?【(.*?)】', html_text, re.DOTALL):
+        x, y = int(m.group(1)), int(m.group(2))
+        nums = [n for n in re.findall(r'\d+', m.group(3)) if 1 <= int(n) <= 49]
+        if len(nums) == 10:
+            code_ranges10.append((x, y, nums))
+
+    # 6. 平特一尾：X期;平特一尾【数字】（值如"444尾"→尾4，取首个数字字符）
+    pt = []
+    for p, v in _extract_rows(html_text, '平特一尾'):
+        digits = [c for c in v if c.isdigit() and 0 <= int(c) <= 9]
+        if digits:
+            pt.append((p, digits[0]))
+    take(pt, 'zhuge_pingte_tail', lambda v: v)
+
+    # 7. 大小中特：X期;大小中特【大数/小数】
+    sizes = []
+    for p, v in _extract_rows(html_text, '大小中特'):
+        if '大数' in v:
+            sizes.append((p, '大'))
+        elif '小数' in v:
+            sizes.append((p, '小'))
+    take(sizes, 'zhuge_size', lambda v: v)
+
+    # 8. 单双中特：X期;单双中特【单数/双数】
+    oddeven = []
+    for p, v in _extract_rows(html_text, '单双中特'):
+        if '单数' in v:
+            oddeven.append((p, '单'))
+        elif '双数' in v:
+            oddeven.append((p, '双'))
+    take(oddeven, 'zhuge_oddeven', lambda v: v)
+
+    # 十码三期必开：找覆盖目标期的组（10码管3期）
+    _ref = target_period or max_period
+    if code_ranges10 and _ref:
+        covering = [c for c in code_ranges10 if c[0] <= _ref <= c[1]]
+        cand = covering or [c for c in code_ranges10 if c[0] <= _ref]
+        if cand:
+            _, _, nums = max(cand, key=lambda c: c[0])
+            result['zhuge_codes10'] = '.'.join(f"{int(n):02d}" for n in nums)
+
     if not result or max_period == 0:
         return None
-    result['period'] = f"{max_period}期"
-    result['draw_date'] = _period_to_date(max_period)
+    final_period = target_period or max_period
+    result['period'] = f"{final_period}期"
+    result['draw_date'] = _period_to_date(final_period)
     return result
 
 
 SITE_PARSERS["zhuge"] = _parse_zhuge
 
 
-def _parse_dajia(html_text):
+def _parse_dajia(html_text, target_period=None):
     """大家站点 parser（/yjjy/am.html）：提取最新一期六肖/六尾/十码。
     六肖「X期;六肖〖生肖〗」、六尾「X期;⑥尾～开:…【尾数】」、十码「X期;十码 表格」。
     十码栏目仅保留最新一期，当期未更新则采不到（历史期不保留）。"""
@@ -6202,9 +6726,10 @@ def _parse_dajia(html_text):
 
     def take(pairs, field, transform):
         nonlocal max_period
-        if not pairs:
+        picked = _pick_period(pairs, target_period)
+        if not picked:
             return
-        p, v = max(pairs, key=lambda x: x[0])
+        p, v = picked
         max_period = max(max_period, p)
         result[field] = transform(v)
 
@@ -6242,17 +6767,71 @@ def _parse_dajia(html_text):
             codes.append((p, nums[:10]))
     take(codes, 'dajia_codes10', lambda v: '.'.join(f"{int(n):02d}" for n in v))
 
+    # 4. 平特一肖：聚彩堂【平特一肖】表格 X期【生肖】开:XX（延迟更新栏目，跳过"更新中"，取最新有值期）
+    pingte = []
+    anchor = re.search(r'聚彩堂【平特一肖】', html_text)
+    if anchor:
+        seg = html_text[anchor.start():anchor.start() + 4000]
+        for m in re.finditer(r'(\d+)期</b></td><td>\s*<p[^>]*>\s*<font[^>]*>\s*【<span[^>]*>([^<]+)</span>】', seg):
+            p = int(m.group(1))
+            v = m.group(2).strip()
+            if '更新' in v:
+                continue
+            zs = [c for c in v if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪']
+            if zs:
+                pingte.append((p, zs[0]))
+    _pp = _pick_period(pingte, target_period)
+    if _pp:
+        # 平特一肖是延迟更新栏目，不参与 max_period（避免把 draw_date 拉回旧期）
+        result['dajia_pingte_zodiac1'] = _pp[1]
+
+    # 5. 24码（内部24码）：258期24码必中特...〖8个〗〖8个〗〖8个〗（号码有 span，先 clean）
+    c24 = []
+    for m in re.finditer(r'(\d+)期24码必中特.*?〖(.*?)〗.*?〖(.*?)〗.*?〖(.*?)〗', html_text, re.DOTALL):
+        p = int(m.group(1))
+        nums = []
+        for g in (m.group(2), m.group(3), m.group(4)):
+            nums += [n for n in re.findall(r'\d+', re.sub(r'<[^>]+>', ' ', g)) if 1 <= int(n) <= 49]
+        if len(nums) == 24:
+            c24.append((p, nums))
+    take(c24, 'dajia_codes24', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    # 6. 家野（家野中特）：260期 【野兽野兽】（期号与【】间有标签，锚点+clean）
+    jy = []
+    anchor = re.search(r'家野中特】', html_text)
+    if anchor:
+        for m in re.finditer(r'(\d+)期.*?【(.*?)】', html_text[anchor.start():anchor.start() + 3000], re.DOTALL):
+            p = int(m.group(1))
+            v = clean(m.group(2))
+            if '野兽' in v:
+                jy.append((p, '野兽'))
+            elif '家畜' in v:
+                jy.append((p, '家畜'))
+    take(jy, 'dajia_jaye', lambda v: v)
+
+    # 7. 四肖（三期四肖）：247期<br>248期<br>249期 【鼠兔蛇马】（锚点+clean）
+    s4 = []
+    anchor = re.search(r'三期四肖】', html_text)
+    if anchor:
+        for m in re.finditer(r'(\d+)期.*?(\d+)期.*?(\d+)期.*?【(.*?)】', html_text[anchor.start():anchor.start() + 5000], re.DOTALL):
+            p = max(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            zs = ''.join(c for c in clean(m.group(4)) if c in '鼠牛虎兔龙蛇马羊猴鸡狗猪')
+            if len(zs) >= 3:
+                s4.append((p, zs))
+    take(s4, 'dajia_sixiao3q', lambda v: v)
+
     if not result or max_period == 0:
         return None
-    result['period'] = f"{max_period}期"
-    result['draw_date'] = _period_to_date(max_period)
+    final_period = target_period or max_period
+    result['period'] = f"{final_period}期"
+    result['draw_date'] = _period_to_date(final_period)
     return result
 
 
 SITE_PARSERS["dajia"] = _parse_dajia
 
 
-def _parse_haoyun(html_text):
+def _parse_haoyun(html_text, target_period=None):
     """好运通站点 parser：数据由 /chajie/*.js 的 document.write 注入（已由 _fetch_site_html 拼接进 html_text，
     以 <!--JS:路径--> 分隔）。六尾(6w)、八码1(qylg 一肖一码)、八码2(4x8m 四肖八码)、八码3(ss6m 神算八码)。
     注：历史 xlsx 有 haoyun_84（第四个八码），新网址无对应栏目，暂不采集。"""
@@ -6264,9 +6843,10 @@ def _parse_haoyun(html_text):
 
     def take(pairs, field, transform):
         nonlocal max_period
-        if not pairs:
+        picked = _pick_period(pairs, target_period)
+        if not picked:
             return
-        p, v = max(pairs, key=lambda x: x[0])
+        p, v = picked
         max_period = max(max_period, p)
         result[field] = transform(v)
 
@@ -6309,22 +6889,87 @@ def _parse_haoyun(html_text):
             c3.append((int(m.group(1)), nums))
     take(c3, 'haoyun_83', lambda v: '.'.join(f"{int(n):02d}" for n in v))
 
+    # 5. 七肖/五肖/五码（qylg.js）：259期五肖：羊猪兔鼠狗
+    qc = clean(seg('qylg'))
+    m = re.search(r'(\d+)期七肖[：:]\s*([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)', qc)
+    if m:
+        result['haoyun_zodiac7'] = m.group(2)
+        max_period = max(max_period, int(m.group(1)))
+    m = re.search(r'(\d+)期五肖[：:]\s*([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)', qc)
+    if m:
+        result['haoyun_zodiac5'] = m.group(2)
+        max_period = max(max_period, int(m.group(1)))
+    m = re.search(r'(\d+)期五码[：:]\s*([0-9.\s]+)', qc)
+    if m:
+        nums = nums8(m.group(2))
+        if len(nums) == 5:
+            result['haoyun_codes5'] = '.'.join(f"{int(n):02d}" for n in nums)
+            max_period = max(max_period, int(m.group(1)))
+
+    # 6. 一肖/六码（4x8m.js）：259期一肖:牛 / 六码:18.30.22.46.04.16
+    xc = clean(seg('4x8m'))
+    m = re.search(r'(\d+)期一肖[：:]\s*([鼠牛虎兔龙蛇马羊猴鸡狗猪])', xc)
+    if m:
+        result['haoyun_zodiac1'] = m.group(2)
+        max_period = max(max_period, int(m.group(1)))
+    m = re.search(r'六码[：:]\s*([0-9.\s]+)', xc)
+    if m:
+        nums = nums8(m.group(1))
+        if len(nums) == 6:
+            result['haoyun_codes6'] = '.'.join(f"{int(n):02d}" for n in nums)
+
+    # 7. 六肖（6xiao.js）：260期 ... <span>羊蛇猪牛虎狗</span>
+    z6 = []
+    for m in re.finditer(r'(\d+)期</td>.*?<span[^>]*>([鼠牛虎兔龙蛇马羊猴鸡狗猪]+)</span>', seg('6xiao'), re.DOTALL):
+        z6.append((int(m.group(1)), m.group(2)))
+    take(z6, 'haoyun_zodiac6', lambda v: v)
+
+    # 8. 24码（24ma.js）：260期 ... 24个号码（<br>分隔，两位数）
+    c24 = []
+    for m in re.finditer(r'(\d+)期</td>(.*?)</td>', seg('24ma'), re.DOTALL):
+        txt = re.sub(r'<[^>]+>', ' ', m.group(2))
+        nums = [n for n in re.findall(r'\d{2}', txt) if 1 <= int(n) <= 49]
+        if len(nums) == 24:
+            c24.append((int(m.group(1)), nums))
+    take(c24, 'haoyun_codes24', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    # 9. 16码（16ma.js）：260期 ... 16个号码
+    c16 = []
+    for m in re.finditer(r'(\d+)期</td>(.*?)</td>', seg('16ma'), re.DOTALL):
+        txt = re.sub(r'<[^>]+>', ' ', m.group(2))
+        nums = [n for n in re.findall(r'\d{2}', txt) if 1 <= int(n) <= 49]
+        if len(nums) == 16:
+            c16.append((int(m.group(1)), nums))
+    take(c16, 'haoyun_codes16', lambda v: '.'.join(f"{int(n):02d}" for n in v))
+
+    # 10. 三头（3t.js）：260期:好运一点通三头 【0头1头3头】
+    m = re.search(r'(\d+)期[:：]好运一点通三头\s*【([0-9]头[0-9]头[0-9]头)】', clean(seg('3t')))
+    if m:
+        heads = re.findall(r'\d', m.group(2))
+        if heads:
+            result['haoyun_santou'] = '.'.join(heads)
+            max_period = max(max_period, int(m.group(1)))
+
     if not result or max_period == 0:
         return None
-    result['period'] = f"{max_period}期"
-    result['draw_date'] = _period_to_date(max_period)
+    final_period = target_period or max_period
+    result['period'] = f"{final_period}期"
+    result['draw_date'] = _period_to_date(final_period)
     return result
 
 
 SITE_PARSERS["haoyun"] = _parse_haoyun
 
 
-def _parse_site_predict(site_key, html_text):
-    """调用站点解析器提取预测数据。返回 {draw_date, period, field: value} 或 None。"""
+def _parse_site_predict(site_key, html_text, target_period=None):
+    """调用站点解析器提取预测数据。返回 {draw_date, period, field: value} 或 None。
+    target_period 指定时采该期（V1 页面保留多期历史）；未指定时约束到上限期号（防止采到未来期）。"""
     parser = SITE_PARSERS.get(site_key)
     if not parser:
         return None
-    return parser(html_text)
+    if target_period is None:
+        target_period = _period_ceiling()
+    return parser(html_text, target_period)
 
 
 def _save_multi_group(db, data):
@@ -6357,8 +7002,18 @@ def _log_fetch(db, site_key, site_name, status, detail, error=""):
     db.commit()
 
 
-def fetch_site(site_key):
-    """一键采集：读配置 → 采集 → parser → 入库 → 记日志。"""
+# V2 站点（CDP 采集 → multi_group_summary2，走 fetch_predict 模块）
+V2_SITE_NAMES = {
+    "zhongte": "中特",
+    "jinsuan": "金算",
+    "jubao": "聚宝",
+    "milao": "米老",
+}
+
+
+def fetch_site(site_key, target_period=None):
+    """一键采集：读配置 → 采集 → parser → 入库 → 记日志。
+    target_period 指定期号时采该期（V1 页面保留多期历史），否则采最新一期。"""
     db = get_db()
     cfg = db.execute("SELECT * FROM predict_site_config WHERE site_key=?", (site_key,)).fetchone()
     if not cfg:
@@ -6369,15 +7024,35 @@ def fetch_site(site_key):
         db.close()
         return {"status": "fail", "site_key": site_key, "error": f"{cfg['site_name']} 网址未配置"}
     try:
+        # V2 站点：CDP 采集 → multi_group_summary2
+        if site_key in V2_SITE_NAMES:
+            import fetch_predict
+            r = fetch_predict.fetch_and_save(V2_SITE_NAMES[site_key], cfg["url"].strip(), target_period=target_period)
+            status = r.get("status", "fail")
+            detail = (f"入库成功 期数={r.get('period')} 字段={len(r.get('fields', {}))}"
+                      if status == "ok" else r.get("error", ""))
+            _log_fetch(db, site_key, cfg["site_name"], status, detail, r.get("error", ""))
+            db.close()
+            return {"status": status, "site_key": site_key, "detail": detail, "error": r.get("error", "")}
+        # V1 站点：HTTP 采集 → multi_group_summary
         html = _fetch_site_html(cfg["url"].strip())
         if not html or len(html.strip()) < 50:
             raise ValueError("采集内容为空或过短")
-        data = _parse_site_predict(site_key, html)
+        data = _parse_site_predict(site_key, html, target_period)
         if not data:
             _log_fetch(db, site_key, cfg["site_name"], "fail", "", "解析器待实现（请先配置网址+解析规则）")
             db.close()
             return {"status": "fail", "site_key": site_key, "error": "解析器待实现（请先提供网址，我来补解析规则）"}
         r = _save_multi_group(db, data)
+        # 好运八四 = 上一期的好运八三（新网址无「八四」栏目，八四实为上一期八三）
+        if site_key == 'haoyun' and r.get('status') == 'ok' and data.get('draw_date'):
+            cur_date = data['draw_date']
+            prev_date = (date(*map(int, cur_date.split('-'))) - timedelta(days=1)).strftime('%Y-%m-%d')
+            prev = db.execute("SELECT haoyun_83 FROM multi_group_summary WHERE draw_date=?", (prev_date,)).fetchone()
+            if prev and prev['haoyun_83']:
+                db.execute("UPDATE multi_group_summary SET haoyun_84=? WHERE draw_date=?",
+                           (prev['haoyun_83'], cur_date))
+                db.commit()
         detail = f"入库成功 期数={r.get('period')} 字段={r.get('fields')}"
         _log_fetch(db, site_key, cfg["site_name"], r["status"], detail, r.get("error", ""))
         db.close()
@@ -6480,12 +7155,18 @@ def predict_site_save(body: dict, user=Header(None, alias="authorization")):
 
 @app.post("/api/predictSite/fetch")
 def predict_site_fetch(body: dict, user=Header(None, alias="authorization")):
-    """一键采集指定站点。body: {site_key}。"""
+    """一键采集指定站点。body: {site_key, period?}。period 为指定期号（如 260），缺省采最新一期。"""
     require_user(user)
     site_key = body.get("site_key", "").strip()
     if not site_key:
         raise HTTPException(400, "缺 site_key")
-    return fetch_site(site_key)
+    period = body.get("period") or None
+    if period is not None:
+        try:
+            period = int(str(period).strip())
+        except (ValueError, TypeError):
+            period = None
+    return fetch_site(site_key, target_period=period)
 
 
 @app.post("/api/predictSite/fetchAll")
