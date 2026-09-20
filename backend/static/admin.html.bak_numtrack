@@ -309,6 +309,7 @@ table.data tr.warn td{background:var(--warnbg)}
           <button class="btn btn-sm" :style="dimTab==='track'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='track';loadTrackTab()">单次跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='hightrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='hightrack';loadHighTrack()">高位跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='tailtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='tailtrack';loadTailTrack()">尾数跟踪</button>
+          <button class="btn btn-sm" :style="dimTab==='numtrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='numtrack';loadNumTrack()">号码跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='zodiac'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='zodiac';loadZodiacTrack()">肖跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='autotrack'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='autotrack';loadSchemeList();loadSchemePicks();loadPaperTrade();loadConsensus();loadRolling();loadGeneralize()">自主跟踪</button>
           <button class="btn btn-sm" :style="dimTab==='random8'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="dimTab='random8';loadRandom8()">8码6期</button>
@@ -1288,6 +1289,97 @@ table.data tr.warn td{background:var(--warnbg)}
           </template>
 
           <!-- tab: 号码跟踪 -->
+          <template v-if="dimTab==='numtrack'">
+            <div class="card">
+              <div class="card-title">🔢 号码跟踪 · 4家号码栏目 N×5 叠加
+                <button class="btn btn-sm" @click="loadNumTrack()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
+              </div>
+              <div style="font-size:12px;color:var(--ink2);line-height:1.8;margin-bottom:10px">
+                4 家（鬼谷子 / 大家发 / 诸葛亮 / 好运通）共 <b>8 个号码栏目</b>：鬼十码·大家十码·诸葛四码·诸葛十码·好运八一~八四。每期把栏目号码汇总，统计每号被预测次数 N，<b>每号投 N×{{ numTrack.bet || 5 }} 元（叠加）</b>，命中开奖号赢 47×N×{{ numTrack.bet || 5 }}，未中亏全部投入。区分<b>前24号(1-24)/后25号(25-49)</b>。
+                <span style="color:var(--warn);font-weight:600">⚠️ 47 赔率 &lt; 49 号 = 结构负期望，命中率 69% 仍低于随机 75%，多来源叠加无 edge。</span>
+              </div>
+              <!-- 汇总卡片 -->
+              <div v-if="numTrack.summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
+                  <div style="font-size:11px;color:var(--ink2)">净盈亏</div>
+                  <div style="font-size:20px;font-weight:800" :style="numTrack.summary.net>=0?'color:var(--ok)':'color:var(--warn)'">{{ numTrack.summary.net>=0?'+':'' }}{{ numTrack.summary.net.toLocaleString() }}</div>
+                </div>
+                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
+                  <div style="font-size:11px;color:var(--ink2)">命中率</div>
+                  <div style="font-size:20px;font-weight:800">{{ numTrack.summary.hit_rate }}%</div>
+                  <div style="font-size:10px;color:#b8b0a0">随机基线 75%</div>
+                </div>
+                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
+                  <div style="font-size:11px;color:var(--ink2)">总投入 / 赢回</div>
+                  <div style="font-size:16px;font-weight:700">{{ numTrack.summary.total_invest.toLocaleString() }} / {{ numTrack.summary.total_win.toLocaleString() }}</div>
+                </div>
+                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
+                  <div style="font-size:11px;color:var(--ink2)">前24号命中</div>
+                  <div style="font-size:20px;font-weight:800">{{ numTrack.summary.front_hit_rate }}%</div>
+                </div>
+                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
+                  <div style="font-size:11px;color:var(--ink2)">后25号命中</div>
+                  <div style="font-size:20px;font-weight:800">{{ numTrack.summary.back_hit_rate }}%</div>
+                </div>
+              </div>
+              <!-- 被预测次数 N 与命中率 -->
+              <div v-if="numTrack.n_dist && numTrack.n_dist.length" style="margin-bottom:12px">
+                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📊 被预测次数 N 与命中率（随机基线 2%）</div>
+                <div class="table-scroll" style="max-height:180px">
+                  <table class="data">
+                    <thead><tr><th>被预测次数</th><th>命中</th><th>命中率</th></tr></thead>
+                    <tbody>
+                      <tr v-for="d in numTrack.n_dist" :key="d.n">
+                        <td>{{ d.n }} 次</td>
+                        <td>{{ d.hits }}/{{ d.total }}</td>
+                        <td :style="d.rate>3?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ d.rate }}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <!-- 逐月 -->
+              <div v-if="numTrack.monthly && numTrack.monthly.length" style="margin-bottom:12px">
+                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📅 逐月盈亏</div>
+                <div class="table-scroll" style="max-height:200px">
+                  <table class="data">
+                    <thead><tr><th>月</th><th>投入</th><th>盈亏</th><th>命中率</th></tr></thead>
+                    <tbody>
+                      <tr v-for="m in numTrack.monthly" :key="m.month">
+                        <td>{{ m.month }}</td>
+                        <td>{{ m.invest.toLocaleString() }}</td>
+                        <td :style="m.pnl>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.pnl>=0?'+':'' }}{{ m.pnl.toLocaleString() }}</td>
+                        <td>{{ m.hit_rate }}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <!-- 逐期列表 -->
+              <div class="table-scroll" style="max-height:480px">
+                <table class="data">
+                  <thead><tr>
+                    <th>期</th><th>日期</th><th>投号数</th><th>投入</th><th>开奖</th><th>区间</th><th>前24号</th><th>后25号</th><th>命中</th><th>盈亏</th><th>累计</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr v-for="r in numTrack.daily" :key="r.date">
+                      <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
+                      <td style="font-family:Roboto Mono,monospace">{{ r.date.slice(5) }}</td>
+                      <td>{{ r.N }}</td>
+                      <td>{{ r.invest }}</td>
+                      <td><b>{{ r.open ? pad(r.open) : '-' }}</b></td>
+                      <td><span class="tag" :style="r.side==='前24'?'background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd':'background:#fef3c7;color:#b45309;border:1px solid #fcd34d'" style="font-size:10px;padding:1px 6px">{{ r.side }}</span></td>
+                      <td>{{ r.front_n }}号/{{ r.front_invest }}</td>
+                      <td>{{ r.back_n }}号/{{ r.back_invest }}</td>
+                      <td :style="r.hit?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ r.hit?'✓中':'✗' }}</td>
+                      <td :style="r.pnl>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ r.pnl>=0?'+':'' }}{{ r.pnl }}</td>
+                      <td :style="r.cum>=0?'color:var(--ok)':'color:var(--warn)'">{{ r.cum>=0?'+':'' }}{{ r.cum }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
 
           <!-- tab: 肖跟踪 -->
           <template v-if="dimTab==='zodiac'">
@@ -1446,14 +1538,6 @@ table.data tr.warn td{background:var(--warnbg)}
                     </tr>
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            <!-- 刷新加载动画弹框 -->
-            <div class="modal-mask" v-if="zodiacTrackLoading" style="z-index:200">
-              <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
-                <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
-                <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
               </div>
             </div>
           </template>
@@ -1897,7 +1981,7 @@ table.data tr.warn td{background:var(--warnbg)}
 
       <!-- 多组汇总 -->
       <template v-if="cur==='/multigroup'">
-        <div class="topbar"><h2>多组汇总 · 5家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="topbar"><h2>多组汇总 · 4家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card" style="margin-bottom:12px">
           <div class="card-title">🎯 命中率统计 · 历史 {{ mgHitPeriods }} 期 vs 开奖号 <span style="font-size:11px;color:var(--ink2);font-weight:400">超额 = 命中率 − 随机基准（号码N/49·生肖N/12·尾数N/10·大小单双1/2·波色1/3），<b style="color:#2e9e4f">+5%以上跑赢</b> / <b style="color:#d84343">−5%以下跑输</b></span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
@@ -1916,7 +2000,7 @@ table.data tr.warn td{background:var(--warnbg)}
           </div>
         </div>
         <div class="card">
-          <div class="card-title">📊 汇总多组 · 鬼 / 大家 / 诸葛 / 好运 / 风云（共 {{ mgTotal }} 期）</div>
+          <div class="card-title">📊 汇总多组 · 鬼 / 大家 / 诸葛 / 好运（共 {{ mgTotal }} 期）</div>
           <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:12px">
             <button v-for="f in mgFamilies" :key="f.key" class="btn btn-sm" :style="mgFamily===f.key?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="mgFamily=f.key;mgPage=1;loadMultiGroup()">{{ f.key }}</button>
           </div>
@@ -1969,7 +2053,7 @@ table.data tr.warn td{background:var(--warnbg)}
 
       <!-- 多组汇总2 -->
       <template v-if="cur==='/multigroup2'">
-        <div class="topbar"><h2>多组汇总2 · 6家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="topbar"><h2>多组汇总2 · 5家预测数据</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card" style="margin-bottom:12px">
           <div class="card-title">🎯 命中率统计 · 历史 {{ mg2HitPeriods }} 期 vs 开奖号 <span style="font-size:11px;color:var(--ink2);font-weight:400">超额 = 命中率 − 随机基准（号码N/49·生肖N/12·尾数N/10·大小单双25/49·波色17/49），<b style="color:#2e9e4f">+5%以上跑赢</b> / <b style="color:#d84343">−5%以下跑输</b></span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
@@ -1988,7 +2072,7 @@ table.data tr.warn td{background:var(--warnbg)}
           </div>
         </div>
         <div class="card">
-          <div class="card-title">📊 汇总多组2 · 哪吒 / 中特 / 金算 / 聚宝 / 米老 / 大赢（共 {{ mg2Total }} 期）</div>
+          <div class="card-title">📊 汇总多组2 · 哪吒 / 中特 / 金算 / 聚宝 / 米老（共 {{ mg2Total }} 期）</div>
           <div class="toolbar" style="gap:0;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;width:fit-content;margin-bottom:12px">
             <button v-for="f in mg2Families" :key="f.key" class="btn btn-sm" :style="mg2Family===f.key?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="mg2Family=f.key;mg2Page=1;loadMultiGroup2()">{{ f.key }}</button>
           </div>
@@ -2066,7 +2150,7 @@ table.data tr.warn td{background:var(--warnbg)}
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
                   <span style="font-weight:700;font-size:13px">📅 当天投票阈值</span>
                   <input type="date" v-model="tailQueryDate" style="padding:6px 10px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                  <span v-if="tailQueryRec" style="font-size:12px;color:var(--ink2)"><template v-if="tailQueryRec.pending">待开 · 期{{ tailQueryRec.period }}</template><template v-else>开奖 <b>{{ pad(tailQueryRec.open_num) }}</b> · 尾{{ tailQueryRec.open_tail }} · 期{{ tailQueryRec.period }}</template></span>
+                  <span v-if="tailQueryRec" style="font-size:12px;color:var(--ink2)">开奖 <b>{{ pad(tailQueryRec.open_num) }}</b> · 尾{{ tailQueryRec.open_tail }} · 期{{ tailQueryRec.period }}</span>
                 </div>
                 <div v-if="tailQueryGroups.length" style="display:flex;gap:8px;flex-wrap:wrap">
                   <div v-for="g in tailQueryGroups" :key="g.votes" style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff;min-width:110px">
@@ -2176,18 +2260,17 @@ table.data tr.warn td{background:var(--warnbg)}
                     <tr v-for="r in tailSourceRecords" :key="r.date">
                       <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
                       <td style="font-family:Roboto Mono,monospace">{{ r.date.slice(5) }}</td>
-                      <td><span v-if="r.pending" style="color:#b8b0a0">待开</span><span v-else><b>{{ pad(r.open_num) }}</b><span style="color:var(--ink2)">尾{{ r.open_tail }}</span></span></td>
+                      <td><b>{{ pad(r.open_num) }}</b><span style="color:var(--ink2)">尾{{ r.open_tail }}</span></td>
                       <td v-for="src in tailSource.sources" :key="src">
                         <span v-for="t in r.source_tails[src]" :key="t" class="tag" :style="t===r.open_tail?'background:#f0fdf4;color:#166534;border:1px solid #86efac':'background:#f3efe5;color:var(--ink2);border:1px solid var(--line)'" style="font-size:10px;margin:1px;padding:1px 4px">{{ t }}</span>
                       </td>
                       <td><b>{{ r.top1 }}</b><span style="color:var(--ink2)">({{ r.top1_votes }})</span></td>
-                      <td :style="r.pending?'color:var(--ink2)':(r.top1===r.open_tail?'color:var(--ok);font-weight:700':'color:var(--warn)')">{{ r.pending?'待开':(r.top1===r.open_tail?'✓中':'✗') }}</td>
+                      <td :style="r.top1===r.open_tail?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ r.top1===r.open_tail?'✓中':'✗' }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
-
 
             <div class="card">
               <div class="card-title">🎯 尾数跟踪 · 达朗贝尔±5 演算</div>
@@ -2273,1257 +2356,8 @@ table.data tr.warn td{background:var(--warnbg)}
               </div>
             </div>
 
-            <!-- 刷新加载动画弹框 -->
-            <div class="modal-mask" v-if="tailLoading" style="z-index:200">
-              <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
-                <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
-                <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
-              </div>
-            </div>
                   </template>
 
-      <template v-if="cur==='/zodiacsummary'">
-        <div class="topbar"><h2>多组肖汇 · 4来源投票</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
-<!-- 生肖来源投票 · 购买决策 -->
-            <div class="card">
-              <div class="card-title">🐲 生肖来源投票 · 购买决策
-                <button class="btn btn-sm" @click="loadZodiacSource()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
-              </div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.8;margin-bottom:10px">
-                4 来源（哪吒八肖 / 聚宝八肖 / 米老网红七肖 / 米老七肖）每期预测生肖 → 投票统计 → 选投票最高的生肖作购买决策 → 对比开奖生肖算命中。
-                <span style="color:var(--warn);font-weight:600">⚠️ 赔率 47 &lt; 49 号（抽水 4%），长期负期望；投票命中率 ≈ 随机基线，仅供观察。</span>
-              </div>
-              <!-- 样本外前向验证 -->
-              <div v-if="zodiacTop1Forward && zodiacTop1Forward.stats" style="border:1px solid #93c5fd;border-radius:8px;padding:12px;margin-bottom:12px;background:#eff6ff">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">🧪 Top1 肖 样本外前向验证（真实逐日固化，非回测）</span>
-                  <button class="btn btn-sm" @click="loadZodiacTop1Forward()" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                </div>
-                <div v-if="zodiacTop1Forward.stats.n > 0" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">已固化/结算</div>
-                    <div style="font-size:18px;font-weight:800">{{ zodiacTop1Forward.stats.n }} 期</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">样本外命中率</div>
-                    <div style="font-size:18px;font-weight:800">{{ zodiacTop1Forward.stats.hit_rate }}%<span style="font-size:10px;color:var(--ink2)">(随机 {{ zodiacTop1Forward.stats.rand_base }}%)</span></div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">样本外盈亏</div>
-                    <div style="font-size:18px;font-weight:800" :style="zodiacTop1Forward.stats.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ zodiacTop1Forward.stats.profit>=0?'+':'' }}{{ zodiacTop1Forward.stats.profit }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">z 值</div>
-                    <div style="font-size:18px;font-weight:800" :style="zodiacTop1Forward.stats.z>=1.96?'color:var(--ok)':'color:var(--ink2)'">{{ zodiacTop1Forward.stats.z }}</div>
-                  </div>
-                </div>
-                <div style="font-size:11px;color:var(--ink2)">
-                  <span v-if="zodiacTop1Forward.stats.n < 20">⏳ 已固化 {{ (zodiacTop1Forward.records||[]).length }} 期、已结算 {{ zodiacTop1Forward.stats.n }} 期（样本外有效），需攒够 20 期结算数据才下结论，z 值尚不可靠。</span>
-                  <span v-else-if="zodiacTop1Forward.stats.z >= 1.96">✅ 样本外 z={{ zodiacTop1Forward.stats.z }} ≥ 1.96，显著高于随机，可考虑小仓试错。</span>
-                  <span v-else>❌ 样本外 z={{ zodiacTop1Forward.stats.z }} &lt; 1.96，未达显著，仍是运气范围。</span>
-                </div>
-                <div v-if="zodiacTop1Forward.records && zodiacTop1Forward.records.length" class="table-scroll" style="max-height:200px;margin-top:8px">
-                  <table class="data">
-                    <thead><tr><th>期</th><th>日期</th><th>固化Top1肖(票)</th><th>开奖号+肖</th><th>命中</th><th>盈亏</th></tr></thead>
-                    <tbody>
-                      <tr v-for="r in zodiacTop1Forward.records" :key="r.id">
-                        <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                        <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                        <td><b>{{ r.top1_zodiac }}</b><span style="color:var(--ink2)">({{ r.top1_votes }})</span></td>
-                        <td><span v-if="r.open_num!=null">{{ pad(r.open_num) }}{{ r.open_zodiac }}</span><span v-else style="color:#b8b0a0">待开</span></td>
-                        <td :style="r.hit===1?'color:var(--ok);font-weight:700':r.hit===0?'color:var(--warn)':'color:var(--ink2)'">{{ r.hit===1?'✓中':r.hit===0?'✗':'待' }}</td>
-                        <td :style="r.profit!=null?(r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'):'color:var(--ink2)'">{{ r.profit!=null?(r.profit>=0?'+':'')+r.profit:'待开' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div v-else style="font-size:12px;color:#b8b0a0">尚无前向记录（今晚 23:00 cron 首次固化后可见）</div>
-              </div>
-              <!-- 生肖购买决策 -->
-              <div v-if="zodiacDecision && zodiacDecision.zodiacs && zodiacDecision.zodiacs.length" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">🎯 生肖购买决策 · 稳定盈利评级（历史 {{ zodiacDecision.total_periods }} 期）</span>
-                  <button class="btn btn-sm" @click="loadZodiacDecision()" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                </div>
-                <div style="font-size:11px;color:var(--ink2);margin-bottom:8px">
-                  <span style="color:var(--warn);font-weight:600">⚠️ 历史回测评级，非未来保证；47赔率&lt;49号=结构负期望。样本&lt;10 的生肖命中率虚高属运气，不推荐。</span>
-                </div>
-                <div class="table-scroll" style="max-height:360px">
-                  <table class="data">
-                    <thead><tr><th>生肖</th><th>评级</th><th>作为Top1次数</th><th>命中率</th><th>随机基线</th><th>z值</th><th>盈亏</th><th>每期期望</th><th>月度正盈</th></tr></thead>
-                    <tbody>
-                      <tr v-for="z in zodiacDecision.zodiacs" :key="z.zodiac" :style="z.level==='stable'?'background:#f0fdf4':''">
-                        <td><b style="font-size:15px">{{ z.zodiac }}</b></td>
-                        <td>
-                          <span v-if="z.level==='stable'" style="color:#16a34a;font-weight:700">✅ 稳定盈利</span>
-                          <span v-else-if="z.level==='significant'" style="color:#2563eb;font-weight:700">🔵 显著</span>
-                          <span v-else-if="z.level==='weak'" style="color:#b45309">🟡 微正不显著</span>
-                          <span v-else-if="z.level==='small'" style="color:#d97706">🟠 样本不足</span>
-                          <span v-else style="color:#dc2626">❌ 不建议</span>
-                        </td>
-                        <td>{{ z.n }}</td>
-                        <td>{{ z.hit_rate }}%</td>
-                        <td>{{ z.rand_base }}%</td>
-                        <td :style="z.z>=1.96?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ z.z }}</td>
-                        <td :style="z.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ z.profit>=0?'+':'' }}{{ z.profit }}</td>
-                        <td :style="z.per_period>=0?'color:var(--ok)':'color:var(--warn)'">{{ z.per_period>=0?'+':'' }}{{ z.per_period }}</td>
-                        <td>{{ z.pos_months }}/{{ z.total_months }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 按投票购买演算 -->
-              <div v-if="zodiacBuyPlan && zodiacBuyPlan.strategies && zodiacBuyPlan.strategies.length" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">💰 按投票演算如何购买（历史 {{ zodiacBuyPlan.total_periods }} 期）</span>
-                  <button class="btn btn-sm" @click="loadZodiacBuyPlan()" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                </div>
-                <div v-if="zodiacBuyPlan.today && zodiacBuyPlan.today.period" style="margin-bottom:10px;padding:10px;background:#fff7ed;border-radius:8px;border:1px solid #fdba74">
-                  <div style="font-size:12px;font-weight:700;margin-bottom:4px">📌 今天（{{ zodiacBuyPlan.today.period }}）投票 → 各策略该买：</div>
-                  <div style="font-size:12px;color:var(--ink2)">
-                    <span v-if="zodiacBuyPlan.today.top1 && zodiacBuyPlan.today.top1.length">Top1：<b style="color:#16a34a">{{ zodiacBuyPlan.today.top1.join('') }}</b></span>
-                    <span v-if="zodiacBuyPlan.today.top2 && zodiacBuyPlan.today.top2.length" style="margin-left:12px">Top2：<b>{{ zodiacBuyPlan.today.top2.join('') }}</b></span>
-                    <span v-if="zodiacBuyPlan.today.eq4 && zodiacBuyPlan.today.eq4.length" style="margin-left:12px">4票：<b>{{ zodiacBuyPlan.today.eq4.join('') }}</b></span>
-                  </div>
-                  <div v-if="zodiacBuyPlan.today.votes" style="font-size:11px;color:var(--ink2);margin-top:4px">今日投票：<span v-for="(v,z) in zodiacBuyPlan.today.votes" :key="z">{{ z }}({{ v }}票) </span></div>
-                </div>
-                <!-- 下单指南 · 前3方案（对齐四组汇下单指南） -->
-                <div v-if="zodiacBuyPlan.guide && zodiacBuyPlan.guide.plans && zodiacBuyPlan.guide.plans.length" style="margin-bottom:10px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px">
-                  <div style="font-size:13px;font-weight:700;margin-bottom:8px">🎯 今日下单指南 · 前3方案（{{ zodiacBuyPlan.guide.period }} {{ zodiacBuyPlan.guide.date }}）</div>
-                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
-                    <div v-for="g in zodiacBuyPlan.guide.plans" :key="g.key" style="border:2px solid #16a34a;border-radius:6px;padding:8px;background:#f0fdf4">
-                      <div style="font-size:13px;font-weight:700;margin-bottom:4px">{{ g.name }}</div>
-                      <div style="font-size:12px;color:var(--ink2);margin-bottom:2px">生肖：<b style="color:#16a34a">{{ g.zodiacs.join('') }}</b></div>
-                      <div style="font-family:Roboto Mono,monospace;font-size:15px;font-weight:700;color:#1e3a5f">{{ g.picks_str || '空仓' }}</div>
-                      <div style="font-size:12px;color:var(--ink2);margin-top:4px">买{{ g.N }}号 · 投入{{ g.invest }}元</div>
-                    </div>
-                  </div>
-                </div>
-                <!-- 号码筹码汇总（前3方案） -->
-                <div v-if="zodiacChipGroups && zodiacChipGroups.length" style="margin-bottom:10px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px">
-                  <div style="font-size:13px;font-weight:700;margin-bottom:8px">📋 号码筹码汇总（下注金额）</div>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <div v-for="g in zodiacChipGroups" :key="g.amount" style="border:1px solid var(--line);border-radius:6px;padding:8px;background:#fbfaf6;min-width:150px">
-                      <div style="font-size:11px;color:var(--ink2);margin-bottom:4px">{{ g.amount }}元（{{ g.nums.length }}号）</div>
-                      <div style="font-family:Roboto Mono,monospace;font-size:13px;font-weight:700">{{ g.nums.map(n=>pad(n)).join('.') }}</div>
-                      <button class="btn btn-sm" @click="copyZodiacGroup(g)" style="margin-top:6px;padding:2px 8px;font-size:11px">📋 复制号码</button>
-                    </div>
-                  </div>
-                </div>
-                <div class="table-scroll" style="max-height:300px">
-                  <table class="data">
-                    <thead><tr><th>购买策略</th><th>命中</th><th>命中率</th><th>累计盈亏</th><th>ROI</th><th>月度正盈</th></tr></thead>
-                    <tbody>
-                      <tr v-for="s in zodiacBuyPlan.strategies" :key="s.key" :style="s.profit>0?'background:#f0fdf4':''">
-                        <td><b>{{ s.name }}</b></td>
-                        <td>{{ s.hits }}/{{ s.total }}</td>
-                        <td>{{ s.hit_rate }}%</td>
-                        <td :style="s.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ s.profit>=0?'+':'' }}{{ s.profit }}</td>
-                        <td :style="s.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ s.roi }}%</td>
-                        <td>{{ s.pos_months }}/{{ s.total_months }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 真实下单台账 -->
-              <div v-if="zodiacOrder && zodiacOrder.total_orders > 0" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">📒 真实下单台账（买 Top1 肖 · 每号 {{ zodiacOrder.per }} 元 · 本金 {{ zodiacOrder.init_capital }}）</span>
-                  <button class="btn btn-sm" @click="loadZodiacOrder()" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                </div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">当前本金</div>
-                    <div style="font-size:18px;font-weight:800" :style="zodiacOrder.capital>=zodiacOrder.init_capital?'color:var(--ok)':'color:var(--warn)'">{{ zodiacOrder.capital }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">累计盈亏</div>
-                    <div style="font-size:18px;font-weight:800" :style="zodiacOrder.total_profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ zodiacOrder.total_profit>=0?'+':'' }}{{ zodiacOrder.total_profit }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">已下单/结算</div>
-                    <div style="font-size:18px;font-weight:800">{{ zodiacOrder.total_orders }}/{{ zodiacOrder.settled }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">命中率</div>
-                    <div style="font-size:18px;font-weight:800">{{ zodiacOrder.hit_rate }}%</div>
-                  </div>
-                </div>
-                <div class="table-scroll" style="max-height:320px">
-                  <table class="data">
-                    <thead><tr><th>期</th><th>日期</th><th>下单肖(票)</th><th>投入</th><th>开奖</th><th>命中</th><th>盈亏</th><th>结算后本金</th></tr></thead>
-                    <tbody>
-                      <tr v-for="r in zodiacOrder.records" :key="r.id">
-                        <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                        <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                        <td><b>{{ r.zodiac }}</b><span style="color:var(--ink2)">({{ r.votes }})</span></td>
-                        <td>{{ r.invest }}</td>
-                        <td><span v-if="r.open_num!=null">{{ pad(r.open_num) }}{{ r.open_zodiac }}</span><span v-else style="color:#b8b0a0">待开</span></td>
-                        <td :style="r.hit===1?'color:var(--ok);font-weight:700':r.hit===0?'color:var(--warn)':'color:var(--ink2)'">{{ r.hit===1?'✓中':r.hit===0?'✗':'待' }}</td>
-                        <td :style="r.profit!=null?(r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'):'color:var(--ink2)'">{{ r.profit!=null?(r.profit>=0?'+':'')+r.profit:'待开' }}</td>
-                        <td>{{ r.capital!=null?r.capital:'-' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 满票肖（≥4票）真实下单台账（对比口径） -->
-              <div v-if="zodiacOrderFull && zodiacOrderFull.total_orders > 0" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">📒 真实下单台账（买满票肖 ≥4票 · 每号 {{ zodiacOrderFull.per }} 元 · 本金 {{ zodiacOrderFull.init_capital }}）</span>
-                  <button class="btn btn-sm" @click="loadZodiacOrderFull()" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                </div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">当前本金</div>
-                    <div style="font-size:18px;font-weight:800" :style="zodiacOrderFull.capital>=zodiacOrderFull.init_capital?'color:var(--ok)':'color:var(--warn)'">{{ zodiacOrderFull.capital }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">累计盈亏</div>
-                    <div style="font-size:18px;font-weight:800" :style="zodiacOrderFull.total_profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ zodiacOrderFull.total_profit>=0?'+':'' }}{{ zodiacOrderFull.total_profit }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">已下单/结算</div>
-                    <div style="font-size:18px;font-weight:800">{{ zodiacOrderFull.total_orders }}/{{ zodiacOrderFull.settled }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center;background:#fff;border-radius:8px;padding:8px">
-                    <div style="font-size:11px;color:var(--ink2)">命中率</div>
-                    <div style="font-size:18px;font-weight:800">{{ zodiacOrderFull.hit_rate }}%</div>
-                  </div>
-                </div>
-                <div class="table-scroll" style="max-height:320px">
-                  <table class="data">
-                    <thead><tr><th>期</th><th>日期</th><th>下单肖(个数)</th><th>投入</th><th>开奖</th><th>命中</th><th>盈亏</th><th>结算后本金</th></tr></thead>
-                    <tbody>
-                      <tr v-for="r in zodiacOrderFull.records" :key="r.id">
-                        <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                        <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                        <td><b>{{ r.zodiac || '空仓' }}</b><span style="color:var(--ink2)">({{ r.votes }}肖)</span></td>
-                        <td>{{ r.invest }}</td>
-                        <td><span v-if="r.open_num!=null">{{ pad(r.open_num) }}{{ r.open_zodiac }}</span><span v-else style="color:#b8b0a0">待开</span></td>
-                        <td :style="r.hit===1?'color:var(--ok);font-weight:700':r.hit===0?'color:var(--warn)':'color:var(--ink2)'">{{ r.num_count===0?'空':(r.hit===1?'✓中':r.hit===0?'✗':'待') }}</td>
-                        <td :style="r.profit!=null?(r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'):'color:var(--ink2)'">{{ r.num_count===0?'—':(r.profit!=null?(r.profit>=0?'+':'')+r.profit:'待开') }}</td>
-                        <td>{{ r.capital!=null?r.capital:'-' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 购买策略前3方案 真实下单台账 -->
-              <div v-if="zodiacBpOrder && zodiacBpOrder.plans && zodiacBpOrder.plans.length" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">📒 真实下单台账（前3方案 · 每号 {{ zodiacBpOrder.per }} 元 · 每方案本金 {{ zodiacBpOrder.init_capital }}）</span>
-                  <button class="btn btn-sm" @click="loadZodiacBpOrder()" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                </div>
-                <div v-if="zodiacBpOrder.guide" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
-                  <div style="font-size:13px;font-weight:700;margin-bottom:8px">🎯 今日下单指南（{{ zodiacBpOrder.guide.period }} {{ zodiacBpOrder.guide.date }}）</div>
-                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
-                    <div v-for="g in zodiacBpOrder.guide.plans" :key="g.key" style="border:2px solid #16a34a;border-radius:6px;padding:8px;background:#f0fdf4">
-                      <div style="font-size:13px;font-weight:700;margin-bottom:4px">{{ g.name }}</div>
-                      <div style="font-size:12px;color:var(--ink2);margin-bottom:2px">生肖：<b style="color:#16a34a">{{ g.zodiacs.join('') }}</b></div>
-                      <div style="font-family:Roboto Mono,monospace;font-size:15px;font-weight:700;color:#1e3a5f">{{ g.picks_str || '空仓' }}</div>
-                      <div style="font-size:12px;color:var(--ink2);margin-top:4px">买{{ g.N }}号 · 投入{{ g.invest }}元</div>
-                    </div>
-                  </div>
-                  <div v-if="zodiacBpOrder.guide.stopped && zodiacBpOrder.guide.stopped.length" style="margin-top:10px;padding:8px 10px;background:#fdecec;border:1px solid #f5b5b5;border-radius:6px">
-                    <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:4px">⛔ 已止损停手（本期不进下单，虚拟跟踪中，命中后再释放）</div>
-                    <div v-for="s in zodiacBpOrder.guide.stopped" :key="s.key" style="font-size:12px;color:#8b2f24">
-                      {{ s.name }} · 连亏 {{ s.stop_streak }} 期 · {{ s.stop_date }} 起停手
-                    </div>
-                  </div>
-                </div>
-                <div v-if="zodiacBpChipGroups && zodiacBpChipGroups.length" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
-                  <div style="font-size:13px;font-weight:700;margin-bottom:8px">📋 号码筹码汇总（下注金额）</div>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <div v-for="g in zodiacBpChipGroups" :key="g.amount" style="border:1px solid var(--line);border-radius:6px;padding:8px;background:#fbfaf6;min-width:150px">
-                      <div style="font-size:11px;color:var(--ink2);margin-bottom:4px">{{ g.amount }}元（{{ g.nums.length }}号）</div>
-                      <div style="font-family:Roboto Mono,monospace;font-size:13px;font-weight:700">{{ g.nums.map(n=>pad(n)).join('.') }}</div>
-                      <button class="btn btn-sm" @click="copyZodiacBpGroup(g)" style="margin-top:6px;padding:2px 8px;font-size:11px">📋 复制号码</button>
-                    </div>
-                  </div>
-                </div>
-                <div class="table-scroll" style="margin-bottom:10px">
-                  <table class="data">
-                    <thead><tr><th>方案</th><th>下单</th><th>结算</th><th>命中</th><th>命中率</th><th>累计盈亏</th><th>当前本金</th><th>明细</th></tr></thead>
-                    <tbody>
-                      <tr v-for="p in zodiacBpOrder.plans" :key="p.key" :style="zodiacBpOpen===p.key?'background:#eef6ff':''">
-                        <td><b>{{ p.name }}</b> <span v-if="p.status==='stopped'" style="font-size:10px;color:#c0392b;background:#fdecec;border:1px solid #f5b5b5;border-radius:4px;padding:1px 5px;margin-left:4px">⛔止损停手</span></td>
-                        <td>{{ p.total_orders }}</td>
-                        <td>{{ p.settled }}</td>
-                        <td>{{ p.hits }}/{{ p.settled }}</td>
-                        <td>{{ p.hit_rate }}%</td>
-                        <td :style="p.total_profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ p.total_profit>=0?'+':'' }}{{ p.total_profit }}</td>
-                        <td :style="p.capital>=p.init_capital?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ p.capital }}</td>
-                        <td><button class="btn btn-sm" @click="setZodiacBpPlan(p.key)" style="padding:2px 8px;font-size:11px">查看</button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-                  <button v-for="p in zodiacBpOrder.plans" :key="p.key" @click="setZodiacBpPlan(p.key)"
-                    :style="zodiacBpOpen===p.key ? 'background:#1e3a5f;color:#fff;border-color:#1e3a5f' : 'background:#f3efe5;color:var(--ink2);border-color:var(--line)'"
-                    style="padding:5px 12px;border:1px solid;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">
-                    {{ p.name }}<span v-if="p.status==='stopped'" style="color:#c0392b;margin-left:3px">⛔</span>
-                  </button>
-                </div>
-                <div v-if="zodiacBpCurrent">
-                  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;padding:8px 10px;background:#fbfaf6;border:1px solid var(--line);border-radius:6px">
-                    <span style="font-size:12px">命中 <b>{{ zodiacBpCurrent.hits }}/{{ zodiacBpCurrent.settled }}</b>（{{ zodiacBpCurrent.hit_rate }}%）</span>
-                    <span style="font-size:12px">累计盈亏 <b :style="zodiacBpCurrent.total_profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ zodiacBpCurrent.total_profit>=0?'+':'' }}{{ zodiacBpCurrent.total_profit }}</b></span>
-                    <span style="font-size:12px">当前本金 <b :style="zodiacBpCurrent.capital>=zodiacBpCurrent.init_capital?'color:var(--ok)':'color:var(--warn)'">{{ zodiacBpCurrent.capital }}</b></span>
-                    <span style="font-size:12px">下单 {{ zodiacBpCurrent.total_orders }} / 结算 {{ zodiacBpCurrent.settled }}</span>
-                  </div>
-                  <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">逐笔下单记录（{{ zodiacBpCurrent.name }} · 最新在上）</div>
-                  <div class="table-scroll" style="max-height:360px">
-                    <table class="data">
-                      <thead><tr><th>期</th><th>日期</th><th>下单肖</th><th>下单号码</th><th>投入</th><th>开奖</th><th>命中</th><th>盈亏</th><th>结算后本金</th></tr></thead>
-                      <tbody>
-                        <tr v-for="r in zodiacBpCurrent.records" :key="r.id">
-                          <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                          <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                          <td><b>{{ r.zodiacs || '空仓' }}</b></td>
-                          <td style="font-family:Roboto Mono,monospace;font-size:12px">{{ r.picks || '空仓' }}</td>
-                          <td>{{ r.invest }}</td>
-                          <td><span v-if="r.open_num!=null"><b>{{ pad(r.open_num) }}</b></span><span v-else style="color:#b8b0a0">待开</span></td>
-                          <td :style="r.hit===1?'color:var(--ok);font-weight:700':r.num_count===0?'color:var(--ink2)':'color:var(--warn)'">{{ r.num_count===0?'空':r.hit===1?'✓中':r.hit===0?'✗':'待' }}</td>
-                          <td :style="r.profit!=null?(r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'):'color:var(--ink2)'">{{ r.profit!=null?(r.profit>=0?'+':'')+r.profit:'待开' }}</td>
-                          <td>{{ r.capital!=null?r.capital:'-' }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              <!-- 购买策略前3方案 AI 分析 + 超期止损 -->
-              <div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                  <span style="font-weight:700;font-size:13px">🤖 AI 分析演算预测 + 超期止损（前3方案）</span>
-                  <button class="btn btn-sm" @click="runZodiacBpAi()" :disabled="zodiacBpAiLoading" style="padding:3px 10px;font-size:12px">{{ zodiacBpAiLoading ? '分析中…' : '🔍 分析' }}</button>
-                </div>
-                <div v-if="zodiacBpStats && zodiacBpStats.plans && zodiacBpStats.plans.length" style="margin-bottom:10px">
-                  <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">止损状态（连亏≥20期自动停手，虚拟跟踪命中后释放）</div>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <div v-for="p in zodiacBpStats.plans" :key="p.key" style="border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:#fff">
-                      <span style="font-size:12px;font-weight:700">{{ p.name }}</span>
-                      <span style="font-size:11px;color:var(--ink2)"> 连{{ p.cur_streak>0?'中':'亏' }}{{ Math.abs(p.cur_streak) }}期 · 最长连亏{{ p.max_miss_streak }}期</span>
-                      <span style="font-size:14px;font-weight:800;color:#dc2626;border:2px solid #dc2626;border-radius:4px;padding:1px 6px;margin-left:6px">止损线 {{ zodiacBpStats.stop_threshold }}期</span>
-                      <span v-if="p.stop" :style="p.stop.level==='danger'?'color:#dc2626;font-weight:700;margin-left:4px':'color:#b45309;margin-left:4px'">{{ p.stop.text }}</span>
-                      <span v-else style="color:var(--ok);margin-left:4px">✅ 正常</span>
-                    </div>
-                  </div>
-                </div>
-                <div v-if="zodiacBpAiError" style="color:#dc2626;font-size:12px;margin-bottom:8px">{{ zodiacBpAiError }}</div>
-                <div v-if="zodiacBpAi" style="white-space:pre-wrap;font-size:13px;line-height:1.7;background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px">{{ zodiacBpAi }}</div>
-                <div v-else-if="!zodiacBpAiLoading" style="font-size:12px;color:#b8b0a0">点「🔍 分析」调用大模型对前3方案做盈利趋势分析 + 超期止损建议。</div>
-              </div>
-              <!-- 汇总：Top1/Top2/Top3 生肖购买 -->
-              <div v-if="zodiacSource.summary && zodiacSource.summary.top1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:12px">
-                <div v-for="(s, k) in zodiacSource.summary" :key="k" style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
-                  <div style="font-weight:700;font-size:13px;margin-bottom:4px">{{ k==='top1'?'Top1 肖':k==='top2'?'Top2 肖':'Top3 肖' }}</div>
-                  <div style="font-size:20px;font-weight:800" :style="s.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ s.profit>=0?'+':'' }}{{ s.profit }}</div>
-                  <div style="font-size:11px;color:var(--ink2);margin-top:2px">命中 {{ s.hit_rate }}%（随机 {{ s.rand_base }}%）· {{ s.hits }}/{{ s.total }} · ROI {{ s.roi }}%</div>
-                </div>
-              </div>
-              <!-- 按日期查询当天投票阈值（按票数分组生肖） -->
-              <div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-                  <span style="font-weight:700;font-size:13px">📅 当天投票阈值</span>
-                  <input type="date" v-model="zodiacQueryDate" style="padding:6px 10px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                  <span v-if="zodiacQueryRec" style="font-size:12px;color:var(--ink2)">开奖 <b>{{ pad(zodiacQueryRec.open_num) }}</b> · {{ zodiacQueryRec.open_zodiac }} · 期{{ zodiacQueryRec.period }}</span>
-                </div>
-                <div v-if="zodiacQueryGroups.length" style="display:flex;gap:8px;flex-wrap:wrap">
-                  <div v-for="g in zodiacQueryGroups" :key="g.votes" style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff;min-width:110px">
-                    <div style="font-size:11px;color:var(--ink2);margin-bottom:4px">{{ g.votes }} 票</div>
-                    <div style="font-family:Roboto Mono,monospace;font-size:14px;font-weight:700">
-                      <span v-for="z in g.zodiacs" :key="z" class="tag" :style="z===zodiacQueryRec.open_zodiac?'background:#f0fdf4;color:#166534;border:1px solid #86efac':'background:#f3efe5;color:var(--ink2);border:1px solid var(--line)'" style="font-size:12px;margin:1px;padding:1px 6px">{{ z }}</span>
-                    </div>
-                    <button class="btn btn-sm" @click="copyZodiacGroup(g)" style="margin-top:6px;padding:2px 8px;font-size:11px">📋 复制生肖</button>
-                  </div>
-                </div>
-                <div v-else style="font-size:12px;color:#b8b0a0">该日期无投票数据</div>
-              </div>
-              <!-- 投票阈值分析 -->
-              <div v-if="zodiacSource.threshold_analysis && zodiacSource.threshold_analysis.length" class="table-scroll" style="max-height:220px;margin-bottom:12px">
-                <table class="data">
-                  <thead><tr><th>投票阈值</th><th>命中</th><th>命中率</th><th>累计盈亏（每号1元）</th></tr></thead>
-                  <tbody>
-                    <tr v-for="t in zodiacSource.threshold_analysis" :key="t.threshold">
-                      <td>≥ {{ t.threshold }} 票</td>
-                      <td>{{ t.hits }}/{{ t.total }}</td>
-                      <td>{{ t.hit_rate }}%</td>
-                      <td :style="t.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ t.profit>=0?'+':'' }}{{ t.profit }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <!-- 按票数分组盈利 -->
-              <div v-if="zodiacSource.group_profit && zodiacSource.group_profit.length" style="margin-bottom:12px">
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">💰 按票数分组盈利（=N票 买 / ≥N票 买）</div>
-                <div class="table-scroll" style="max-height:280px">
-                  <table class="data">
-                    <thead><tr><th>票数</th><th>=N票命中率</th><th>=N票盈亏</th><th>=N票ROI</th><th>≥N票命中率</th><th>≥N票盈亏</th><th>≥N票ROI</th></tr></thead>
-                    <tbody>
-                      <tr v-for="g in zodiacSource.group_profit" :key="g.vote_count">
-                        <td><b>{{ g.vote_count }} 票</b></td>
-                        <td>{{ g.exact.hit_rate }}%<span style="color:#b8b0a0">({{ g.exact.hits }}/{{ g.exact.total }})</span></td>
-                        <td :style="g.exact.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ g.exact.profit>=0?'+':'' }}{{ g.exact.profit }}</td>
-                        <td :style="g.exact.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ g.exact.roi }}%</td>
-                        <td>{{ g.ge.hit_rate }}%<span style="color:#b8b0a0">({{ g.ge.hits }}/{{ g.ge.total }})</span></td>
-                        <td :style="g.ge.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ g.ge.profit>=0?'+':'' }}{{ g.ge.profit }}</td>
-                        <td :style="g.ge.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ g.ge.roi }}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 最长记录 -->
-              <div v-if="zodiacSource.streaks" style="margin-bottom:12px">
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📈 最长记录（连中/连亏/最大单期盈亏/最大回撤）</div>
-                <div class="table-scroll" style="max-height:280px">
-                  <table class="data">
-                    <thead><tr><th>策略</th><th>最长连中</th><th>最长连亏</th><th>当前连</th><th>最大单期盈</th><th>最大单期亏</th><th>最大回撤</th><th>ROI</th></tr></thead>
-                    <tbody>
-                      <tr v-for="(s, k) in zodiacSource.streaks" :key="k">
-                        <td><b>{{ k==='top1'?'Top1肖':k==='top2'?'Top2肖':k==='top3'?'Top3肖':k==='ge2'?'≥2票':k==='ge3'?'≥3票':'≥4票' }}</b></td>
-                        <td style="color:var(--ok);font-weight:700">{{ s.max_hit_streak }}</td>
-                        <td style="color:var(--warn);font-weight:700">{{ s.max_miss_streak }}</td>
-                        <td :style="s.cur_streak>0?'color:var(--ok)':s.cur_streak<0?'color:var(--warn)':'color:var(--ink2)'">{{ s.cur_streak>0?'连中'+s.cur_streak:s.cur_streak<0?'连亏'+(-s.cur_streak):'-' }}</td>
-                        <td style="color:var(--ok)">{{ s.max_profit>=0?'+':'' }}{{ s.max_profit }}</td>
-                        <td style="color:var(--warn)">{{ s.max_loss }}</td>
-                        <td>{{ s.max_drawdown }}</td>
-                        <td :style="s.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ s.roi }}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 按月/按周趋势监测 -->
-              <div v-if="zodiacSource.timelines" style="margin-bottom:12px">
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📅 按月 / 按周趋势监测（判断是否继续跟踪）</div>
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                  <select v-model="zodiacTlKey" style="padding:5px 10px;font-size:13px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                    <option v-for="(tl, k) in zodiacSource.timelines" :key="k" :value="k">{{ tl.label }}</option>
-                  </select>
-                  <button class="btn btn-sm" :style="zodiacTlView==='month'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="zodiacTlView='month'">月</button>
-                  <button class="btn btn-sm" :style="zodiacTlView==='week'?'background:var(--warn);color:#fff':'background:transparent;color:var(--ink2)'" @click="zodiacTlView='week'">周</button>
-                </div>
-                <div v-if="zodiacTlConclusion" style="padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:12px" :style="zodiacTlConclusion.level==='ok'?'background:#f0fdf4;color:#166534':zodiacTlConclusion.level==='warn'?'background:#fef3c7;color:#b45309':'background:#fee2e2;color:#dc2626'">
-                  {{ zodiacTlConclusion.text }}
-                </div>
-                <div class="table-scroll" style="max-height:300px">
-                  <table class="data">
-                    <thead><tr><th>{{ zodiacTlView==='month'?'月份':'周' }}</th><th>命中</th><th>命中率</th><th>盈亏</th><th>ROI</th></tr></thead>
-                    <tbody>
-                      <tr v-for="m in zodiacTlData" :key="m.key">
-                        <td style="font-family:Roboto Mono,monospace">{{ m.key }}</td>
-                        <td>{{ m.hits }}/{{ m.total }}</td>
-                        <td>{{ m.hit_rate }}%</td>
-                        <td :style="m.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit>=0?'+':'' }}{{ m.profit }}</td>
-                        <td :style="m.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ m.roi }}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 逐期列表 -->
-              <div class="table-scroll" style="max-height:420px">
-                <table class="data">
-                  <thead><tr>
-                    <th>期</th><th>日期</th><th>开奖</th>
-                    <th v-for="src in zodiacSource.sources" :key="src" style="min-width:70px">{{ src }}</th>
-                    <th>Top1肖(票)</th><th>命中</th>
-                  </tr></thead>
-                  <tbody>
-                    <tr v-for="r in zodiacSourceRecords" :key="r.date">
-                      <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                      <td style="font-family:Roboto Mono,monospace">{{ r.date.slice(5) }}</td>
-                      <td><span v-if="r.pending" style="color:var(--ink2)">待开</span><span v-else><b>{{ pad(r.open_num) }}</b><span style="color:var(--ink2)">{{ r.open_zodiac }}</span></span></td>
-                      <td v-for="src in zodiacSource.sources" :key="src">
-                        <span v-for="z in r.source_zodiacs[src]" :key="z" class="tag" :style="z===r.open_zodiac?'background:#f0fdf4;color:#166534;border:1px solid #86efac':'background:#f3efe5;color:var(--ink2);border:1px solid var(--line)'" style="font-size:10px;margin:1px;padding:1px 4px">{{ z }}</span>
-                      </td>
-                      <td><b>{{ r.top1 }}</b><span style="color:var(--ink2)">({{ r.top1_votes }})</span></td>
-                      <td :style="r.pending?'color:var(--ink2)':(r.top1===r.open_zodiac?'color:var(--ok);font-weight:700':'color:var(--warn)')">{{ r.pending?'待开':(r.top1===r.open_zodiac?'✓中':'✗') }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <!-- 刷新加载动画弹框 -->
-            <div class="modal-mask" v-if="zodiacLoading" style="z-index:200">
-              <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
-                <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
-                <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
-              </div>
-            </div>
-      </template>
-
-      <template v-if="cur==='/sizu'">
-        <div class="topbar"><h2>四组汇 · 好运4组号码投票</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
-
-        <!-- 最新期投票概览 -->
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">🗳️ 最新期投票（{{ sizu.end_date }}）· 各票数号码
-            <button class="btn btn-sm" @click="loadSizu()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
-          </div>
-          <div v-if="sizuLatest">
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:8px"><template v-if="sizuLatest.pending">待开奖</template><template v-else>开奖 <b>{{ pad(sizuLatest.open_num) }}</b></template>（{{ sizuLatest.period }}）· 4来源各8码投票</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <div v-for="g in sizuVoteGroups" :key="g.votes" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;min-width:120px">
-                <div style="font-size:11px;color:var(--ink2);margin-bottom:4px">{{ g.votes }} 票（{{ g.nums.length }}号）</div>
-                <div style="font-family:Roboto Mono,monospace;font-size:14px;font-weight:700">{{ g.nums.map(n=>pad(n)).join('.') }}</div>
-              </div>
-            </div>
-            <!-- 4组来源号码卡片 -->
-            <div v-if="sizuLatest.source_nums" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
-              <div style="font-size:12px;font-weight:700;margin-bottom:6px">🎯 4组来源号码（好运八一~八四）</div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
-                <div v-for="name in sizu.sources" :key="name" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fbfaf6">
-                  <div style="font-size:11px;color:var(--ink2);margin-bottom:4px">{{ name }}（{{ (sizuLatest.source_nums[name]||[]).length }}码）</div>
-                  <div style="font-family:Roboto Mono,monospace;font-size:14px;font-weight:700;color:#1e3a5f">
-                    <template v-for="(n, i) in (sizuLatest.source_nums[name]||[])" :key="n">
-                      <span v-if="i>0">.</span><span :style="(!sizuLatest.pending && sizuLatest.open_num===n) ? 'background:#1890ff;color:#fff;font-weight:800;padding:1px 4px;border-radius:4px' : ''">{{ pad(n) }}</span>
-                    </template>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else style="font-size:12px;color:#b8b0a0">暂无数据</div>
-        </div>
-
-        <!-- 4组来源号码逐期列表 -->
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">📋 4组来源号码逐期列表（共 {{ sizu.records.length }} 期）</div>
-          <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">好运八一~八四 每期各 8 码完整展示，命中开奖号绿色高亮。</div>
-          <div class="table-scroll" style="max-height:520px">
-            <table class="data">
-              <thead>
-                <tr>
-                  <th style="min-width:64px">期数</th>
-                  <th style="min-width:92px">日期</th>
-                  <th style="min-width:52px">开奖</th>
-                  <th v-for="name in sizu.sources" :key="name" style="min-width:150px">{{ name }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in sizuRecordsReversed" :key="r.date">
-                  <td>{{ r.period }}</td>
-                  <td>{{ r.date }}</td>
-                  <td><b v-if="!r.pending">{{ pad(r.open_num) }}</b><span v-else style="color:#b8b0a0">—</span></td>
-                  <td v-for="name in sizu.sources" :key="name" style="font-family:Roboto Mono,monospace;font-size:12px;white-space:nowrap">
-                    <template v-for="(n, i) in (r.source_nums[name]||[])" :key="n">
-                      <span v-if="i>0">.</span><span :style="(!r.pending && r.open_num===n) ? 'background:#1890ff;color:#fff;font-weight:800;padding:1px 4px;border-radius:4px' : ''">{{ pad(n) }}</span>
-                    </template>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- 方案盈利排名 -->
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">📊 方案盈利排名（{{ sizu.total_periods }}期 · 每号1元标准化 · 按盈利降序）</div>
-          <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">4来源（好运八一~八四，各8码）投票 → 1-49号码得票。命中赚 47−N、未中亏 N。⚠️ 高ROI=高赔率低命中，小样本回测非盈利保证。</div>
-          <div class="table-scroll">
-            <table class="data">
-              <thead><tr><th>#</th><th>方案</th><th>命中</th><th>命中率</th><th>盈亏</th><th>ROI</th><th>均投号</th><th>连中/连亏</th><th>最大回撤</th><th>明细</th></tr></thead>
-              <tbody>
-                <tr v-for="(p, idx) in sizu.plans" :key="p.key" :style="idx===0?'background:#fefce8':''">
-                  <td><b :style="idx===0?'color:#d97706':''">{{ idx+1 }}</b></td>
-                  <td><b>{{ p.name }}</b></td>
-                  <td>{{ p.hits }}/{{ p.total }}</td>
-                  <td>{{ p.hit_rate }}%</td>
-                  <td :style="p.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ p.profit>=0?'+':'' }}{{ p.profit }}</td>
-                  <td :style="p.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ p.roi }}%</td>
-                  <td>{{ p.avg_nums }}</td>
-                  <td>{{ p.max_hit_streak }}中/{{ p.max_miss_streak }}亏</td>
-                  <td>-{{ p.max_drawdown }}</td>
-                  <td><button class="btn btn-sm" @click="toggleSizuPlan(p.key)" style="padding:2px 8px;font-size:11px">{{ sizuOpen===p.key?'收起':'明细' }}</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- 🧮 数学盈利方案（数学家视角） -->
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">🧮 数学盈利方案（数学家视角 · 样本内 140 期 2026-05-04~09-20 演算）</div>
-
-          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9">
-            <div style="font-weight:800;color:#c2410c;margin-bottom:4px">⚠️ 核心数学结论（先看这个）</div>
-            <div>① 六合彩 <b>47 倍赔率 = 抽水 4% 负期望</b>。要盈利，命中率必须<b>显著高于随机基线</b>（买 N 个号，随机命中率 = N/49，例：买 1 号随机命中 2.04%）。</div>
-            <div>② 样本内发现<b>「共识高票」信号</b>：被 3 个来源同时选中的号（=3票）命中率 <b>8.33% vs 随机 2.95%</b>，<b>z=+3.11 统计显著</b>，每期期望 +2.47 元/号。</div>
-            <div>③ 但这是<b>样本内回测 + 多重比较</b>，不保证样本外持续。铁律：<b>负期望不下注、正期望按凯利 3~6% 仓位、连亏 20 期止损保命</b>。</div>
-          </div>
-
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">
-
-            <div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfaf6">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px">1️⃣ 共识高票策略（=3票）⭐最强</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>每期统计好运八一~八四 4 来源投票，只买「恰好被 3 个来源同时选中」的号码（得票=3）。没有 3 票号的那期空仓不下注。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>数学依据：</b>命中率 <b>8.33% vs 随机 2.95%</b>，z=+3.11（显著），每期期望 +2.47 元，ROI 170%，凯利 f=5.4%。</div>
-              <div style="font-size:12px;line-height:1.7;color:#c2410c"><b>风险：</b>仅 96/140 期有信号（44 期空仓），命中仅 8 次样本偏小，前向可能衰减。</div>
-            </div>
-
-            <div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfaf6">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px">2️⃣ 票数降序 Top-N</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>号码按得票数降序排列，买前 N 个（Top1/Top2/Top3/Top5）。票数并列时按号码小号优先。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>数学依据：</b>Top2 命中 8.57%（随机 4.08%，z=+2.68）· Top3 命中 10.71%（z=+2.27）· Top5 命中 15.71%（z=+2.15），每期期望 +2.0~2.4 元。</div>
-              <div style="font-size:12px;line-height:1.7;color:#c2410c"><b>风险：</b>连亏极长（Top1 连亏 55 期、Top2 连亏 44 期），必须配止损，否则本金扛不住。</div>
-            </div>
-
-            <div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfaf6">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px">3️⃣ 反共识避让（排除 1 票号）</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>下注时<b>排除</b>「恰好被 1 个来源单独选中」的号码。这些号是弱信号，命中率显著偏低。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>数学依据：</b>1 票号命中率 <b>28.57% vs 随机 35.35%</b>（z=-1.68，显著偏低），每期期望 -3.89 元（负）。避开它 = 减少无效下注。</div>
-              <div style="font-size:12px;line-height:1.7;color:#c2410c"><b>风险：</b>不直接产生盈利，只做「过滤」用，需配合方案 1/2 一起用。</div>
-            </div>
-
-            <div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfaf6">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px">4️⃣ 凯利公式仓位管理</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>每期下注金额 = 本金 × f*，其中 <b>f* = (p·b − q) / b</b>（p=命中率，b=净赔率 47−N，q=1−p）。正期望才下注，负期望 f*≤0 直接不碰。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>数学依据：</b>=3票 f*=5.4% · Top2 f*=4.5% · Top5 f*=5.7% · 1票号 f*=-13%（永不下）。</div>
-              <div style="font-size:12px;line-height:1.7;color:#c2410c"><b>风险：</b>样本内 f 偏乐观，实际建议<b>减半执行（1.5~3%）</b>，防止高估命中率导致超仓爆仓。</div>
-            </div>
-
-            <div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfaf6">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px">5️⃣ 连亏止损 + 滚动监控</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>连亏 ≥20 期立即停手（虚拟跟踪，命中后再恢复）；同时每 20 期滚动窗口重算命中率，做 z 检验，<b>显著衰减即永久停用</b>该方案。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>数学依据：</b>Top1 样本内最长连亏 55 期，真实前向已连亏 27 期触发止损，避免了继续深亏。</div>
-              <div style="font-size:12px;line-height:1.7;color:#c2410c"><b>风险：</b>止损后可能错过反弹，但本金生存 > 博反弹。</div>
-            </div>
-
-            <div style="border:1px solid var(--line);border-radius:10px;padding:12px;background:#fbfaf6">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px">6️⃣ 组合分散（高票 + 避 1 票）</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>买「≥3票」高共识号，同时用方案 3 排除 1 票号，多个方案（Top2/Top3/=3票）等额归一化组合下注，分散单期风险。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>数学依据：</b>组合降低单期方差，最大回撤从 Top5 的 143 降到 Top3 的 85，收益曲线更平滑。</div>
-              <div style="font-size:12px;line-height:1.7;color:#c2410c"><b>风险：</b>多方案需分别结算、分别止损，组合后必须重新回测验证。</div>
-            </div>
-
-            <div style="border:2px solid #dc2626;border-radius:10px;padding:12px;background:#fef2f2">
-              <div style="font-weight:800;font-size:14px;margin-bottom:6px;color:#dc2626">7️⃣ 每期翻倍筹码 + 止损（马丁格尔）❌ 演算不可行</div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.7;margin-bottom:6px"><b>方法：</b>未中 → 每号注码 ×2，命中 → 回基础注；连亏 k 期触发止损清仓重来。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>演算铁证（死穴）：</b>单次命中仅赚 <b>230 元</b>（base 5 元 × 净赔 46）；扛连亏 10 期需本金 <b>5115 元</b>（22 倍）仍 41~60% 爆仓；扛 20 期需 <b>524 万</b>（2.28 万倍）爆仓率 17~36%；扛 30 期需 <b>53.7 亿</b>爆仓率 7~21%。</div>
-              <div style="font-size:12px;line-height:1.7;margin-bottom:6px"><b>结论：</b>马丁格尔不改变期望（负期望仍负），只是把风险从「平滑小亏」变「爆仓归零」。用 524 万本金博每次 230 元、还带 17~36% 一次亏光，数学上<b>彻底劣于固定注码 + 凯利 3~6%</b>。</div>
-              <div style="font-size:12px;line-height:1.7;color:#dc2626"><b>风险：</b>⚠️ 不可行，不采用。140 期回放：=3票 连亏30期终值 <b>-76 亿</b>、Top2 连亏30期 <b>-107 亿</b>（爆仓归零）。</div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- 数学方案逐期盈利查询 -->
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">📋 数学方案逐期盈利查询（选方案看每一期盈亏）</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <button v-for="key in mathPlanKeys" :key="key" @click="setMathPlan(key)"
-              :style="mathPlanKey===key ? 'background:#1e3a5f;color:#fff;border-color:#1e3a5f' : 'background:#f3efe5;color:var(--ink2);border-color:var(--line)'"
-              style="padding:5px 12px;border:1px solid;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">
-              {{ mathPlanName(key) }}
-            </button>
-          </div>
-          <div v-if="mathPlanCurrent" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:13px">
-            <span>命中 <b>{{ mathPlanCurrent.hits }}/{{ mathPlanCurrent.total }}</b>（{{ mathPlanCurrent.hit_rate }}%）</span>
-            <span>累计盈亏 <b :style="mathPlanCurrent.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ mathPlanCurrent.profit>=0?'+':'' }}{{ mathPlanCurrent.profit }}</b></span>
-            <span>ROI <b :style="mathPlanCurrent.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ mathPlanCurrent.roi }}%</b></span>
-            <span>均投 {{ mathPlanCurrent.avg_nums }} 号</span>
-            <span>最长连亏 {{ mathPlanCurrent.max_miss_streak }} 期</span>
-            <span>凯利仓位 <b :style="mathPlanKelly>0?'color:var(--ok)':'color:var(--warn)'">{{ mathPlanKelly>0 ? mathPlanKelly+'%' : '不下注' }}</b></span>
-            <span>当前 <b :style="mathPlanCurrent.cur_streak<0?'color:var(--warn)':'color:var(--ok)'">{{ mathPlanCurrent.cur_streak>0 ? '连中'+mathPlanCurrent.cur_streak+'期' : (mathPlanCurrent.cur_streak<0 ? '连亏'+(-mathPlanCurrent.cur_streak)+'期' : '—') }}</b><span v-if="mathPlanCurrent.cur_streak<=-20" style="color:#dc2626;font-weight:700"> ⛔已触发止损</span></span>
-          </div>
-          <div class="table-scroll" style="max-height:520px">
-            <table class="data">
-              <thead><tr><th>期数</th><th>日期</th><th>选号</th><th>号数</th><th>开奖</th><th>命中</th><th>盈亏</th><th>累计</th></tr></thead>
-              <tbody>
-                <tr v-for="d in mathPlanDetail" :key="d.date" :style="d.hit ? 'background:#eff6ff' : ''">
-                  <td>{{ d.period }}</td>
-                  <td>{{ d.date }}</td>
-                  <td style="font-family:Roboto Mono,monospace;font-size:11px">{{ (d.picks||[]).map(n=>pad(n)).join('.') }}</td>
-                  <td>{{ d.N }}</td>
-                  <td><b>{{ pad(d.open_num) }}</b></td>
-                  <td :style="d.hit?'color:#1890ff;font-weight:700':'color:#b8b0a0'">{{ d.hit ? '命中' : '未中' }}</td>
-                  <td :style="d.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ d.profit>=0?'+':'' }}{{ d.profit }}</td>
-                  <td :style="d.cum>=0?'color:var(--ok)':'color:var(--warn)'">{{ d.cum }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- 四组汇 ROI前5 真实下单台账 -->
-        <div v-if="sizuOrder && sizuOrder.plans && sizuOrder.plans.length" class="card" style="margin-bottom:12px">
-          <div class="card-title">📒 真实下单台账（7方案 · 每号 {{ sizuOrder.per }} 元 · 每方案本金 {{ sizuOrder.init_capital }}）
-            <button class="btn btn-sm" @click="loadSizuOrder()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
-          </div>
-          <div v-if="sizuOrder.guide" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
-            <div style="font-size:13px;font-weight:700;margin-bottom:8px">🎯 今日下单指南（{{ sizuOrder.guide.period }} {{ sizuOrder.guide.date }}）</div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
-              <div v-for="g in sizuOrder.guide.plans" :key="g.key" style="border:2px solid #16a34a;border-radius:6px;padding:8px;background:#f0fdf4">
-                <div style="font-size:13px;font-weight:700;margin-bottom:4px">{{ g.name }}</div>
-                <div style="font-family:Roboto Mono,monospace;font-size:15px;font-weight:700;color:#1e3a5f">{{ g.picks_str || '空仓' }}</div>
-                <div style="font-size:12px;color:var(--ink2);margin-top:4px">买{{ g.N }}号 · 投入{{ g.invest }}元</div>
-              </div>
-            </div>
-            <div v-if="sizuOrder.guide.stopped && sizuOrder.guide.stopped.length" style="margin-top:10px;padding:8px 10px;background:#fdecec;border:1px solid #f5b5b5;border-radius:6px">
-              <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:4px">⛔ 已止损停手（本期不进下单，虚拟跟踪中，命中后再释放）</div>
-              <div v-for="s in sizuOrder.guide.stopped" :key="s.key" style="font-size:12px;color:#8b2f24">
-                {{ s.name }} · 连亏 {{ s.stop_streak }} 期 · {{ s.stop_date }} 起停手
-              </div>
-            </div>
-          </div>
-          <div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
-            <div style="font-size:13px;font-weight:700;margin-bottom:8px">📋 号码筹码汇总（下注金额）</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <div v-for="g in sizuChipGroups" :key="g.amount" style="border:1px solid var(--line);border-radius:6px;padding:8px;background:#fbfaf6;min-width:150px">
-                <div style="font-size:11px;color:var(--ink2);margin-bottom:4px">{{ g.amount }}元（{{ g.nums.length }}号）</div>
-                <div style="font-family:Roboto Mono,monospace;font-size:13px;font-weight:700">{{ g.nums.map(n=>pad(n)).join('.') }}</div>
-                <button class="btn btn-sm" @click="copySizuGroup(g)" style="margin-top:6px;padding:2px 8px;font-size:11px">📋 复制号码</button>
-              </div>
-            </div>
-          </div>
-          <div class="table-scroll" style="margin-bottom:10px">
-            <table class="data">
-              <thead><tr><th>方案</th><th>下单</th><th>结算</th><th>命中</th><th>命中率</th><th>累计盈亏</th><th>当前本金</th><th>明细</th></tr></thead>
-              <tbody>
-                <tr v-for="p in sizuOrder.plans" :key="p.key" :style="sizuOrderOpen===p.key?'background:#eef6ff':''">
-                  <td><b>{{ p.name }}</b> <span v-if="p.status==='stopped'" style="font-size:10px;color:#c0392b;background:#fdecec;border:1px solid #f5b5b5;border-radius:4px;padding:1px 5px;margin-left:4px">⛔止损停手</span></td>
-                  <td>{{ p.total_orders }}</td>
-                  <td>{{ p.settled }}</td>
-                  <td>{{ p.hits }}/{{ p.settled }}</td>
-                  <td>{{ p.hit_rate }}%</td>
-                  <td :style="p.total_profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ p.total_profit>=0?'+':'' }}{{ p.total_profit }}</td>
-                  <td :style="p.capital>=p.init_capital?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ p.capital }}</td>
-                  <td><button class="btn btn-sm" @click="setSizuOrderPlan(p.key)" style="padding:2px 8px;font-size:11px">查看</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <!-- 7 方案 tab 随时切换 -->
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <button v-for="p in sizuOrder.plans" :key="p.key" @click="setSizuOrderPlan(p.key)"
-              :style="sizuOrderOpen===p.key ? 'background:#1e3a5f;color:#fff;border-color:#1e3a5f' : 'background:#f3efe5;color:var(--ink2);border-color:var(--line)'"
-              style="padding:5px 12px;border:1px solid;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">
-              {{ p.name }}<span v-if="p.status==='stopped'" style="color:#c0392b;margin-left:3px">⛔</span>
-            </button>
-          </div>
-          <div v-if="sizuCurrentOrder">
-            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;padding:8px 10px;background:#fbfaf6;border:1px solid var(--line);border-radius:6px">
-              <span style="font-size:12px">命中 <b>{{ sizuCurrentOrder.hits }}/{{ sizuCurrentOrder.settled }}</b>（{{ sizuCurrentOrder.hit_rate }}%）</span>
-              <span style="font-size:12px">累计盈亏 <b :style="sizuCurrentOrder.total_profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ sizuCurrentOrder.total_profit>=0?'+':'' }}{{ sizuCurrentOrder.total_profit }}</b></span>
-              <span style="font-size:12px">当前本金 <b :style="sizuCurrentOrder.capital>=sizuCurrentOrder.init_capital?'color:var(--ok)':'color:var(--warn)'">{{ sizuCurrentOrder.capital }}</b></span>
-              <span style="font-size:12px">下单 {{ sizuCurrentOrder.total_orders }} / 结算 {{ sizuCurrentOrder.settled }}</span>
-            </div>
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">逐笔下单记录（{{ sizuCurrentOrder.name }} · 最新在上）</div>
-            <div class="table-scroll" style="max-height:360px">
-              <table class="data">
-                <thead><tr><th>期</th><th>日期</th><th>下单号码</th><th>投入</th><th>开奖</th><th>命中</th><th>盈亏</th><th>结算后本金</th></tr></thead>
-                <tbody>
-                  <tr v-for="r in sizuCurrentOrder.records" :key="r.id">
-                    <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                    <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                    <td style="font-family:Roboto Mono,monospace;font-size:12px">{{ r.picks || '空仓' }}</td>
-                    <td>{{ r.invest }}</td>
-                    <td><span v-if="r.open_num!=null"><b>{{ pad(r.open_num) }}</b></span><span v-else style="color:#b8b0a0">待开</span></td>
-                    <td :style="r.hit===1?'color:var(--ok);font-weight:700':r.num_count===0?'color:var(--ink2)':'color:var(--warn)'">{{ r.num_count===0?'空':r.hit===1?'✓中':r.hit===0?'✗':'待' }}</td>
-                    <td :style="r.profit!=null?(r.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'):'color:var(--ink2)'">{{ r.profit!=null?(r.profit>=0?'+':'')+r.profit:'待开' }}</td>
-                    <td>{{ r.capital!=null?r.capital:'-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- 四组汇 7 方案 AI 分析 + 超期止损 -->
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">🤖 AI 分析演算预测 + 超期止损
-            <button class="btn btn-sm" @click="runSizuAi()" :disabled="sizuAiLoading" style="float:right;padding:3px 10px;font-size:12px">{{ sizuAiLoading ? '分析中…' : '🔍 分析' }}</button>
-          </div>
-          <div v-if="sizuStats && sizuStats.plans && sizuStats.plans.length" style="margin-bottom:10px">
-            <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">止损状态（连亏≥20期自动停手，虚拟跟踪命中后释放）</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <div v-for="p in sizuStats.plans" :key="p.key" style="border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:#fff">
-                <span style="font-size:12px;font-weight:700">{{ p.name }}</span>
-                <span style="font-size:11px;color:var(--ink2)"> 连{{ p.cur_streak>0?'中':'亏' }}{{ Math.abs(p.cur_streak) }}期 · 最长连亏{{ p.max_miss_streak }}期</span>
-                <span style="font-size:14px;font-weight:800;color:#dc2626;border:2px solid #dc2626;border-radius:4px;padding:1px 6px;margin-left:6px">止损线 {{ sizuStats.stop_threshold }}期</span>
-                <span v-if="p.stop" :style="p.stop.level==='danger'?'color:#dc2626;font-weight:700;margin-left:4px':'color:#b45309;margin-left:4px'">{{ p.stop.text }}</span>
-                <span v-else style="color:var(--ok);margin-left:4px">✅ 正常</span>
-              </div>
-            </div>
-          </div>
-          <div v-if="sizuAiError" style="color:#dc2626;font-size:12px;margin-bottom:8px">{{ sizuAiError }}</div>
-          <div v-if="sizuAi" style="white-space:pre-wrap;font-size:13px;line-height:1.7;background:#fbfaf6;border:1px solid var(--line);border-radius:8px;padding:12px">{{ sizuAi }}</div>
-          <div v-else-if="!sizuAiLoading" style="font-size:12px;color:#b8b0a0">点「🔍 分析」调用大模型对 7 方案做盈利趋势分析 + 超期止损建议。</div>
-        </div>
-
-        <!-- 展开的方案明细 -->
-        <div v-if="sizuCurrent" class="card" style="margin-bottom:12px">
-          <div class="card-title">🔍 {{ sizuCurrent.name }} · 盈利细节（命中 {{ sizuCurrent.hits }}/{{ sizuCurrent.total }} · {{ sizuCurrent.hit_rate }}% · 盈亏 {{ sizuCurrent.profit>=0?'+':'' }}{{ sizuCurrent.profit }} · ROI {{ sizuCurrent.roi }}% · 连中{{ sizuCurrent.max_hit_streak }}/连亏{{ sizuCurrent.max_miss_streak }}）</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-            <div>
-              <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">按月趋势</div>
-              <table class="data"><thead><tr><th>月</th><th>命中</th><th>命中率</th><th>盈亏</th><th>ROI</th></tr></thead>
-                <tbody><tr v-for="m in sizuCurrent.monthly" :key="m.key">
-                  <td>{{ m.key }}</td><td>{{ m.hits }}/{{ m.total }}</td><td>{{ m.hit_rate }}%</td>
-                  <td :style="m.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ m.profit>=0?'+':'' }}{{ m.profit }}</td>
-                  <td :style="m.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ m.roi }}%</td>
-                </tr></tbody>
-              </table>
-            </div>
-            <div>
-              <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">按周趋势</div>
-              <table class="data"><thead><tr><th>周</th><th>命中</th><th>盈亏</th><th>ROI</th></tr></thead>
-                <tbody><tr v-for="w in sizuCurrent.weekly" :key="w.key">
-                  <td>{{ w.key }}</td><td>{{ w.hits }}/{{ w.total }}</td>
-                  <td :style="w.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ w.profit>=0?'+':'' }}{{ w.profit }}</td>
-                  <td :style="w.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ w.roi }}%</td>
-                </tr></tbody>
-              </table>
-            </div>
-          </div>
-          <div style="font-size:12px;color:var(--ink2);margin-bottom:6px">逐期下单明细（{{ sizuCurrent.detail.length }}期，最新在上）</div>
-          <div class="table-scroll" style="max-height:400px">
-            <table class="data">
-              <thead><tr><th>期</th><th>日期</th><th>下单号码</th><th>投入N</th><th>开奖</th><th>命中</th><th>盈亏</th><th>累计</th></tr></thead>
-              <tbody>
-                <tr v-for="d in sizuCurrentDetail" :key="d.date">
-                  <td style="font-family:Roboto Mono,monospace">{{ d.period }}</td>
-                  <td style="font-family:Roboto Mono,monospace">{{ d.date.slice(5) }}</td>
-                  <td style="font-family:Roboto Mono,monospace;font-size:12px">{{ d.picks.map(n=>pad(n)).join('.') }}</td>
-                  <td>{{ d.N }}</td>
-                  <td><b>{{ pad(d.open_num) }}</b></td>
-                  <td :style="d.hit?'color:var(--ok);font-weight:700':'color:var(--warn)'">{{ d.hit?'✓中':'✗' }}</td>
-                  <td :style="d.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ d.profit>=0?'+':'' }}{{ d.profit }}</td>
-                  <td>{{ d.cum>=0?'+':'' }}{{ d.cum }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="modal-mask" v-if="sizuLoading" style="z-index:200">
-          <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
-            <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
-            <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
-          </div>
-        </div>
-      </template>
-
-          <template v-if="cur==='/numtrack'">
-        <div class="topbar"><h2>号码跟踪 · 4家28栏目 N×5 叠加</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
-            <div class="card" style="margin-bottom:12px">
-              <div class="card-title">📅 按日期查询分组明细
-                <button class="btn btn-sm" @click="loadNumTrackDaily()" style="float:right;padding:3px 10px;font-size:12px">🔍 查询</button>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-                <input type="date" v-model="numTrackQueryDate" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px">
-                <span style="font-size:12px;color:var(--ink2)">选日期 → 查询，查看当日 28 栏目分组号码 + 每号次数</span>
-              </div>
-              <div v-if="numTrackDaily && numTrackDaily.found">
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:12px">
-                  <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fbfaf6">
-                    <div style="font-size:11px;color:var(--ink2)">开奖号（{{ numTrackDaily.period }}）</div>
-                    <div style="font-size:18px;font-weight:800">{{ numTrackDaily.open ? pad(numTrackDaily.open) : '-' }} <span v-if="numTrackDaily.open!=null" style="font-size:11px;color:var(--ink2)">尾{{ numTrackDaily.open_tail }}</span></div>
-                  </div>
-                  <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fbfaf6">
-                    <div style="font-size:11px;color:var(--ink2)">命中</div>
-                    <div style="font-size:18px;font-weight:800" :style="numTrackDaily.pending?'color:var(--ink2)':(numTrackDaily.hit?'color:var(--ok)':'color:var(--warn)')">{{ numTrackDaily.pending?'⏳待开':(numTrackDaily.hit?'✓中':'✗未中') }}</div>
-                  </div>
-                  <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fbfaf6">
-                    <div style="font-size:11px;color:var(--ink2)">总投入</div>
-                    <div style="font-size:18px;font-weight:800">{{ numTrackDaily.total_invest }}</div>
-                  </div>
-                  <div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fbfaf6">
-                    <div style="font-size:11px;color:var(--ink2)">盈亏</div>
-                    <div style="font-size:18px;font-weight:800" :style="numTrackDaily.pending?'color:var(--ink2)':(numTrackDaily.pnl>=0?'color:var(--ok)':'color:var(--warn)')">{{ numTrackDaily.pending?'⏳待开':((numTrackDaily.pnl>=0?'+':'') + numTrackDaily.pnl) }}</div>
-                  </div>
-                </div>
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📦 各栏目（组）分别对应的号码列表</div>
-                <div class="table-scroll" style="max-height:360px;margin-bottom:12px">
-                  <table class="data">
-                    <thead><tr><th>栏目（组）</th><th>家</th><th>码数</th><th>号码列表</th></tr></thead>
-                    <tbody>
-                      <tr v-for="f in numTrackDaily.fields" :key="f.label">
-                        <td style="font-weight:700">{{ f.label }}</td>
-                        <td>{{ f.fam }}</td>
-                        <td>{{ f.nums.length }}</td>
-                        <td style="font-family:Roboto Mono,monospace;white-space:normal;line-height:1.8">
-                          <span v-for="(n,i) in f.nums" :key="n" :style="numTrackDaily.open===n?'color:var(--ok);font-weight:800;background:#f0fdf4;padding:1px 4px;border-radius:4px':'color:var(--ink)'">{{ i>0?' · ':'' }}{{ pad(n) }}</span>
-                          <span v-if="!f.nums.length" style="color:#b8b0a0">无</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <div style="font-size:13px;font-weight:700">💰 当期 1-49 号筹码（每号 = 被预测次数 N × {{ numTrackDaily.bet||5 }} 元）</div>
-                  <button class="btn btn-sm" @click="openNumTrackChip()" style="padding:3px 10px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:6px">📋 复制正反筹码</button>
-                </div>
-                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px">
-                  <div v-for="x in numTrackDaily.all49" :key="x.num" :style="numTrackDaily.open===x.num?'border:2px solid #16a34a;background:#f0fdf4':(x.count>0?'border:1px solid #93c5fd;background:#eff6ff':'border:1px solid var(--line);background:#faf8f2')" style="border-radius:6px;padding:4px 2px;text-align:center">
-                    <div :style="numTrackDaily.open===x.num?'color:var(--ok);font-weight:800':'color:var(--ink)'" style="font-family:Roboto Mono,monospace;font-size:14px;font-weight:700">{{ pad(x.num) }}{{ numTrackDaily.open===x.num?'★':'' }}</div>
-                    <div :style="x.count>0?'color:#1d4ed8;font-weight:700':'color:#c9c2b4'" style="font-size:10px">{{ x.count>0 ? (x.chip + '元') : '—' }}</div>
-                    <div style="font-size:9px;color:#b8b0a0">{{ x.count>0 ? x.count+'次' : '0' }}</div>
-                  </div>
-                </div>
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">🔃 反向筹码（最大 {{ numTrackDaily.max_chip }} 元 − 各号筹码 → 反向下单额）</div>
-                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px">
-                  <div v-for="x in numTrackDaily.all49" :key="'r'+x.num" :style="numTrackDaily.open===x.num?'border:2px solid #16a34a;background:#f0fdf4':(x.rev_chip>0?'border:1px solid #f59e0b;background:#fff7ed':'border:1px solid var(--line);background:#faf8f2')" style="border-radius:6px;padding:4px 2px;text-align:center">
-                    <div :style="numTrackDaily.open===x.num?'color:var(--ok);font-weight:800':'color:var(--ink)'" style="font-family:Roboto Mono,monospace;font-size:14px;font-weight:700">{{ pad(x.num) }}{{ numTrackDaily.open===x.num?'★':'' }}</div>
-                    <div :style="x.rev_chip>0?'color:#b45309;font-weight:700':'color:#c9c2b4'" style="font-size:10px">{{ x.rev_chip>0 ? (x.rev_chip + '元') : '—' }}</div>
-                    <div style="font-size:9px;color:#b8b0a0">{{ x.count>0 ? x.count+'次' : '0' }}</div>
-                  </div>
-                </div>
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">🔢 每号被预测次数（N×5 叠加）</div>
-                <div class="table-scroll" style="max-height:320px;margin-bottom:12px">
-                  <table class="data">
-                    <thead><tr><th>号码</th><th>次数N</th><th>投入</th><th>来源栏目</th><th>区间</th></tr></thead>
-                    <tbody>
-                      <tr v-for="(p, pi) in numTrackDaily.picks_sorted" :key="p.num" :style="numTrackDaily.open===p.num?'background:#f0fdf4':''">
-                        <td :style="numTrackDaily.open===p.num?'color:var(--ok);font-weight:800':''">{{ pad(p.num) }}{{ numTrackDaily.open===p.num?' ★开奖':'' }}</td>
-                        <td>{{ p.count }} 次</td>
-                        <td>{{ p.count * (numTrackDaily.bet||5) }}</td>
-                        <td style="font-size:11px;color:var(--ink2)">{{ p.sources.join('、') }}</td>
-                        <td><span class="tag" :style="pi<24?'background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd':'background:#fef3c7;color:#b45309;border:1px solid #fcd34d'" style="font-size:10px;padding:1px 6px">{{ pi<24?'前24':'后25' }}</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                  <div style="border:1px solid #93c5fd;border-radius:8px;padding:8px;background:#eff6ff">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                      <div style="font-size:12px;font-weight:700;color:#1d4ed8">前24号（{{ numTrackDaily.front24.length }} 号）投入 {{ numTrackDaily.front_invest }}</div>
-                      <button class="btn btn-sm" @click="copyNumTrackGroup('front')" style="padding:2px 8px;font-size:11px">📋 复制</button>
-                    </div>
-                    <div style="font-size:12px;font-family:Roboto Mono,monospace;line-height:1.7"><span v-for="(x,xi) in numTrackDaily.front24" :key="x.num">{{ xi>0?' · ':'' }}{{ pad(x.num) }}<span v-if="x.count>1" style="color:#1d4ed8">({{x.count}})</span></span></div>
-                  </div>
-                  <div style="border:1px solid #fcd34d;border-radius:8px;padding:8px;background:#fef3c7">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                      <div style="font-size:12px;font-weight:700;color:#b45309">后25号（{{ numTrackDaily.back25.length }} 号）投入 {{ numTrackDaily.back_invest }}</div>
-                      <button class="btn btn-sm" @click="copyNumTrackGroup('back')" style="padding:2px 8px;font-size:11px">📋 复制</button>
-                    </div>
-                    <div style="font-size:12px;font-family:Roboto Mono,monospace;line-height:1.7"><span v-for="(x,xi) in numTrackDaily.back25" :key="x.num">{{ xi>0?' · ':'' }}{{ pad(x.num) }}<span v-if="x.count>1" style="color:#b45309">({{x.count}})</span></span></div>
-                  </div>
-                </div>
-              </div>
-              <div v-else-if="numTrackDaily && !numTrackDaily.found" style="font-size:12px;color:var(--warn)">⚠️ 该日期无数据（可能未采集）</div>
-              <div v-else style="font-size:12px;color:#b8b0a0">选择日期后点击「查询」查看分组明细</div>
-            </div>
-            <div class="card">
-              <div class="card-title">🔢 号码跟踪 · 4家28栏目 N×5 叠加
-                <button class="btn btn-sm" @click="loadNumTrack()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
-              </div>
-              <div style="font-size:12px;color:var(--ink2);line-height:1.8;margin-bottom:10px">
-                4 家（鬼谷子 / 大家发 / 诸葛亮 / 好运通）共 <b>28 个栏目</b>（号码·生肖·大小·单双·尾数·家野）。每期把各栏目映射成号码汇总，统计每号被预测次数 N，<b>每号投 N×{{ numTrack.bet || 5 }} 元（叠加）</b>，命中开奖号赢 47×N×{{ numTrack.bet || 5 }}，未中亏全部投入。区分<b>前24号（筹码最多24号）/后25号（其余）</b>。
-                 <span style="color:var(--warn);font-weight:600">⚠️ 47 赔率 &lt; 49 号 = 结构负期望；含大小/单双/家野等粗粒度栏目后命中率虚高，但净盈亏仍为负，多来源叠加无 edge。</span>
-              </div>
-              <!-- 汇总卡片 -->
-              <div v-if="numTrack.summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px">
-                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
-                  <div style="font-size:11px;color:var(--ink2)">净盈亏</div>
-                  <div style="font-size:20px;font-weight:800" :style="numTrack.summary.net>=0?'color:var(--ok)':'color:var(--warn)'">{{ numTrack.summary.net>=0?'+':'' }}{{ numTrack.summary.net.toLocaleString() }}</div>
-                </div>
-                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
-                  <div style="font-size:11px;color:var(--ink2)">命中率</div>
-                  <div style="font-size:20px;font-weight:800">{{ numTrack.summary.hit_rate }}%</div>
-                  <div style="font-size:10px;color:#b8b0a0">随机基线 75%</div>
-                </div>
-                <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:#fbfaf6">
-                  <div style="font-size:11px;color:var(--ink2)">总投入 / 赢回</div>
-                  <div style="font-size:16px;font-weight:700">{{ numTrack.summary.total_invest.toLocaleString() }} / {{ numTrack.summary.total_win.toLocaleString() }}</div>
-                </div>
-              </div>
-              <!-- 前24号 / 后25号 真实下单台账 -->
-              <div v-if="frontbackOrder && frontbackOrder.settled > 0" style="border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:#fbfaf6">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-                  <span style="font-size:14px;font-weight:800">📒 前24号 / 后25号 真实下单台账（每组5元 · 汇总后每号 N×5 叠加 · 47倍）</span>
-                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                    <input type="date" v-model="frontbackFrom" style="padding:4px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                    <span style="font-size:12px;color:var(--ink2)">~</span>
-                    <input type="date" v-model="frontbackTo" style="padding:4px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                    <button class="btn btn-sm" @click="loadFrontbackOrder(frontbackFrom, frontbackTo)" style="padding:2px 8px;font-size:11px">🔍 查询</button>
-                    <button class="btn btn-sm" @click="frontbackFrom='';frontbackTo='';loadFrontbackOrder('','')" style="padding:2px 8px;font-size:11px">全部</button>
-                    <button class="btn btn-sm" @click="loadFrontbackOrder(frontbackFrom, frontbackTo)" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                  </div>
-                </div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-                  <span style="font-size:11px;color:var(--ink2)">快捷：</span>
-                  <button class="btn btn-sm" @click="setFrontbackRange('week')" style="padding:2px 8px;font-size:11px">本周</button>
-                  <button class="btn btn-sm" @click="setFrontbackRange('month')" style="padding:2px 8px;font-size:11px">本月</button>
-                  <button class="btn btn-sm" @click="setFrontbackRange('lastmonth')" style="padding:2px 8px;font-size:11px">上月</button>
-                  <button class="btn btn-sm" @click="setFrontbackRange('year')" style="padding:2px 8px;font-size:11px">本年</button>
-                </div>
-                <!-- 整体合计 -->
-                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px">
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">总投入</div>
-                    <div style="font-size:18px;font-weight:800">{{ frontbackOrder.total.invest.toLocaleString() }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">总盈亏</div>
-                    <div style="font-size:18px;font-weight:800" :style="frontbackOrder.total.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ frontbackOrder.total.profit>=0?'+':'' }}{{ frontbackOrder.total.profit.toLocaleString() }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">总ROI</div>
-                    <div style="font-size:18px;font-weight:800" :style="frontbackOrder.total.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ frontbackOrder.total.roi>=0?'+':'' }}{{ frontbackOrder.total.roi }}%</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">已结算</div>
-                    <div style="font-size:18px;font-weight:800">{{ frontbackOrder.settled }}/{{ frontbackOrder.total_orders }} 期</div>
-                  </div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-                  <div style="border:1px solid #93c5fd;border-radius:8px;padding:10px;background:#eff6ff">
-                    <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:6px">🔵 前24号（买筹码最多24号）</div>
-                    <div style="font-size:11px;color:var(--ink2)">命中 <b>{{ frontbackOrder.front.hits }}/{{ frontbackOrder.settled }}</b>（{{ frontbackOrder.front.hit_rate }}% · 随机 {{ frontbackOrder.front.rand_base }}%）</div>
-                    <div style="font-size:16px;font-weight:800" :style="frontbackOrder.front.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ frontbackOrder.front.profit>=0?'+':'' }}{{ frontbackOrder.front.profit }} <span style="font-size:11px;font-weight:600">ROI {{ frontbackOrder.front.roi>=0?'+':'' }}{{ frontbackOrder.front.roi }}%</span></div>
-                    <div style="font-size:11px;color:var(--ink2)">投入 {{ frontbackOrder.front.invest }}（均 {{ frontbackOrder.front.avg_invest }}/期）</div>
-                    <div style="font-size:11px;color:var(--ink2)">最大单期 {{ frontbackOrder.front.max_profit>=0?'+':'' }}{{ frontbackOrder.front.max_profit }} / {{ frontbackOrder.front.max_loss }} · 连中 {{ frontbackOrder.front.max_hit_streak }} · 连亏 {{ frontbackOrder.front.max_miss_streak }}</div>
-                  </div>
-                  <div style="border:1px solid #fcd34d;border-radius:8px;padding:10px;background:#fef3c7">
-                    <div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:6px">🟡 后25号（买其余25号）</div>
-                    <div style="font-size:11px;color:var(--ink2)">命中 <b>{{ frontbackOrder.back.hits }}/{{ frontbackOrder.settled }}</b>（{{ frontbackOrder.back.hit_rate }}% · 随机 {{ frontbackOrder.back.rand_base }}%）</div>
-                    <div style="font-size:16px;font-weight:800" :style="frontbackOrder.back.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ frontbackOrder.back.profit>=0?'+':'' }}{{ frontbackOrder.back.profit }} <span style="font-size:11px;font-weight:600">ROI {{ frontbackOrder.back.roi>=0?'+':'' }}{{ frontbackOrder.back.roi }}%</span></div>
-                    <div style="font-size:11px;color:var(--ink2)">投入 {{ frontbackOrder.back.invest }}（均 {{ frontbackOrder.back.avg_invest }}/期）</div>
-                    <div style="font-size:11px;color:var(--ink2)">最大单期 {{ frontbackOrder.back.max_profit>=0?'+':'' }}{{ frontbackOrder.back.max_profit }} / {{ frontbackOrder.back.max_loss }} · 连中 {{ frontbackOrder.back.max_hit_streak }} · 连亏 {{ frontbackOrder.back.max_miss_streak }}</div>
-                  </div>
-                </div>
-                <!-- 逐月（真实下单） -->
-                <div v-if="frontbackOrder.monthly && frontbackOrder.monthly.length" style="margin-bottom:10px">
-                  <div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 逐月盈亏（真实下单）</div>
-                  <div class="table-scroll" style="max-height:180px">
-                    <table class="data">
-                      <thead><tr><th>月</th><th>期数</th><th>前24命中</th><th>前24盈亏</th><th>后25命中</th><th>后25盈亏</th><th>合计</th></tr></thead>
-                      <tbody>
-                        <tr v-for="m in frontbackOrder.monthly" :key="m.month">
-                          <td>{{ m.month }}</td>
-                          <td>{{ m.periods }}</td>
-                          <td>{{ m.front_hits }}/{{ m.periods }}</td>
-                          <td :style="m.front_profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.front_profit>=0?'+':'' }}{{ m.front_profit.toLocaleString() }}</td>
-                          <td>{{ m.back_hits }}/{{ m.periods }}</td>
-                          <td :style="m.back_profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.back_profit>=0?'+':'' }}{{ m.back_profit.toLocaleString() }}</td>
-                          <td :style="m.total_profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.total_profit>=0?'+':'' }}{{ m.total_profit.toLocaleString() }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div class="table-scroll" style="max-height:320px">
-                  <table class="data">
-                    <thead><tr><th>期</th><th>日期</th><th>开奖</th><th>前24号</th><th>前24盈亏</th><th>后25号</th><th>后25盈亏</th></tr></thead>
-                    <tbody>
-                      <tr v-for="r in frontbackOrder.records" :key="r.id">
-                        <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                        <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                        <td><b>{{ r.open_num!=null ? pad(r.open_num) : '待开' }}</b></td>
-                        <td :style="r.front_hit===1?'color:var(--ok);font-weight:700':r.front_hit===0?'color:var(--warn)':'color:var(--ink2)'">{{ r.front_hit===1?'✓中':r.front_hit===0?'✗':'待' }}</td>
-                        <td :style="r.front_profit!=null?(r.front_profit>=0?'color:var(--ok)':'color:var(--warn)'):'color:var(--ink2)'">{{ r.front_profit!=null?(r.front_profit>=0?'+':'')+r.front_profit:'待开' }}</td>
-                        <td :style="r.back_hit===1?'color:var(--ok);font-weight:700':r.back_hit===0?'color:var(--warn)':'color:var(--ink2)'">{{ r.back_hit===1?'✓中':r.back_hit===0?'✗':'待' }}</td>
-                        <td :style="r.back_profit!=null?(r.back_profit>=0?'color:var(--ok)':'color:var(--warn)'):'color:var(--ink2)'">{{ r.back_profit!=null?(r.back_profit>=0?'+':'')+r.back_profit:'待开' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <!-- AI 分析 -->
-                <div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:10px">
-                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-                    <span style="font-size:13px;font-weight:700">🤖 AI 分析（正反都亏原因 · 月/周趋势 · 下一期预测）</span>
-                    <button class="btn btn-sm" @click="runFrontbackAi()" :disabled="frontbackAiLoading" style="padding:4px 12px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:8px"><span v-if="frontbackAiLoading" class="spinner"></span>{{ frontbackAiLoading ? '分析中…' : '🔍 AI 分析' }}</button>
-                  </div>
-                  <div v-if="frontbackAiLoading" style="color:var(--ink2);padding:10px;text-align:center">🤖 AI 分析中，请稍候…</div>
-                  <div v-else-if="frontbackAiError" style="color:var(--warn);padding:10px">{{ frontbackAiError }}</div>
-                  <div v-else-if="frontbackAi" style="white-space:pre-wrap;line-height:1.9;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px">{{ frontbackAi }}</div>
-                  <div v-else style="color:#b8b0a0;font-size:12px;padding:10px">点右上角「🔍 AI 分析」按钮，按当前日期段的台账数据进行分析。</div>
-                </div>
-              </div>
-              <!-- 反向筹码真实下单台账 -->
-              <div v-if="reverseChipOrder && reverseChipOrder.settled > 0" style="border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:#fff7ed">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-                  <span style="font-size:14px;font-weight:800">🔃 反向筹码真实下单台账（每号 = 最大筹码 − 正向筹码，反追冷门号 · 47倍）</span>
-                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                    <input type="date" v-model="reverseChipFrom" style="padding:4px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                    <span style="font-size:12px;color:var(--ink2)">~</span>
-                    <input type="date" v-model="reverseChipTo" style="padding:4px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff">
-                    <button class="btn btn-sm" @click="loadReverseChipOrder(reverseChipFrom, reverseChipTo)" style="padding:2px 8px;font-size:11px">🔍 查询</button>
-                    <button class="btn btn-sm" @click="reverseChipFrom='';reverseChipTo='';loadReverseChipOrder('','')" style="padding:2px 8px;font-size:11px">全部</button>
-                    <button class="btn btn-sm" @click="loadReverseChipOrder(reverseChipFrom, reverseChipTo)" style="padding:2px 8px;font-size:11px">🔄 刷新</button>
-                  </div>
-                </div>
-                <div style="font-size:11px;color:var(--ink2);margin-bottom:10px">反向筹码 = 当期最大筹码 − 各号正向筹码，被预测越少的号反向筹码越重（反追冷门号），被预测最多的号反向为 0 不下单。命中赢 47×反向筹码，未中亏总投入。</div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px">
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">总投入</div>
-                    <div style="font-size:18px;font-weight:800">{{ reverseChipOrder.summary.invest.toLocaleString() }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">总盈亏</div>
-                    <div style="font-size:18px;font-weight:800" :style="reverseChipOrder.summary.profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ reverseChipOrder.summary.profit>=0?'+':'' }}{{ reverseChipOrder.summary.profit.toLocaleString() }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">总ROI</div>
-                    <div style="font-size:18px;font-weight:800" :style="reverseChipOrder.summary.roi>=0?'color:var(--ok)':'color:var(--warn)'">{{ reverseChipOrder.summary.roi>=0?'+':'' }}{{ reverseChipOrder.summary.roi }}%</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">命中率</div>
-                    <div style="font-size:18px;font-weight:800">{{ reverseChipOrder.summary.hit_rate }}%<span style="font-size:11px;font-weight:400;color:var(--ink2)">（{{ reverseChipOrder.summary.hits }}/{{ reverseChipOrder.settled }}）</span></div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">连中/连亏</div>
-                    <div style="font-size:18px;font-weight:800">{{ reverseChipOrder.summary.max_hit_streak }} / {{ reverseChipOrder.summary.max_miss_streak }}</div>
-                  </div>
-                  <div style="flex:1;min-width:90px;text-align:center">
-                    <div style="font-size:11px;color:var(--ink2)">最大单期盈/亏</div>
-                    <div style="font-size:18px;font-weight:800"><span :style="reverseChipOrder.summary.max_profit>=0?'color:var(--ok)':'color:var(--warn)'">{{ reverseChipOrder.summary.max_profit>=0?'+':'' }}{{ reverseChipOrder.summary.max_profit }}</span> / <span style="color:var(--warn)">{{ reverseChipOrder.summary.max_loss }}</span></div>
-                  </div>
-                </div>
-                <!-- 逐月 -->
-                <div v-if="reverseChipOrder.monthly && reverseChipOrder.monthly.length" style="margin-bottom:10px">
-                  <div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 逐月盈亏（反向筹码）</div>
-                  <div class="table-scroll" style="max-height:180px">
-                    <table class="data">
-                      <thead><tr><th>月</th><th>期数</th><th>命中</th><th>盈亏</th></tr></thead>
-                      <tbody>
-                        <tr v-for="m in reverseChipOrder.monthly" :key="m.month">
-                          <td>{{ m.month }}</td>
-                          <td>{{ m.periods }}</td>
-                          <td>{{ m.hits }}/{{ m.periods }}</td>
-                          <td :style="m.profit>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.profit>=0?'+':'' }}{{ m.profit.toLocaleString() }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div class="table-scroll" style="max-height:320px">
-                  <table class="data">
-                    <thead><tr>
-                      <th>期号</th>
-                      <th>日期</th>
-                      <th>开奖号</th>
-                      <th>开奖号<br>反向筹码</th>
-                      <th>最大正向<br>筹码(基准)</th>
-                      <th>反向<br>总投入</th>
-                      <th>命中</th>
-                      <th>命中赢<br>(47×反向筹码)</th>
-                      <th>净盈亏<br>(赢−投入)</th>
-                    </tr></thead>
-                    <tbody>
-                      <tr v-for="r in reverseChipOrder.records" :key="r.id">
-                        <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                        <td style="font-family:Roboto Mono,monospace">{{ r.bet_date ? r.bet_date.slice(5) : '' }}</td>
-                        <td><b>{{ r.open_num!=null ? pad(r.open_num) : '待开' }}</b></td>
-                        <td style="color:#b45309;font-weight:700">{{ r.open_rev_chip!=null ? r.open_rev_chip : '—' }}</td>
-                        <td>{{ r.max_chip }}</td>
-                        <td>{{ r.invest }}</td>
-                        <td :style="r.hit===1?'color:var(--ok);font-weight:700':r.hit===0?'color:var(--warn)':'color:var(--ink2)'">{{ r.hit===1?'✓中':r.hit===0?'✗':'待' }}</td>
-                        <td :style="r.win!=null?(r.win>=0?'color:var(--ok)':'color:var(--warn)'):'color:var(--ink2)'">{{ r.win!=null?r.win.toLocaleString():'待开' }}</td>
-                        <td :style="r.profit!=null?(r.profit>=0?'color:var(--ok)':'color:var(--warn)'):'color:var(--ink2)'">{{ r.profit!=null?(r.profit>=0?'+':'')+r.profit.toLocaleString():'待开' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 被预测次数 N 与命中率 -->
-              <div v-if="numTrack.n_dist && numTrack.n_dist.length" style="margin-bottom:12px">
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📊 被预测次数 N 与命中率（随机基线 2%）</div>
-                <div class="table-scroll" style="max-height:180px">
-                  <table class="data">
-                    <thead><tr><th>被预测次数</th><th>命中</th><th>命中率</th></tr></thead>
-                    <tbody>
-                      <tr v-for="d in numTrack.n_dist" :key="d.n">
-                        <td>{{ d.n }} 次</td>
-                        <td>{{ d.hits }}/{{ d.total }}</td>
-                        <td :style="d.rate>3?'color:var(--ok);font-weight:700':'color:var(--ink2)'">{{ d.rate }}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 逐月 -->
-              <div v-if="numTrack.monthly && numTrack.monthly.length" style="margin-bottom:12px">
-                <div style="font-size:13px;font-weight:700;margin-bottom:6px">📅 逐月盈亏</div>
-                <div class="table-scroll" style="max-height:200px">
-                  <table class="data">
-                    <thead><tr><th>月</th><th>投入</th><th>盈亏</th><th>前24盈亏</th><th>后25盈亏</th><th>命中率</th></tr></thead>
-                    <tbody>
-                      <tr v-for="m in numTrack.monthly" :key="m.month">
-                        <td>{{ m.month }}</td>
-                        <td>{{ m.invest.toLocaleString() }}</td>
-                        <td :style="m.pnl>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.pnl>=0?'+':'' }}{{ m.pnl.toLocaleString() }}</td>
-                        <td :style="m.front_pnl>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.front_pnl>=0?'+':'' }}{{ m.front_pnl.toLocaleString() }}</td>
-                        <td :style="m.back_pnl>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700'">{{ m.back_pnl>=0?'+':'' }}{{ m.back_pnl.toLocaleString() }}</td>
-                        <td>{{ m.hit_rate }}%</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- 逐期列表 -->
-              <div style="font-size:11px;color:var(--ink2);line-height:1.8;margin-bottom:8px;padding:8px 10px;background:#fbfaf6;border:1px solid var(--line);border-radius:8px">
-                <span style="display:inline-block;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #93c5fd;border-radius:4px;padding:0 6px;margin-right:6px">正向筹码</span>逐期演算明细（自 2026-05-04 起，被预测次数越多筹码越重·追共识号）：<b>投号数</b>=当期 28 栏目预测的号码去重数；<b>总投入</b>=每号按「被预测次数 N × 5 元」叠加求和；<b>开奖落点</b>=开奖号落前24号（筹码最多24号）还是后25号（其余25号），仅展示落点不参与盈亏拆分；<b>前24/后25</b>=两组各自的「号数/投入」；<b>命中</b>=开奖号是否被预测到；<b>当期盈亏</b>=命中赢 47×count×5 − 总投入，未中亏总投入；<b>累计盈亏</b>=从起始日累加。前24投入+后25投入=总投入，前24盈亏+后25盈亏=当期盈亏。
-              </div>
-              <div class="table-scroll" style="max-height:480px">
-                <table class="data">
-                  <thead><tr>
-                    <th>期号</th><th>日期</th><th>投号数<br>(去重)</th><th>总投入<br>(N×5叠加)</th><th>开奖号</th><th>开奖<br>落点</th><th>前24号<br>(号数/投入)</th><th>后25号<br>(号数/投入)</th><th>命中</th><th>当期盈亏<br>(赢−投入)</th><th>累计盈亏</th>
-                  </tr></thead>
-                  <tbody>
-                    <tr v-for="r in numTrack.daily" :key="r.date">
-                      <td style="font-family:Roboto Mono,monospace">{{ r.period }}</td>
-                      <td style="font-family:Roboto Mono,monospace">{{ r.date.slice(5) }}</td>
-                      <td>{{ r.N }}</td>
-                      <td>{{ r.invest }}</td>
-                      <td><b>{{ r.pending ? '待开' : (r.open ? pad(r.open) : '-') }}</b></td>
-                      <td><span class="tag" :style="r.pending?'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1':(r.side==='前24'?'background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd':'background:#fef3c7;color:#b45309;border:1px solid #fcd34d')" style="font-size:10px;padding:1px 6px">{{ r.pending?'待开':r.side }}</span></td>
-                      <td>{{ r.front_n }}号/{{ r.front_invest }}</td>
-                      <td>{{ r.back_n }}号/{{ r.back_invest }}</td>
-                      <td :style="r.pending?'color:var(--ink2)':(r.hit?'color:var(--ok);font-weight:700':'color:var(--warn)')">{{ r.pending?'待开':(r.hit?'✓中':'✗') }}</td>
-                      <td :style="r.pending?'color:var(--ink2)':(r.pnl>=0?'color:var(--ok);font-weight:700':'color:var(--warn);font-weight:700')">{{ r.pending?'待开':((r.pnl>=0?'+':'') + r.pnl) }}</td>
-                      <td :style="r.cum>=0?'color:var(--ok)':'color:var(--warn)'">{{ r.cum>=0?'+':'' }}{{ r.cum }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <!-- 刷新加载动画弹框 -->
-            <div class="modal-mask" v-if="numTrackLoading" style="z-index:200">
-              <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
-                <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
-                <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
-              </div>
-            </div>
-            <!-- 正反筹码复制弹框 -->
-            <div class="modal-mask" v-if="numTrackChipOpen" @click.self="numTrackChipOpen=false" style="z-index:300">
-              <div class="modal" style="max-width:760px;max-height:82vh;overflow:auto;padding:20px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-                  <div style="font-size:16px;font-weight:800">📋 正反筹码复制（{{ numTrackDaily.period }} · 最大 {{ numTrackDaily.max_chip }} 元）</div>
-                  <button class="btn btn-sm" @click="numTrackChipOpen=false" style="padding:2px 10px;font-size:12px">✕ 关闭</button>
-                </div>
-                <div style="font-size:12px;color:var(--ink2);margin-bottom:12px">复制为「号码 + 筹码」两列 / 三列制表符文本，粘贴到 Excel 自动分列。</div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-                  <button class="btn btn-sm" @click="copyNumTrackChips('normal')" style="padding:6px 14px;background:#1d4ed8;color:#fff;border:none;border-radius:6px">📋 复制正向筹码</button>
-                  <button class="btn btn-sm" @click="copyNumTrackChips('reverse')" style="padding:6px 14px;background:#b45309;color:#fff;border:none;border-radius:6px">📋 复制反向筹码</button>
-                  <button class="btn btn-sm" @click="copyNumTrackChips('both')" style="padding:6px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px">📋 复制正反两列</button>
-                  <button class="btn btn-sm" @click="copyNumTrackGroup('front')" style="padding:6px 14px;background:#1e40af;color:#fff;border:none;border-radius:6px">🔵 复制前24号</button>
-                  <button class="btn btn-sm" @click="copyNumTrackGroup('back')" style="padding:6px 14px;background:#d97706;color:#fff;border:none;border-radius:6px">🟡 复制后25号</button>
-                </div>
-                <div class="table-scroll" style="max-height:52vh">
-                  <table class="data">
-                    <thead><tr><th>号码</th><th>预测次数</th><th>正向筹码(元)</th><th>反向筹码(元)</th></tr></thead>
-                    <tbody>
-                      <tr v-for="x in numTrackDaily.all49" :key="'c'+x.num" :style="numTrackDaily.open===x.num?'background:#f0fdf4':''">
-                        <td style="font-family:Roboto Mono,monospace;font-weight:700">{{ pad(x.num) }}{{ numTrackDaily.open===x.num?' ★':'' }}</td>
-                        <td>{{ x.count }}</td>
-                        <td style="color:#1d4ed8;font-weight:700">{{ x.chip }}</td>
-                        <td style="color:#b45309;font-weight:700">{{ x.rev_chip }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </template>
 <template v-if="cur==='/predictsite'">
         <div class="topbar"><h2>预测采集 · 4家预测数据来源</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card">
@@ -4261,9 +3095,6 @@ createApp({
       else if (cur.value === '/multigroup') loadMultiGroupPage();
       else if (cur.value === '/multigroup2') loadMultiGroup2Page();
       else if (cur.value === '/tailsummary') loadTailTrack();
-      else if (cur.value === '/zodiacsummary') loadZodiacSource();
-      else if (cur.value === '/sizu') loadSizu();
-      else if (cur.value === '/numtrack') loadNumTrack();
       else if (cur.value === '/predictsite') loadPredictSitePage();
       else if (cur.value === '/signaltrack') loadSignalTrack();
       else if (cur.value === '/config') loadConfig();
@@ -4554,10 +3385,6 @@ createApp({
     // ====== 尾数跟踪 ======
     const tailTrack = ref(null);
     const tailSource = ref({ sources: [], records: [], summary: {}, threshold_analysis: [], total_periods: 0 });
-    const tailLoading = ref(false);
-    let _tailLoadDepth = 0;
-    function _tailLoadBegin() { _tailLoadDepth++; tailLoading.value = true; }
-    function _tailLoadEnd() { _tailLoadDepth--; if (_tailLoadDepth <= 0) { _tailLoadDepth = 0; tailLoading.value = false; } }
     const tailView = ref('month');  // month / week
     const tailGroups = computed(() => {
       const t = tailTrack.value;
@@ -4570,19 +3397,14 @@ createApp({
       return 'background:#f1f5f9;color:#64748b';
     }
     async function loadTailTrack() {
-      _tailLoadBegin();
-      try {
-        try { tailTrack.value = await api('GET', '/api/tailTrack/calc'); }
-        catch (e) { tailTrack.value = null; }
-        try { tailTrackSmart.value = await api('GET', '/api/tailTrack/smart'); }
-        catch (e) { tailTrackSmart.value = null; }
-        try { tailSource.value = await api('GET', '/api/tailSource/overview'); }
-        catch (e) { tailSource.value = { sources: [], records: [], summary: {}, threshold_analysis: [], total_periods: 0 }; }
-        const recs = tailSource.value.records || [];
-        if (!tailQueryDate.value && recs.length) tailQueryDate.value = recs[recs.length - 1].date;
-      } finally {
-        _tailLoadEnd();
-      }
+      try { tailTrack.value = await api('GET', '/api/tailTrack/calc'); }
+      catch (e) { tailTrack.value = null; }
+      try { tailTrackSmart.value = await api('GET', '/api/tailTrack/smart'); }
+      catch (e) { tailTrackSmart.value = null; }
+      try { tailSource.value = await api('GET', '/api/tailSource/overview'); }
+      catch (e) { tailSource.value = { sources: [], records: [], summary: {}, threshold_analysis: [], total_periods: 0 }; }
+      const recs = tailSource.value.records || [];
+      if (!tailQueryDate.value && recs.length) tailQueryDate.value = recs[recs.length - 1].date;
     }
     // ====== 尾数来源投票 · 按日期查询 + 按票数分组尾号 + 复制 ======
     const tailQueryDate = ref('');
@@ -4635,508 +3457,11 @@ createApp({
         return { level: 'bad', text: `❌ 建议暂停：最近4${label}累计 ${recent_profit>=0?'+':''}${recent_profit}（仅${positive_cnt}/4 个${label}为正），全期 ${all_profit>=0?'+':''}${all_profit}，趋势走弱。` };
       }
     });
-    // ====== 生肖来源投票（4 来源：哪吒八肖/聚宝八肖/米老网红七肖/米老七肖）======
-    const zodiacSource = ref({ sources: [], records: [], summary: {}, threshold_analysis: [], total_periods: 0 });
-    const zodiacLoading = ref(false);
-    let _zodiacLoadDepth = 0;
-    function _zodiacLoadBegin() { _zodiacLoadDepth++; zodiacLoading.value = true; }
-    function _zodiacLoadEnd() { _zodiacLoadDepth--; if (_zodiacLoadDepth <= 0) { _zodiacLoadDepth = 0; zodiacLoading.value = false; } }
-    async function loadZodiacSource() {
-      _zodiacLoadBegin();
-      try {
-        await Promise.all([
-          api('GET', '/api/zodiacSource/overview').then(d => { zodiacSource.value = d; }).catch(() => { zodiacSource.value = { sources: [], records: [], summary: {}, threshold_analysis: [], total_periods: 0 }; }),
-          loadZodiacTop1Forward(),
-          loadZodiacDecision(),
-          loadZodiacBuyPlan(),
-          loadZodiacOrder(),
-          loadZodiacOrderFull(),
-          loadZodiacBpOrder(),
-          loadZodiacBpStats(),
-        ]);
-        const recs = zodiacSource.value.records || [];
-        if (!zodiacQueryDate.value && recs.length) zodiacQueryDate.value = recs[recs.length - 1].date;
-      } finally {
-        _zodiacLoadEnd();
-      }
-    }
-    // Top1 肖 样本外前向跟踪
-    const zodiacTop1Forward = ref({ stats: { n: 0 }, records: [] });
-    async function loadZodiacTop1Forward() {
-      _zodiacLoadBegin();
-      try { zodiacTop1Forward.value = await api('GET', '/api/zodiacTop1/forward'); }
-      catch (e) { zodiacTop1Forward.value = { stats: { n: 0 }, records: [] }; }
-      finally { _zodiacLoadEnd(); }
-    }
-    // 生肖购买决策
-    const zodiacDecision = ref({ zodiacs: [], total_periods: 0 });
-    async function loadZodiacDecision() {
-      _zodiacLoadBegin();
-      try { zodiacDecision.value = await api('GET', '/api/zodiacDecision'); }
-      catch (e) { zodiacDecision.value = { zodiacs: [], total_periods: 0 }; }
-      finally { _zodiacLoadEnd(); }
-    }
-    // 按投票购买演算
-    const zodiacBuyPlan = ref({ strategies: [], today: {}, guide: null, total_periods: 0 });
-    async function loadZodiacBuyPlan() {
-      _zodiacLoadBegin();
-      try { zodiacBuyPlan.value = await api('GET', '/api/zodiacBuyPlan'); }
-      catch (e) { zodiacBuyPlan.value = { strategies: [], today: {}, guide: null, total_periods: 0 }; }
-      finally { _zodiacLoadEnd(); }
-    }
-    // 前3方案号码筹码汇总（号码被前3方案选中次数 × 每号5元）
-    const zodiacChipGroups = computed(() => {
-      const guide = zodiacBuyPlan.value.guide;
-      if (!guide || !guide.plans) return [];
-      const per = 5;
-      const chips = {};
-      for (const p of guide.plans) {
-        for (const n of (p.picks || [])) {
-          chips[n] = (chips[n] || 0) + per;
-        }
-      }
-      const byAmt = {};
-      for (const [n, amt] of Object.entries(chips)) {
-        (byAmt[amt] = byAmt[amt] || []).push(Number(n));
-      }
-      return Object.keys(byAmt).map(Number).sort((a, b) => b - a).map(amt => ({
-        amount: amt,
-        nums: byAmt[amt].sort((a, b) => a - b),
-      }));
-    });
-    function copyZodiacGroup(g) {
-      copyText(g.nums.map(n => pad(n)).join('.'), g.amount + '元号码');
-    }
-    // Top1 肖真实下单台账
-    const zodiacOrder = ref({ per: 0, init_capital: 0, capital: 0, total_orders: 0, settled: 0, hits: 0, hit_rate: 0, total_profit: 0, records: [] });
-    async function loadZodiacOrder() {
-      _zodiacLoadBegin();
-      try { zodiacOrder.value = await api('GET', '/api/zodiacOrder'); }
-      catch (e) { zodiacOrder.value = { per: 0, init_capital: 0, capital: 0, total_orders: 0, settled: 0, hits: 0, hit_rate: 0, total_profit: 0, records: [] }; }
-      finally { _zodiacLoadEnd(); }
-    }
-    const zodiacOrderFull = ref({ per: 0, init_capital: 0, capital: 0, total_orders: 0, settled: 0, hits: 0, hit_rate: 0, total_profit: 0, records: [] });
-    async function loadZodiacOrderFull() {
-      _zodiacLoadBegin();
-      try { zodiacOrderFull.value = await api('GET', '/api/zodiacOrderFull'); }
-      catch (e) { zodiacOrderFull.value = { per: 0, init_capital: 0, capital: 0, total_orders: 0, settled: 0, hits: 0, hit_rate: 0, total_profit: 0, records: [] }; }
-      finally { _zodiacLoadEnd(); }
-    }
-    // ====== 购买策略前3方案 真实下单台账 + AI + 止损 ======
-    const zodiacBpOrder = ref({ per: 0, init_capital: 0, plans: [], guide: null });
-    const zodiacBpOpen = ref('');
-    async function loadZodiacBpOrder() {
-      _zodiacLoadBegin();
-      try {
-        const d = await api('GET', '/api/zodiacBpOrder');
-        zodiacBpOrder.value = d;
-        if (!zodiacBpOpen.value && d.plans && d.plans.length) zodiacBpOpen.value = d.plans[0].key;
-      }
-      catch (e) { zodiacBpOrder.value = { per: 0, init_capital: 0, plans: [], guide: null }; }
-      finally { _zodiacLoadEnd(); }
-    }
-    const zodiacBpCurrent = computed(() => {
-      if (!zodiacBpOpen.value) return null;
-      return (zodiacBpOrder.value.plans || []).find(p => p.key === zodiacBpOpen.value) || null;
-    });
-    function setZodiacBpPlan(key) { zodiacBpOpen.value = key; }
-    const zodiacBpChipGroups = computed(() => {
-      const guide = zodiacBpOrder.value.guide;
-      if (!guide || !guide.plans) return [];
-      const per = zodiacBpOrder.value.per || 5;
-      const chips = {};
-      for (const p of guide.plans) {
-        for (const n of (p.picks || [])) {
-          chips[n] = (chips[n] || 0) + per;
-        }
-      }
-      const byAmt = {};
-      for (const [n, amt] of Object.entries(chips)) {
-        (byAmt[amt] = byAmt[amt] || []).push(Number(n));
-      }
-      return Object.keys(byAmt).map(Number).sort((a, b) => b - a).map(amt => ({
-        amount: amt,
-        nums: byAmt[amt].sort((a, b) => a - b),
-      }));
-    });
-    function copyZodiacBpGroup(g) {
-      copyText(g.nums.map(n => pad(n)).join('.'), g.amount + '元号码');
-    }
-    const zodiacBpStats = ref(null);
-    const zodiacBpAi = ref('');
-    const zodiacBpAiLoading = ref(false);
-    const zodiacBpAiError = ref('');
-    async function loadZodiacBpStats() {
-      _zodiacLoadBegin();
-      try { zodiacBpStats.value = await api('GET', '/api/zodiacBpOrder/stats'); }
-      catch (e) { zodiacBpStats.value = null; }
-      finally { _zodiacLoadEnd(); }
-    }
-    async function runZodiacBpAi() {
-      zodiacBpAiLoading.value = true;
-      zodiacBpAiError.value = '';
-      zodiacBpAi.value = '';
-      try {
-        const d = await api('GET', '/api/zodiacBpOrder/aiAnalysis');
-        if (d.ok) zodiacBpAi.value = d.analysis;
-        else zodiacBpAiError.value = d.error || '分析失败';
-      }
-      catch (e) { zodiacBpAiError.value = '分析失败：' + (e.message || e); }
-      finally { zodiacBpAiLoading.value = false; }
-    }
-    // ====== 四组汇（好运4组号码投票 → 方案扫描 → 按盈利排序）======
-    const sizu = ref({ sources: [], records: [], plans: [], start_date: '', end_date: '', total_periods: 0 });
-    const sizuLoading = ref(false);
-    const sizuOpen = ref('');
-    let _sizuLoadDepth = 0;
-    function _sizuLoadBegin() { _sizuLoadDepth++; sizuLoading.value = true; }
-    function _sizuLoadEnd() { _sizuLoadDepth--; if (_sizuLoadDepth <= 0) { _sizuLoadDepth = 0; sizuLoading.value = false; } }
-    async function loadSizu() {
-      _sizuLoadBegin();
-      try {
-        await Promise.all([
-          api('GET', '/api/sizuVote').then(d => { sizu.value = d; }).catch(() => { sizu.value = { sources: [], records: [], plans: [], start_date: '', end_date: '', total_periods: 0 }; }),
-          loadSizuOrder(),
-          loadSizuStats(),
-        ]);
-      } finally { _sizuLoadEnd(); }
-    }
-    const sizuLatest = computed(() => {
-      const recs = sizu.value.records || [];
-      return recs.length ? recs[recs.length - 1] : null;
-    });
-    const sizuRecordsReversed = computed(() => [...(sizu.value.records || [])].reverse());
-    const sizuVoteGroups = computed(() => {
-      if (!sizuLatest.value) return [];
-      const votes = sizuLatest.value.votes || {};
-      const byVotes = {};
-      for (const [n, v] of Object.entries(votes)) {
-        if (!v || v <= 0) continue;
-        (byVotes[v] = byVotes[v] || []).push(Number(n));
-      }
-      return Object.keys(byVotes).map(Number).sort((a, b) => b - a).map(v => ({
-        votes: v,
-        nums: byVotes[v].sort((a, b) => a - b),
-      }));
-    });
-    const sizuChipGroups = computed(() => {
-      const guide = sizuOrder.value.guide;
-      if (!guide || !guide.plans) return [];
-      const per = sizuOrder.value.per || 5;
-      const chips = {};
-      for (const p of guide.plans) {
-        for (const n of (p.picks || [])) {
-          chips[n] = (chips[n] || 0) + per;
-        }
-      }
-      const byAmt = {};
-      for (const [n, amt] of Object.entries(chips)) {
-        (byAmt[amt] = byAmt[amt] || []).push(Number(n));
-      }
-      return Object.keys(byAmt).map(Number).sort((a, b) => b - a).map(amt => ({
-        amount: amt,
-        nums: byAmt[amt].sort((a, b) => a - b),
-      }));
-    });
-    const sizuCurrent = computed(() => {
-      if (!sizuOpen.value) return null;
-      return (sizu.value.plans || []).find(p => p.key === sizuOpen.value) || null;
-    });
-    const sizuCurrentDetail = computed(() => {
-      if (!sizuCurrent.value) return [];
-      return [...(sizuCurrent.value.detail || [])].reverse();
-    });
-    function toggleSizuPlan(key) {
-      sizuOpen.value = sizuOpen.value === key ? '' : key;
-    }
-    // ====== 数学方案逐期盈利查询 ======
-    const mathPlanKeys = ['eq3', 'ge3', 'top1', 'top2', 'top3', 'top5', 'ge2', 'combo'];
-    const mathPlanKey = ref('eq3');
-    const COMBO_KEYS = ['eq3', 'ge3', 'top2', 'top3'];
-    const mathPlanCurrent = computed(() => {
-      if (mathPlanKey.value === 'combo') {
-        const plans = (sizu.value.plans || []).filter(p => COMBO_KEYS.includes(p.key));
-        if (!plans.length) return null;
-        const byDate = {};
-        plans.forEach(p => (p.detail || []).forEach(d => {
-          if (!byDate[d.date]) byDate[d.date] = { date: d.date, period: d.period, open_num: d.open_num, picks: [], N: 0, profits: [], hits: 0, cnt: 0 };
-          const e = byDate[d.date];
-          e.profits.push(d.profit);
-          e.N += d.N; e.cnt += 1;
-          if (d.hit) e.hits += 1;
-          (d.picks || []).forEach(x => { if (!e.picks.includes(x)) e.picks.push(x); });
-        }));
-        const detail = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)).map(e => ({
-          date: e.date, period: e.period, open_num: e.open_num,
-          picks: e.picks.sort((a, b) => a - b), N: Math.round(e.N / e.cnt * 10) / 10,
-          hit: e.hits > 0, profit: Math.round(e.profits.reduce((s, x) => s + x, 0) / e.profits.length * 100) / 100,
-        }));
-        let cum = 0;
-        detail.forEach(d => { cum += d.profit; d.cum = Math.round(cum * 100) / 100; });
-        const settled = detail;
-        const hits = settled.filter(d => d.hit).length;
-        const profit = Math.round(settled.reduce((s, d) => s + d.profit, 0) * 100) / 100;
-        const total_bet = settled.reduce((s, d) => s + d.N, 0);
-        let maxMiss = 0, curStreak = 0;
-        detail.forEach(d => {
-          if (d.hit) curStreak = curStreak > 0 ? curStreak + 1 : 1;
-          else curStreak = curStreak < 0 ? curStreak - 1 : -1;
-          maxMiss = Math.max(maxMiss, -curStreak);
-        });
-        return {
-          key: 'combo', name: '组合(=3+≥3+Top2+Top3)',
-          hits, total: settled.length,
-          hit_rate: settled.length ? Math.round(hits / settled.length * 1000) / 10 : 0,
-          profit, roi: total_bet ? Math.round(profit / total_bet * 10000) / 100 : 0,
-          avg_nums: settled.length ? Math.round(total_bet / settled.length * 10) / 10 : 0,
-          max_miss_streak: maxMiss, cur_streak: curStreak, detail,
-        };
-      }
-      return (sizu.value.plans || []).find(p => p.key === mathPlanKey.value) || null;
-    });
-    const mathPlanDetail = computed(() => mathPlanCurrent.value ? [...(mathPlanCurrent.value.detail || [])].reverse() : []);
-    function setMathPlan(key) { mathPlanKey.value = key; }
-    function mathPlanName(key) {
-      const alias = { eq3: '=3票(共识高票)', ge3: '≥3票', top1: 'Top1号', top2: 'Top2号', top3: 'Top3号', top5: 'Top5号', ge2: '≥2票(避1票)', combo: '组合(=3+≥3+Top2+Top3)' };
-      if (alias[key]) return alias[key];
-      const p = (sizu.value.plans || []).find(x => x.key === key);
-      return p ? p.name : key;
-    }
-    // 凯利 f* = (p·b − q) / b（p=命中率，b=净赔率47−N，q=1−p），负期望返回 0
-    const mathPlanKelly = computed(() => {
-      const p = mathPlanCurrent.value;
-      if (!p || !p.total) return 0;
-      const hit = p.hit_rate / 100;
-      const N = p.avg_nums;
-      const b = 47 - N;
-      const q = 1 - hit;
-      const f = (hit * b - q) / b;
-      return f > 0 ? (f * 100).toFixed(1) : 0;
-    });
-    // ====== 四组汇 ROI 前5 真实下单台账 ======
-    const sizuOrder = ref({ per: 0, init_capital: 0, plans: [], guide: null });
-    const sizuOrderOpen = ref('');
-    async function loadSizuOrder() {
-      _sizuLoadBegin();
-      try {
-        const d = await api('GET', '/api/sizuOrder');
-        sizuOrder.value = d;
-        if (!sizuOrderOpen.value && d.plans && d.plans.length) sizuOrderOpen.value = d.plans[0].key;
-      }
-      catch (e) { sizuOrder.value = { per: 0, init_capital: 0, plans: [], guide: null }; }
-      finally { _sizuLoadEnd(); }
-    }
-    const sizuCurrentOrder = computed(() => {
-      if (!sizuOrderOpen.value) return null;
-      return (sizuOrder.value.plans || []).find(p => p.key === sizuOrderOpen.value) || null;
-    });
-    function setSizuOrderPlan(key) {
-      sizuOrderOpen.value = key;
-    }
-    function copySizuGroup(g) {
-      copyText(g.nums.map(n => pad(n)).join('.'), g.amount + '元号码');
-    }
-    // ====== 四组汇 AI 分析演算预测 + 超期止损 ======
-    const sizuStats = ref(null);
-    const sizuAi = ref('');
-    const sizuAiLoading = ref(false);
-    const sizuAiError = ref('');
-    async function loadSizuStats() {
-      try { sizuStats.value = await api('GET', '/api/sizuOrder/stats'); }
-      catch (e) { sizuStats.value = null; }
-    }
-    async function runSizuAi() {
-      sizuAiLoading.value = true;
-      sizuAiError.value = '';
-      sizuAi.value = '';
-      try {
-        const d = await api('GET', '/api/sizuOrder/aiAnalysis');
-        if (d.ok) sizuAi.value = d.analysis;
-        else sizuAiError.value = d.error || '分析失败';
-      }
-      catch (e) { sizuAiError.value = '分析失败：' + (e.message || e); }
-      finally { sizuAiLoading.value = false; }
-    }
-    const zodiacQueryDate = ref('');
-    const zodiacSourceRecords = computed(() => [...(zodiacSource.value.records || [])].reverse());
-    const zodiacQueryRec = computed(() => {
-      const recs = zodiacSource.value.records || [];
-      if (!recs.length) return null;
-      const d = zodiacQueryDate.value;
-      if (d) return recs.find(r => r.date === d) || null;
-      return recs[recs.length - 1];
-    });
-    const zodiacQueryGroups = computed(() => {
-      const rec = zodiacQueryRec.value;
-      if (!rec || !rec.votes) return [];
-      const byVotes = {};
-      for (const [z, v] of Object.entries(rec.votes)) {
-        if (!v || v <= 0) continue;
-        (byVotes[v] = byVotes[v] || []).push(z);
-      }
-      return Object.keys(byVotes).map(Number).sort((a, b) => b - a).map(v => ({
-        votes: v,
-        zodiacs: byVotes[v],
-      }));
-    });
-    function copyZodiacGroup(g) {
-      copyText(g.zodiacs.join(''), g.votes + '票生肖');
-    }
-    // 生肖来源投票 · 按月/按周趋势监测
-    const zodiacTlKey = ref('eq2');
-    const zodiacTlView = ref('month');
-    const zodiacTlData = computed(() => {
-      const tl = (zodiacSource.value.timelines || {})[zodiacTlKey.value];
-      if (!tl) return [];
-      return zodiacTlView.value === 'month' ? (tl.monthly || []) : (tl.weekly || []);
-    });
-    const zodiacTlConclusion = computed(() => {
-      const data = zodiacTlData.value;
-      if (!data.length) return null;
-      const recent = data.slice(-4);
-      const recent_profit = recent.reduce((s, x) => s + x.profit, 0);
-      const positive_cnt = recent.filter(x => x.profit > 0).length;
-      const all_profit = data.reduce((s, x) => s + x.profit, 0);
-      const label = zodiacTlView.value === 'month' ? '月' : '周';
-      if (recent_profit > 0 && all_profit > 0) {
-        return { level: 'ok', text: `✅ 可继续跟踪：最近4${label}累计 ${recent_profit>=0?'+':''}${recent_profit}（${positive_cnt}/4 个${label}为正），全期 ${all_profit>=0?'+':''}${all_profit}，趋势走强。` };
-      } else if (recent_profit > 0) {
-        return { level: 'warn', text: `⚠️ 观察：最近4${label}转正 ${recent_profit>=0?'+':''}${recent_profit}（${positive_cnt}/4 个${label}为正），但全期仍 ${all_profit>=0?'+':''}${all_profit}，样本不足需继续观察。` };
-      } else {
-        return { level: 'bad', text: `❌ 建议暂停：最近4${label}累计 ${recent_profit>=0?'+':''}${recent_profit}（仅${positive_cnt}/4 个${label}为正），全期 ${all_profit>=0?'+':''}${all_profit}，趋势走弱。` };
-      }
-    });
-    // ====== 号码跟踪（4家28栏目 N×5 叠加）======
+    // ====== 号码跟踪（4家号码栏目 N×5 叠加）======
     const numTrack = ref({ summary: null, n_dist: [], monthly: [], daily: [], bet: 5 });
-    const numTrackLoading = ref(false);
-    let _numTrackLoadDepth = 0;
-    function _numTrackLoadBegin() { _numTrackLoadDepth++; numTrackLoading.value = true; }
-    function _numTrackLoadEnd() { _numTrackLoadDepth--; if (_numTrackLoadDepth <= 0) { _numTrackLoadDepth = 0; numTrackLoading.value = false; } }
     async function loadNumTrack() {
-      _numTrackLoadBegin();
-      try {
-        try { numTrack.value = await api('GET', '/api/numTrack/calc'); }
-        catch (e) { numTrack.value = { summary: null, n_dist: [], monthly: [], daily: [], bet: 5 }; }
-        await loadFrontbackOrder(frontbackFrom.value, frontbackTo.value);
-        await loadReverseChipOrder(reverseChipFrom.value, reverseChipTo.value);
-        // 默认查询最新日期
-        if (!numTrackQueryDate.value && numTrack.value.end_date) {
-          numTrackQueryDate.value = numTrack.value.end_date;
-          await loadNumTrackDaily();
-        }
-      } finally {
-        _numTrackLoadEnd();
-      }
-    }
-    const numTrackDaily = ref(null);
-    const numTrackQueryDate = ref('');
-    async function loadNumTrackDaily() {
-      if (!numTrackQueryDate.value) return;
-      _numTrackLoadBegin();
-      try { numTrackDaily.value = await api('GET', '/api/numTrack/daily?date=' + numTrackQueryDate.value); }
-      catch (e) { numTrackDaily.value = null; }
-      finally { _numTrackLoadEnd(); }
-    }
-    const frontbackOrder = ref(null);
-    const frontbackFrom = ref('');
-    const frontbackTo = ref('');
-    async function loadFrontbackOrder(from, to) {
-      _numTrackLoadBegin();
-      try {
-        const p = new URLSearchParams();
-        if (from) p.set('date_from', from);
-        if (to) p.set('date_to', to);
-        const q = p.toString();
-        frontbackOrder.value = await api('GET', '/api/frontbackOrder' + (q ? '?' + q : ''));
-      }
-      catch (e) { frontbackOrder.value = null; }
-      finally { _numTrackLoadEnd(); }
-    }
-    // ====== 反向筹码真实下单台账 ======
-    const reverseChipOrder = ref(null);
-    const reverseChipFrom = ref('');
-    const reverseChipTo = ref('');
-    async function loadReverseChipOrder(from, to) {
-      _numTrackLoadBegin();
-      try {
-        const p = new URLSearchParams();
-        if (from) p.set('date_from', from);
-        if (to) p.set('date_to', to);
-        const q = p.toString();
-        reverseChipOrder.value = await api('GET', '/api/reverseChipOrder' + (q ? '?' + q : ''));
-      }
-      catch (e) { reverseChipOrder.value = null; }
-      finally { _numTrackLoadEnd(); }
-    }
-    const frontbackAi = ref('');
-    const frontbackAiLoading = ref(false);
-    const frontbackAiError = ref('');
-    async function runFrontbackAi() {
-      frontbackAiLoading.value = true;
-      frontbackAiError.value = '';
-      frontbackAi.value = '';
-      try {
-        const p = new URLSearchParams();
-        if (frontbackFrom.value) p.set('date_from', frontbackFrom.value);
-        if (frontbackTo.value) p.set('date_to', frontbackTo.value);
-        const q = p.toString();
-        const d = await api('GET', '/api/frontbackOrder/aiAnalysis' + (q ? '?' + q : ''));
-        if (d.ok) { frontbackAi.value = d.analysis; }
-        else { frontbackAiError.value = d.error || '分析失败'; }
-      }
-      catch (e) { frontbackAiError.value = 'AI 分析请求失败，请重试'; }
-      finally { frontbackAiLoading.value = false; }
-    }
-    function setFrontbackRange(kind) {
-      const now = new Date();
-      const y = now.getFullYear();
-      const m = now.getMonth();
-      const d = now.getDate();
-      const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-      let from = '', to = '';
-      if (kind === 'week') {
-        const day = now.getDay() || 7;  // 周日=7，周一=1
-        from = fmt(new Date(y, m, d - (day - 1)));
-        to = fmt(now);
-      } else if (kind === 'month') {
-        from = fmt(new Date(y, m, 1));
-        to = fmt(now);
-      } else if (kind === 'lastmonth') {
-        from = fmt(new Date(y, m - 1, 1));
-        to = fmt(new Date(y, m, 0));  // 本月0号 = 上月末
-      } else if (kind === 'year') {
-        from = fmt(new Date(y, 0, 1));
-        to = fmt(now);
-      }
-      frontbackFrom.value = from;
-      frontbackTo.value = to;
-      loadFrontbackOrder(from, to);
-    }
-    function copyNumTrackGroup(kind) {
-      const arr = kind === 'front' ? (numTrackDaily.value?.front24 || []) : (numTrackDaily.value?.back25 || []);
-      copyText(arr.map(x => pad(x.num)).join('.'), kind === 'front' ? '前24号' : '后25号');
-    }
-    // ====== 号码跟踪 · 正反筹码复制弹框（可复制到 Excel）======
-    const numTrackChipOpen = ref(false);
-    const numTrackChipMode = ref('both');  // normal / reverse / both
-    function openNumTrackChip() { numTrackChipOpen.value = true; }
-    function numTrackChipTSV(mode) {
-      const arr = numTrackDaily.value?.all49 || [];
-      const lines = [];
-      if (mode === 'normal') {
-        lines.push('号码\t正向筹码');
-        for (const x of arr) lines.push(pad(x.num) + '\t' + x.chip);
-      } else if (mode === 'reverse') {
-        lines.push('号码\t反向筹码');
-        for (const x of arr) lines.push(pad(x.num) + '\t' + x.rev_chip);
-      } else {
-        lines.push('号码\t正向筹码\t反向筹码');
-        for (const x of arr) lines.push(pad(x.num) + '\t' + x.chip + '\t' + x.rev_chip);
-      }
-      return lines.join('\n');
-    }
-    function copyNumTrackChips(mode) {
-      copyText(numTrackChipTSV(mode), mode === 'normal' ? '正向筹码' : mode === 'reverse' ? '反向筹码' : '正反筹码');
+      try { numTrack.value = await api('GET', '/api/numTrack/calc'); }
+      catch (e) { numTrack.value = { summary: null, n_dist: [], monthly: [], daily: [], bet: 5 }; }
     }
     // ====== 尾数跟踪·智能（连续失败3次停手 → 等待命中再恢复）======
     const tailTrackSmart = ref(null);
@@ -5159,23 +3484,14 @@ createApp({
     }
     // ====== 肖跟踪（生肖遗漏≥12期，6肖全跟踪）======
     const zodiacTrack = ref({ threshold: 12, K: 12, max_track: 6, bet_n: 3, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 });
-    const zodiacTrackLoading = ref(false);
-    let _zodiacTrackLoadDepth = 0;
-    function _zodiacTrackLoadBegin() { _zodiacTrackLoadDepth++; zodiacTrackLoading.value = true; }
-    function _zodiacTrackLoadEnd() { _zodiacTrackLoadDepth--; if (_zodiacTrackLoadDepth <= 0) { _zodiacTrackLoadDepth = 0; zodiacTrackLoading.value = false; } }
     const zodiacOrders = ref([]);
     const zodiacDepositAmount = ref(null);
     async function loadZodiacTrack() {
-      _zodiacTrackLoadBegin();
       try {
-        try {
-          zodiacTrack.value = await api('GET', '/api/zodiacTrack/overview');
-          const od = await api('GET', '/api/zodiacTrack/orders?limit=200');
-          zodiacOrders.value = od.orders || [];
-        } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, bet_n: 3, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 }; }
-      } finally {
-        _zodiacTrackLoadEnd();
-      }
+        zodiacTrack.value = await api('GET', '/api/zodiacTrack/overview');
+        const od = await api('GET', '/api/zodiacTrack/orders?limit=200');
+        zodiacOrders.value = od.orders || [];
+      } catch (e) { zodiacTrack.value = { threshold: 12, K: 12, max_track: 6, bet_n: 3, cold: [], cold_count: 0, backtest: null, account: null, guide: {}, holding: [], holding_count: 0, sources: [], source_count: 0 }; }
     }
     async function zodiacSettle() {
       try {
@@ -5441,30 +3757,19 @@ createApp({
           refreshMenus();
           // 自动刷新：维度统计页跟踪类 tab 每 30 秒自动刷新数据（数据变化无需手动刷新）
           setInterval(() => {
-            // 页面不可见（切到后台/其他标签）时暂停刷新，省资源
-            if (document.visibilityState === 'hidden') return;
-            // 号码跟踪（独立菜单）：自动刷新演算，预测采集/开奖结果入库后自动更新
-            if (cur.value === '/numtrack') {
-              loadNumTrack();
-              return;
-            }
-            // 多组肖汇（独立菜单）：自动刷新生肖投票，预测采集/开奖结果入库后自动更新
-            if (cur.value === '/zodiacsummary') {
-              loadZodiacSource();
-              return;
-            }
             if (cur.value !== '/dimstats') return;
             const autoRefresh = {
               'track': loadTrackTab,
               'hightrack': loadHighTrack,
               'tailtrack': loadTailTrack,
               'zodiac': loadZodiacTrack,
+              'numtrack': loadNumTrack,
               'random8': loadRandom8,
               'fixedorder': loadFixedOrder,
             };
             const fn = autoRefresh[dimTab.value];
             if (fn) fn();
-          }, 60000);
+          }, 30000);
         } catch(e){ doLogout(); }
       }
     });
@@ -5484,11 +3789,11 @@ createApp({
       dash, recs, recPage, recTotal, recTotalPages, recPageSize, recFilter, selectedIds, allSelected,
       cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
       dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
-      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailSource, tailLoading, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle, numTrack, loadNumTrack, numTrackLoading, numTrackDaily, numTrackQueryDate, loadNumTrackDaily, copyNumTrackGroup, numTrackChipOpen, openNumTrackChip, copyNumTrackChips, frontbackOrder, frontbackFrom, frontbackTo, loadFrontbackOrder, frontbackAi, frontbackAiLoading, frontbackAiError, runFrontbackAi, setFrontbackRange, reverseChipOrder, reverseChipFrom, reverseChipTo, loadReverseChipOrder, tailQueryDate, tailQueryRec, tailQueryGroups, tailSourceRecords, copyTailGroup, tailTlKey, tailTlView, tailTlData, tailTlConclusion, zodiacSource, loadZodiacSource, zodiacLoading, zodiacQueryDate, zodiacQueryRec, zodiacQueryGroups, zodiacSourceRecords, copyZodiacGroup, zodiacTlKey, zodiacTlView, zodiacTlData, zodiacTlConclusion, zodiacTop1Forward, loadZodiacTop1Forward, zodiacDecision, loadZodiacDecision, zodiacBuyPlan, loadZodiacBuyPlan, zodiacChipGroups, copyZodiacGroup, zodiacOrder, loadZodiacOrder, zodiacOrderFull, loadZodiacOrderFull, zodiacBpOrder, zodiacBpOpen, loadZodiacBpOrder, zodiacBpCurrent, setZodiacBpPlan, zodiacBpChipGroups, copyZodiacBpGroup, zodiacBpStats, zodiacBpAi, zodiacBpAiLoading, zodiacBpAiError, runZodiacBpAi, loadZodiacBpStats, sizu, sizuLoading, sizuOpen, loadSizu, sizuLatest, sizuRecordsReversed, sizuVoteGroups, sizuChipGroups, sizuCurrent, sizuCurrentDetail, toggleSizuPlan, mathPlanKeys, mathPlanKey, mathPlanCurrent, mathPlanDetail, setMathPlan, mathPlanName, mathPlanKelly, sizuOrder, sizuOrderOpen, loadSizuOrder, sizuCurrentOrder, setSizuOrderPlan, copySizuGroup, sizuStats, sizuAi, sizuAiLoading, sizuAiError, runSizuAi, loadSizuStats,
+      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailSource, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle, numTrack, loadNumTrack, tailQueryDate, tailQueryRec, tailQueryGroups, tailSourceRecords, copyTailGroup, tailTlKey, tailTlView, tailTlData, tailTlConclusion,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
-      zodiacTrack, zodiacTrackLoading, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
+      zodiacTrack, zodiacOrders, zodiacDepositAmount, loadZodiacTrack, zodiacSettle, zodiacInit, zodiacDeposit,
       random8, loadRandom8, fixedOrder, loadFixedOrder,
       mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage, mgEditing, mgEditVal, mgStartEdit, mgSaveEdit, mgCancelEdit,
       mg2Family, mg2Families, mg2Constraints, mg2Cols, mg2Rows, mg2Total, mg2Page, mg2Pages, mg2Period, mg2DateFrom, mg2DateTo, mg2HitFamilies, mg2HitPeriods, loadMultiGroup2, loadMultiGroup2Page, mg2Editing, mg2EditVal, mg2StartEdit, mg2SaveEdit, mg2CancelEdit,

@@ -53,11 +53,67 @@ def main():
               "total_pnl": rr.get("total_pnl", 0)}
     except Exception as e:
         r8 = {"status": "error", "msg": str(e)}
+    # 7. Top1 肖样本外前向：结算已固化 + 固化最新采集期（开奖前采集的预测）
+    zt1 = {"status": "ok"}
+    try:
+        s1 = M._settle_zodiac_top1_forward()
+        g1 = M._generate_zodiac_top1_forward()
+        zt1 = {"status": "ok", "settled": s1, "generated": g1}
+    except Exception as e:
+        zt1 = {"status": "error", "msg": str(e)}
+    # 8. Top1 肖真实下单：结算 pending + 固化最新采集期下单
+    zo = {"status": "ok"}
+    try:
+        so = M._settle_zodiac_order()
+        go = M._generate_zodiac_order()
+        zo = {"status": "ok", "settled": so, "generated": go}
+    except Exception as e:
+        zo = {"status": "error", "msg": str(e)}
+    # 8.5 满票肖（≥4票）真实下单：结算 pending + 固化最新采集期下单
+    zof = {"status": "ok"}
+    try:
+        sof = M._settle_zodiac_full_order()
+        gof = M._generate_zodiac_full_order()
+        zof = {"status": "ok", "settled": sof, "generated": gof}
+    except Exception as e:
+        zof = {"status": "error", "msg": str(e)}
+    # 9. 前24/后25 真实下单：结算 pending + 固化最新采集期下单
+    fb = {"status": "ok"}
+    try:
+        sf = M._settle_frontback_order()
+        gf = M._generate_frontback_order()
+        fb = {"status": "ok", "settled": sf, "generated": gf}
+    except Exception as e:
+        fb = {"status": "error", "msg": str(e)}
+    # 10. 四组汇 ROI 前5 真实下单：结算 pending + 固化最新采集期下单
+    sz = {"status": "ok"}
+    try:
+        ss = M._settle_sizu_order()
+        gs = M._generate_sizu_order()
+        sz = {"status": "ok", "settled": ss, "generated": gs}
+    except Exception as e:
+        sz = {"status": "error", "msg": str(e)}
+    # 11. 购买策略前3方案 真实下单：结算 pending + 固化最新采集期下单（含止损状态机）
+    zbp = {"status": "ok"}
+    try:
+        sbp = M._settle_zodiac_bp_order()
+        gbp = M._generate_zodiac_bp_order()
+        zbp = {"status": "ok", "settled": sbp, "generated": gbp}
+    except Exception as e:
+        zbp = {"status": "error", "msg": str(e)}
+    # 12. 反向筹码真实下单：结算 pending + 固化最新采集期下单
+    rc = {"status": "ok"}
+    try:
+        src = M._settle_reverse_chip_order()
+        grc = M._generate_reverse_chip_order()
+        rc = {"status": "ok", "settled": src, "generated": grc}
+    except Exception as e:
+        rc = {"status": "error", "msg": str(e)}
     print(f"[{now}] matched={matched} settled={settled} "
           f"generated={gen['generated']} date={gen['date']} "
           f"scheme_updated={upd} scheme_generated={sgen['generated']} "
           f"consensus_generated={cgen['generated']} consensus_N={cgen.get('N', 0)} "
-          f"zodiac_track={zt} random8={r8}")
+          f"zodiac_track={zt} random8={r8} zodiac_top1_forward={zt1} zodiac_order={zo} zodiac_order_full={zof} frontback_order={fb} sizu_order={sz} zodiac_bp_order={zbp} reverse_chip_order={rc}")
 
 
 if __name__ == "__main__":

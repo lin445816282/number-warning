@@ -1931,8 +1931,8 @@ def _order_row_to_dict(row):
 
 
 def _compute_rule_records(dims, offset, window=None):
-    """回放历史，逐条生成「高位开出」触发规则记录 + 累计盈亏。
-    口径：标签遗漏 gap >= 历史最高 hist_max - offset 时开出（高位开出）→ 下一期买入该标签号码（唯一买入点）→ 单期结算（下一期开出命中赚 47−N、未中亏 N）。
+    """回放历史，逐条生成「憋到高位」触发规则记录 + 累计盈亏。
+    口径：标签遗漏 gap >= 历史最高 hist_max - offset（憋到高位）→ 当天买入该标签号码（唯一买入点）→ 当天开奖结算（命中赚 47−N、未中亏 N）。
     window：历史最高遗漏滚动窗口（期），0/None=全量历史。"""
     db = get_db()
     cycle_maps = _load_cycle_maps(db)
@@ -1959,31 +1959,27 @@ def _compute_rule_records(dims, offset, window=None):
         zm = _map_for(r, cycle_maps)
         open_num = int(r["source_number"])
         open_labels = match_labels(open_num, zm)
-        # 1. 检测高位开出事件
-        events_now = []
-        for dim, tag in open_labels.items():
-            if not tag or dim not in dimset:
+        # 1. 检测憋到高位的标签（截至上一期的遗漏状态，当天买入）
+        signals_now = []
+        for (dim, tag), ls in list(last_seen.items()):
+            if dim not in dimset:
                 continue
-            k = (dim, tag)
-            if k in last_seen:
-                gap = seq - last_seen[k]
-                hm = _window_hist_max(gap_hist, k, seq, window)
-                if sample.get(k, 0) >= 2 and gap >= hm - offset:
-                    events_now.append((dim, tag, len(tag_nums(dim, tag, zm))))
-        # 2. 结算 + 逐条记录（单次买 + 连续买两种模式）
-        for dim, tag, N in events_now:
-            # 单次买：每号 SINGLE_BET 元，下一期买入（唯一买入点），单期结算
-            hit = False
-            if i + 1 < len(rows):
-                hit = match_labels(rows[i + 1]["source_number"], _map_for(rows[i + 1], cycle_maps)).get(dim) == tag
+            gap = seq - ls
+            hm = _window_hist_max(gap_hist, (dim, tag), seq, window)
+            if sample.get((dim, tag), 0) >= 2 and gap >= hm - offset:
+                signals_now.append((dim, tag, len(tag_nums(dim, tag, zm))))
+        # 2. 当天买入 + 当天结算（单次买 + 连续买两种模式）
+        for dim, tag, N in signals_now:
+            # 单次买：每号 SINGLE_BET 元，当天买入（唯一买入点），当天开奖结算
+            hit = open_labels.get(dim) == tag
             profit_single = SINGLE_BET * (STRATEGY_ODDS - N) if hit else -SINGLE_BET * N
             cumulative_single += profit_single
-            # 连续买：命中就停（马丁格尔），从高位开出下一期开始，五期固定结束
+            # 连续买：命中就停（马丁格尔），从当天开始，五期固定结束
             profit_multi = 0.0
             multi_detail = []
             stopped = False
             for k in range(len(MULTI_BETS)):
-                j = i + 1 + k
+                j = i + k
                 if j >= len(rows):
                     break
                 bet = MULTI_BETS[k]
@@ -3986,6 +3982,2456 @@ def strategy_scheme_consensus_generalize(user=Header(None, alias="authorization"
 
 
 # ============================================================
+# 尾数来源投票跟踪（5 来源预测尾数 → 投票 → 购买决策 → 命中/盈亏演算）
+# ============================================================
+TAIL_SOURCES = [
+    {"name": "哪吒五尾", "table": "multi_group_summary2", "col": "nezha_tail5"},
+    {"name": "中特五尾", "table": "multi_group_summary2", "col": "zhongte_tail5"},
+    {"name": "诸葛四尾", "table": "multi_group_summary", "col": "zhuge_tail4"},
+    {"name": "鬼5尾", "table": "multi_group_summary", "col": "gui_tail5"},
+    {"name": "好运六尾", "table": "multi_group_summary", "col": "haoyun_tail6"},
+]
+
+
+def _parse_tails(s):
+    """清洗尾数字符串 → 尾数集合。兼容点号/横杠/空格/尾字分隔（如 '4.2.3.5.6'、'3-1-8-6-5-7'、'5.4.8.2.1尾'、'1尾3尾4尾'）。"""
+    import re
+    if not s:
+        return set()
+    return {int(d) for d in re.findall(r"\d", str(s))}
+
+
+def _compute_tail_source_vote():
+    """尾数来源投票跟踪：5 来源预测尾数 → 每期投票 → topN 购买决策 → 对比开奖尾数 → 命中/盈亏。
+
+    纯只读演算。盈亏口径：单次买（每号 1 元标准化），买 topN 尾数对应号码（每尾 4~5 号），
+    命中赚 47−N、未中亏 N（N=买的号码总数）。命中率基线 = N/49（随机）。
+    """
+    db = get_db()
+    m1 = {r["draw_date"]: r for r in db.execute("SELECT * FROM multi_group_summary").fetchall()}
+    m2 = {r["draw_date"]: r for r in db.execute("SELECT * FROM multi_group_summary2").fetchall()}
+    opens = {}
+    for r in db.execute("SELECT record_date, source_number, tail_number FROM number_knowledge_record WHERE status=1").fetchall():
+        tn = r["tail_number"]
+        if tn is not None and str(tn).strip() != "":
+            opens[r["record_date"]] = {"num": int(r["source_number"]), "tail": int(tn)}
+    db.close()
+
+    dates = sorted(set(m1.keys()) & set(m2.keys()))
+
+    def tail_nums(t):
+        return [n for n in range(1, 50) if n % 10 == t]
+    tail_map = {t: tail_nums(t) for t in range(10)}
+
+    records = []
+    for d in dates:
+        r1, r2 = m1[d], m2[d]
+        votes = {t: 0 for t in range(10)}
+        source_tails = {}
+        for src in TAIL_SOURCES:
+            row = r1 if src["table"] == "multi_group_summary" else r2
+            tails = sorted(_parse_tails(row[src["col"]]))
+            source_tails[src["name"]] = tails
+            for t in tails:
+                votes[t] += 1
+        o = opens.get(d)
+        open_tail = o["tail"] if o else None
+        open_num = o["num"] if o else None
+        pending = o is None
+        # topN 尾数（按票数降序，票数相同按尾数升序稳定）
+        ranked = sorted(range(10), key=lambda t: (-votes[t], t))
+        rec = {
+            "date": d,
+            "period": (m1[d]["period"] if "period" in m1[d].keys() else "") or (m2[d]["period"] if "period" in m2[d].keys() else ""),
+            "open_num": open_num, "open_tail": open_tail, "pending": pending,
+            "source_tails": source_tails, "votes": votes,
+            "top1": ranked[0], "top1_votes": votes[ranked[0]],
+            "top2": ranked[1], "top2_votes": votes[ranked[1]],
+            "top3": ranked[2], "top3_votes": votes[ranked[2]],
+        }
+        records.append(rec)
+
+    # 汇总：top1/top2/top3 命中率 + 盈亏（每号1元）
+    def agg(top_n):
+        hits = 0
+        total = 0
+        profit = 0.0
+        total_bet = 0
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = [rec["top1"], rec["top2"], rec["top3"]][:top_n]
+            nums = set()
+            for t in picks:
+                nums.update(tail_map[t])
+            N = len(nums)
+            hit = rec["open_tail"] in picks
+            if hit:
+                hits += 1
+                profit += (47 - N)
+            else:
+                profit += -N
+            total += 1
+            total_bet += N
+        return {
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 2),
+            "total_bet": total_bet,
+            "roi": round(profit / total_bet * 100, 2) if total_bet else 0,
+            "rand_base": round(sum(len(tail_map[t]) for t in range(top_n)) / 49 * 100, 1),
+        }
+
+    # 数据分析：不同投票阈值（≥1/≥2/≥3票）的命中率与盈亏
+    threshold_analysis = []
+    for thr in [1, 2, 3, 4]:
+        hits = 0; total = 0; profit = 0.0
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = [t for t, v in rec["votes"].items() if v >= thr]
+            if not picks:
+                continue
+            nums = set()
+            for t in picks:
+                nums.update(tail_map[t])
+            N = len(nums)
+            hit = rec["open_tail"] in picks
+            if hit:
+                hits += 1; profit += (47 - N)
+            else:
+                profit += -N
+            total += 1
+        threshold_analysis.append({
+            "threshold": thr,
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 2),
+        })
+
+    # 数据分析：通用策略分析器（命中率 + 盈亏 + ROI + 最长连中/连亏 + 最大单期盈亏 + 最大回撤）
+    def analyze(pick_fn):
+        hits = 0; total = 0; profit = 0.0; total_bet = 0
+        cur = 0; max_hit = 0; max_miss = 0
+        max_p = float("-inf"); min_p = float("inf")
+        cum = 0.0; peak = 0.0; max_dd = 0.0
+        hit_streaks = []  # 记录每次连中的长度（用于算平均/最长）
+        miss_streaks = []
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = pick_fn(rec)
+            if not picks:
+                continue
+            nums = set()
+            for t in picks:
+                nums.update(tail_map[t])
+            N = len(nums)
+            hit = rec["open_tail"] in picks
+            p = (47 - N) if hit else -N
+            total += 1; total_bet += N
+            if hit:
+                hits += 1
+                cur = cur + 1 if cur > 0 else 1
+            else:
+                cur = cur - 1 if cur < 0 else -1
+            max_hit = max(max_hit, cur)
+            max_miss = min(max_miss, cur)
+            max_p = max(max_p, p)
+            min_p = min(min_p, p)
+            profit += p
+            cum += p
+            peak = max(peak, cum)
+            max_dd = max(max_dd, peak - cum)
+            # 记录连中/连亏段长度（cur 从正转负/负转正时结算）
+        return {
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 2),
+            "roi": round(profit / total_bet * 100, 2) if total_bet else 0,
+            "total_bet": total_bet,
+            "max_hit_streak": max_hit,
+            "max_miss_streak": -max_miss,
+            "cur_streak": cur,
+            "max_profit": round(max_p, 2) if max_p != float("-inf") else 0,
+            "max_loss": round(min_p, 2) if min_p != float("inf") else 0,
+            "max_drawdown": round(max_dd, 2),
+        }
+
+    # 按票数档位：=N票 与 ≥N票 两种口径的盈利
+    group_profit = []
+    for n in [1, 2, 3, 4, 5]:
+        exact = analyze(lambda rec, n=n: [t for t, v in rec["votes"].items() if v == n])
+        ge = analyze(lambda rec, n=n: [t for t, v in rec["votes"].items() if v >= n])
+        group_profit.append({"vote_count": n, "exact": exact, "ge": ge})
+
+    # 各策略最长记录（top1/2/3 + 各投票阈值）
+    streaks = {
+        "top1": analyze(lambda r: [r["top1"]]),
+        "top2": analyze(lambda r: [r["top1"], r["top2"]]),
+        "top3": analyze(lambda r: [r["top1"], r["top2"], r["top3"]]),
+        "ge2": analyze(lambda r: [t for t, v in r["votes"].items() if v >= 2]),
+        "ge3": analyze(lambda r: [t for t, v in r["votes"].items() if v >= 3]),
+        "ge4": analyze(lambda r: [t for t, v in r["votes"].items() if v >= 4]),
+    }
+
+    # 按月/按周时间序列（每个票数档位 =N票 与 ≥N票，供趋势监测判断是否继续跟踪）
+    def timeline(pick_fn):
+        monthly = {}
+        weekly = {}
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = pick_fn(rec)
+            if not picks:
+                continue
+            nums = set()
+            for t in picks:
+                nums.update(tail_map[t])
+            N = len(nums)
+            hit = rec["open_tail"] in picks
+            p = (47 - N) if hit else -N
+            m = rec["date"][:7]
+            dt = datetime.strptime(rec["date"], "%Y-%m-%d")
+            wk = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            for bucket, key in [(monthly, m), (weekly, wk)]:
+                b = bucket.setdefault(key, {"hits": 0, "total": 0, "profit": 0.0, "bet": 0})
+                b["total"] += 1
+                b["bet"] += N
+                b["profit"] += p
+                if hit:
+                    b["hits"] += 1
+        def finalize(bucket):
+            out = []
+            for key in sorted(bucket):
+                b = bucket[key]
+                out.append({
+                    "key": key,
+                    "hits": b["hits"], "total": b["total"],
+                    "hit_rate": round(b["hits"] / b["total"] * 100, 1) if b["total"] else 0,
+                    "profit": round(b["profit"], 2),
+                    "roi": round(b["profit"] / b["bet"] * 100, 2) if b["bet"] else 0,
+                })
+            return out
+        return {"monthly": finalize(monthly), "weekly": finalize(weekly)}
+
+    # 关注的核心档位：=1/=2/=3/=4票 与 ≥2/≥3/≥4票
+    timeline_keys = {
+        "eq1": (lambda r: [t for t, v in r["votes"].items() if v == 1], "=1票"),
+        "eq2": (lambda r: [t for t, v in r["votes"].items() if v == 2], "=2票"),
+        "eq3": (lambda r: [t for t, v in r["votes"].items() if v == 3], "=3票"),
+        "eq4": (lambda r: [t for t, v in r["votes"].items() if v == 4], "=4票"),
+        "ge2": (lambda r: [t for t, v in r["votes"].items() if v >= 2], "≥2票"),
+        "ge3": (lambda r: [t for t, v in r["votes"].items() if v >= 3], "≥3票"),
+        "ge4": (lambda r: [t for t, v in r["votes"].items() if v >= 4], "≥4票"),
+    }
+    timelines = {}
+    for key, (fn, label) in timeline_keys.items():
+        tl = timeline(fn)
+        tl["label"] = label
+        timelines[key] = tl
+
+    return {
+        "sources": [s["name"] for s in TAIL_SOURCES],
+        "start_date": dates[0] if dates else "",
+        "end_date": dates[-1] if dates else "",
+        "total_periods": len(records),
+        "records": records,
+        "summary": {"top1": agg(1), "top2": agg(2), "top3": agg(3)},
+        "threshold_analysis": threshold_analysis,
+        "group_profit": group_profit,
+        "streaks": streaks,
+        "timelines": timelines,
+    }
+
+
+@app.get("/api/tailSource/overview")
+def tail_source_overview(user=Header(None, alias="authorization")):
+    """尾数来源投票跟踪总览（5 来源投票 → 购买决策 → 命中/盈亏 + 数据分析）。"""
+    require_user(user)
+    return _compute_tail_source_vote()
+
+
+ZODIAC_ORDER = "鼠牛虎兔龙蛇马羊猴鸡狗猪"
+ZODIAC_SOURCES = [
+    {"name": "哪吒八肖", "table": "multi_group_summary2", "col": "nezha_zodiac8"},
+    {"name": "聚宝八肖", "table": "multi_group_summary2", "col": "jubao_zodiac8"},
+    {"name": "米老网红七肖", "table": "multi_group_summary2", "col": "milao_wanghong7"},
+    {"name": "米老七肖", "table": "multi_group_summary2", "col": "milao_zodiac7"},
+]
+
+
+def _compute_zodiac_source_vote():
+    """生肖来源投票跟踪：4 来源预测生肖 → 每期投票 → topN 购买决策 → 对比开奖生肖 → 命中/盈亏。
+    逻辑同尾数来源投票（生肖替换尾数，生肖→号码用 DEFAULT_ZODIAC 映射）。"""
+    db = get_db()
+    m1 = {r["draw_date"]: r for r in db.execute("SELECT * FROM multi_group_summary").fetchall()}
+    m2 = {r["draw_date"]: r for r in db.execute("SELECT * FROM multi_group_summary2").fetchall()}
+    opens = {}
+    for r in db.execute("SELECT record_date, source_number FROM number_knowledge_record WHERE status=1").fetchall():
+        sn = r["source_number"]
+        if sn is not None and str(sn).strip() != "":
+            n = int(sn)
+            z = _num_to_zodiac(n, DEFAULT_ZODIAC)
+            if z:
+                opens[r["record_date"]] = {"num": n, "zodiac": z}
+    db.close()
+
+    dates = sorted(set(m1.keys()) & set(m2.keys()))
+    zodiac_map = DEFAULT_ZODIAC
+
+    records = []
+    for d in dates:
+        r1, r2 = m1[d], m2[d]
+        votes = {z: 0 for z in ZODIAC_ORDER}
+        source_zodiacs = {}
+        for src in ZODIAC_SOURCES:
+            row = r1 if src["table"] == "multi_group_summary" else r2
+            zs = sorted(_parse_zodiacs(row[src["col"]]), key=lambda z: ZODIAC_ORDER.index(z))
+            source_zodiacs[src["name"]] = zs
+            for z in zs:
+                votes[z] += 1
+        o = opens.get(d)
+        open_zodiac = o["zodiac"] if o else None
+        open_num = o["num"] if o else None
+        pending = o is None
+        ranked = sorted(ZODIAC_ORDER, key=lambda z: (-votes[z], ZODIAC_ORDER.index(z)))
+        rec = {
+            "date": d,
+            "period": (m1[d]["period"] if "period" in m1[d].keys() else "") or (m2[d]["period"] if "period" in m2[d].keys() else ""),
+            "open_num": open_num, "open_zodiac": open_zodiac, "pending": pending,
+            "source_zodiacs": source_zodiacs, "votes": votes,
+            "top1": ranked[0], "top1_votes": votes[ranked[0]],
+            "top2": ranked[1], "top2_votes": votes[ranked[1]],
+            "top3": ranked[2], "top3_votes": votes[ranked[2]],
+        }
+        records.append(rec)
+
+    def agg(top_n):
+        hits = 0; total = 0; profit = 0.0; total_bet = 0
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = [rec["top1"], rec["top2"], rec["top3"]][:top_n]
+            nums = set()
+            for z in picks:
+                nums.update(zodiac_map.get(z, []))
+            N = len(nums)
+            hit = rec["open_zodiac"] in picks
+            if hit:
+                hits += 1; profit += (47 - N)
+            else:
+                profit += -N
+            total += 1; total_bet += N
+        return {
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 2),
+            "total_bet": total_bet,
+            "roi": round(profit / total_bet * 100, 2) if total_bet else 0,
+            "rand_base": round(sum(len(zodiac_map.get(z, [])) for z in [rec["top1"], rec["top2"], rec["top3"]][:top_n]) / 49 * 100, 1),
+        }
+
+    threshold_analysis = []
+    for thr in [1, 2, 3, 4]:
+        hits = 0; total = 0; profit = 0.0
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = [z for z, v in rec["votes"].items() if v >= thr]
+            if not picks:
+                continue
+            nums = set()
+            for z in picks:
+                nums.update(zodiac_map.get(z, []))
+            N = len(nums)
+            hit = rec["open_zodiac"] in picks
+            if hit:
+                hits += 1; profit += (47 - N)
+            else:
+                profit += -N
+            total += 1
+        threshold_analysis.append({"threshold": thr, "hits": hits, "total": total,
+                                   "hit_rate": round(hits / total * 100, 1) if total else 0,
+                                   "profit": round(profit, 2)})
+
+    def analyze(pick_fn):
+        hits = 0; total = 0; profit = 0.0; total_bet = 0
+        cur = 0; max_hit = 0; max_miss = 0
+        max_p = float("-inf"); min_p = float("inf")
+        cum = 0.0; peak = 0.0; max_dd = 0.0
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = pick_fn(rec)
+            if not picks:
+                continue
+            nums = set()
+            for z in picks:
+                nums.update(zodiac_map.get(z, []))
+            N = len(nums)
+            hit = rec["open_zodiac"] in picks
+            p = (47 - N) if hit else -N
+            total += 1; total_bet += N
+            if hit:
+                hits += 1; cur = cur + 1 if cur > 0 else 1
+            else:
+                cur = cur - 1 if cur < 0 else -1
+            max_hit = max(max_hit, cur)
+            max_miss = min(max_miss, cur)
+            max_p = max(max_p, p)
+            min_p = min(min_p, p)
+            profit += p; cum += p
+            peak = max(peak, cum); max_dd = max(max_dd, peak - cum)
+        return {
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 2),
+            "roi": round(profit / total_bet * 100, 2) if total_bet else 0,
+            "total_bet": total_bet,
+            "max_hit_streak": max_hit, "max_miss_streak": -max_miss, "cur_streak": cur,
+            "max_profit": round(max_p, 2) if max_p != float("-inf") else 0,
+            "max_loss": round(min_p, 2) if min_p != float("inf") else 0,
+            "max_drawdown": round(max_dd, 2),
+        }
+
+    group_profit = []
+    for n in [1, 2, 3, 4]:
+        exact = analyze(lambda rec, n=n: [z for z, v in rec["votes"].items() if v == n])
+        ge = analyze(lambda rec, n=n: [z for z, v in rec["votes"].items() if v >= n])
+        group_profit.append({"vote_count": n, "exact": exact, "ge": ge})
+
+    streaks = {
+        "top1": analyze(lambda r: [r["top1"]]),
+        "top2": analyze(lambda r: [r["top1"], r["top2"]]),
+        "top3": analyze(lambda r: [r["top1"], r["top2"], r["top3"]]),
+        "ge2": analyze(lambda r: [z for z, v in r["votes"].items() if v >= 2]),
+        "ge3": analyze(lambda r: [z for z, v in r["votes"].items() if v >= 3]),
+        "ge4": analyze(lambda r: [z for z, v in r["votes"].items() if v >= 4]),
+    }
+
+    def timeline(pick_fn):
+        monthly = {}; weekly = {}
+        for rec in records:
+            if rec.get("pending"):
+                continue
+            picks = pick_fn(rec)
+            if not picks:
+                continue
+            nums = set()
+            for z in picks:
+                nums.update(zodiac_map.get(z, []))
+            N = len(nums)
+            hit = rec["open_zodiac"] in picks
+            p = (47 - N) if hit else -N
+            m = rec["date"][:7]
+            dt = datetime.strptime(rec["date"], "%Y-%m-%d")
+            wk = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            for bucket, key in [(monthly, m), (weekly, wk)]:
+                b = bucket.setdefault(key, {"hits": 0, "total": 0, "profit": 0.0, "bet": 0})
+                b["total"] += 1; b["bet"] += N; b["profit"] += p
+                if hit:
+                    b["hits"] += 1
+        def finalize(bucket):
+            out = []
+            for key in sorted(bucket):
+                b = bucket[key]
+                out.append({"key": key, "hits": b["hits"], "total": b["total"],
+                            "hit_rate": round(b["hits"] / b["total"] * 100, 1) if b["total"] else 0,
+                            "profit": round(b["profit"], 2),
+                            "roi": round(b["profit"] / b["bet"] * 100, 2) if b["bet"] else 0})
+            return out
+        return {"monthly": finalize(monthly), "weekly": finalize(weekly)}
+
+    timeline_keys = {
+        "eq1": (lambda r: [z for z, v in r["votes"].items() if v == 1], "=1票"),
+        "eq2": (lambda r: [z for z, v in r["votes"].items() if v == 2], "=2票"),
+        "eq3": (lambda r: [z for z, v in r["votes"].items() if v == 3], "=3票"),
+        "eq4": (lambda r: [z for z, v in r["votes"].items() if v == 4], "=4票"),
+        "ge2": (lambda r: [z for z, v in r["votes"].items() if v >= 2], "≥2票"),
+        "ge3": (lambda r: [z for z, v in r["votes"].items() if v >= 3], "≥3票"),
+        "ge4": (lambda r: [z for z, v in r["votes"].items() if v >= 4], "≥4票"),
+    }
+    timelines = {}
+    for key, (fn, label) in timeline_keys.items():
+        tl = timeline(fn)
+        tl["label"] = label
+        timelines[key] = tl
+
+    return {
+        "sources": [s["name"] for s in ZODIAC_SOURCES],
+        "start_date": dates[0] if dates else "",
+        "end_date": dates[-1] if dates else "",
+        "total_periods": len(records),
+        "records": records,
+        "summary": {"top1": agg(1), "top2": agg(2), "top3": agg(3)},
+        "threshold_analysis": threshold_analysis,
+        "group_profit": group_profit,
+        "streaks": streaks,
+        "timelines": timelines,
+    }
+
+
+@app.get("/api/zodiacSource/overview")
+def zodiac_source_overview(user=Header(None, alias="authorization")):
+    """生肖来源投票跟踪总览（4 来源投票 → 购买决策 → 命中/盈亏 + 数据分析）。"""
+    require_user(user)
+    return _compute_zodiac_source_vote()
+
+
+# ── 四组汇（好运八一~八四 4 来源 → 号码投票 → 全方案扫描 → 按盈利降序）──
+SIZU_SOURCES = [
+    {"name": "好运八一", "table": "multi_group_summary", "col": "haoyun_81"},
+    {"name": "好运八二", "table": "multi_group_summary", "col": "haoyun_82"},
+    {"name": "好运八三", "table": "multi_group_summary", "col": "haoyun_83"},
+    {"name": "好运八四", "table": "multi_group_summary", "col": "haoyun_84"},
+]
+
+
+def _compute_sizu_vote():
+    """四组汇：4 来源（好运八一~八四，各8码）→ 号码(1-49)投票 → 全方案扫描 → 按盈亏降序。
+    盈亏口径：每号 1 元标准化，命中赚 47−N、未中亏 N（N=买号数）。纯只读回测演算。"""
+    db = get_db()
+    m1 = {r["draw_date"]: r for r in db.execute("SELECT * FROM multi_group_summary").fetchall()}
+    opens = {}
+    for r in db.execute("SELECT record_date, source_number FROM number_knowledge_record WHERE status=1").fetchall():
+        sn = r["source_number"]
+        if sn is not None and str(sn).strip() != "":
+            opens[r["record_date"]] = int(sn)
+    db.close()
+
+    dates = sorted(m1.keys())
+
+    records = []
+    for d in dates:
+        row = m1[d]
+        votes = {n: 0 for n in range(1, 50)}
+        source_nums = {}
+        for src in SIZU_SOURCES:
+            nums = sorted([n for n in _parse_codes(row[src["col"]]) if 1 <= n <= 49])
+            source_nums[src["name"]] = nums
+            for n in nums:
+                votes[n] += 1
+        open_num = opens.get(d)
+        ranked = sorted(range(1, 50), key=lambda n: (-votes[n], n))
+        records.append({
+            "date": d,
+            "period": (row["period"] if "period" in row.keys() else "") or "",
+            "open_num": open_num,
+            "pending": open_num is None,
+            "source_nums": source_nums,
+            "votes": votes,
+            "top1": ranked[0], "top1_votes": votes[ranked[0]],
+            "top2": ranked[1], "top2_votes": votes[ranked[1]],
+            "top3": ranked[2], "top3_votes": votes[ranked[2]],
+        })
+
+    def top_pick(n):
+        def f(v):
+            ranked = sorted(range(1, 50), key=lambda x: (-v[x], x))
+            return ranked[:n]
+        return f
+
+    def eq_pick(n):
+        return lambda v: [x for x in range(1, 50) if v[x] == n]
+
+    def ge_pick(n):
+        return lambda v: [x for x in range(1, 50) if v[x] >= n]
+
+    PLANS = [
+        ("top1", "Top1号", top_pick(1)),
+        ("top2", "Top2号", top_pick(2)),
+        ("top3", "Top3号", top_pick(3)),
+        ("top5", "Top5号", top_pick(5)),
+        ("top8", "Top8号", top_pick(8)),
+        ("eq4", "=4票", eq_pick(4)),
+        ("eq3", "=3票", eq_pick(3)),
+        ("eq2", "=2票", eq_pick(2)),
+        ("eq1", "=1票", eq_pick(1)),
+        ("ge4", "≥4票", ge_pick(4)),
+        ("ge3", "≥3票", ge_pick(3)),
+        ("ge2", "≥2票", ge_pick(2)),
+    ]
+
+    def analyze(pick_fn):
+        hits = 0; total = 0; profit = 0.0; total_bet = 0
+        cur = 0; max_hit = 0; max_miss = 0
+        max_p = float("-inf"); min_p = float("inf")
+        cum = 0.0; peak = 0.0; max_dd = 0.0
+        detail = []
+        for rec in records:
+            if rec["open_num"] is None:
+                continue
+            picks = pick_fn(rec["votes"])
+            if not picks:
+                continue
+            N = len(picks)
+            hit = rec["open_num"] in picks
+            p = (47 - N) if hit else -N
+            total += 1; total_bet += N; profit += p
+            if hit:
+                hits += 1
+                cur = cur + 1 if cur > 0 else 1
+            else:
+                cur = cur - 1 if cur < 0 else -1
+            max_hit = max(max_hit, cur); max_miss = min(max_miss, cur)
+            max_p = max(max_p, p); min_p = min(min_p, p)
+            cum += p; peak = max(peak, cum); max_dd = max(max_dd, peak - cum)
+            detail.append({
+                "date": rec["date"], "period": rec["period"],
+                "picks": picks, "N": N,
+                "open_num": rec["open_num"], "hit": bool(hit),
+                "profit": round(p, 2), "cum": round(cum, 2),
+            })
+        return {
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 2),
+            "roi": round(profit / total_bet * 100, 2) if total_bet else 0,
+            "total_bet": total_bet,
+            "avg_nums": round(total_bet / total, 1) if total else 0,
+            "max_hit_streak": max_hit,
+            "max_miss_streak": -max_miss,
+            "cur_streak": cur,
+            "max_profit": round(max_p, 2) if max_p != float("-inf") else 0,
+            "max_loss": round(min_p, 2) if min_p != float("inf") else 0,
+            "max_drawdown": round(max_dd, 2),
+            "detail": detail,
+        }
+
+    def timeline(pick_fn):
+        monthly = {}; weekly = {}
+        for rec in records:
+            if rec["open_num"] is None:
+                continue
+            picks = pick_fn(rec["votes"])
+            if not picks:
+                continue
+            N = len(picks)
+            hit = rec["open_num"] in picks
+            p = (47 - N) if hit else -N
+            m = rec["date"][:7]
+            dt = datetime.strptime(rec["date"], "%Y-%m-%d")
+            wk = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            for bucket, key in [(monthly, m), (weekly, wk)]:
+                b = bucket.setdefault(key, {"hits": 0, "total": 0, "profit": 0.0, "bet": 0})
+                b["total"] += 1; b["bet"] += N; b["profit"] += p
+                if hit:
+                    b["hits"] += 1
+        def finalize(bucket):
+            out = []
+            for key in sorted(bucket):
+                b = bucket[key]
+                out.append({
+                    "key": key, "hits": b["hits"], "total": b["total"],
+                    "hit_rate": round(b["hits"] / b["total"] * 100, 1) if b["total"] else 0,
+                    "profit": round(b["profit"], 2),
+                    "roi": round(b["profit"] / b["bet"] * 100, 2) if b["bet"] else 0,
+                })
+            return out
+        return {"monthly": finalize(monthly), "weekly": finalize(weekly)}
+
+    plans = []
+    for key, name, fn in PLANS:
+        a = analyze(fn)
+        tl = timeline(fn)
+        plans.append({"key": key, "name": name, **a, "monthly": tl["monthly"], "weekly": tl["weekly"]})
+
+    plans.sort(key=lambda p: -p["profit"])
+
+    return {
+        "sources": [s["name"] for s in SIZU_SOURCES],
+        "start_date": dates[0] if dates else "",
+        "end_date": dates[-1] if dates else "",
+        "total_periods": sum(1 for r in records if r["open_num"] is not None),
+        "records": records,
+        "plans": plans,
+    }
+
+
+@app.get("/api/sizuVote")
+def sizu_vote(user=Header(None, alias="authorization")):
+    """四组汇：4 来源号码投票 → 方案扫描 → 按盈利排序。"""
+    require_user(user)
+    return _compute_sizu_vote()
+
+
+# ── 四组汇 ROI 前5 方案 真实下单台账（每方案独立本金 3000，每号5元47倍）──
+SIZU_ORDER_PER = 5.0          # 每号下注金额（元）
+SIZU_ORDER_CAPITAL = 3000.0   # 每方案独立初始本金
+SIZU_STOP_STREAK = 20         # 止损连亏阈值：连亏≥此期数 → 停手（不再下单/不进指南），虚拟跟踪命中后再释放
+
+
+def _sizu_top_n_pick(n):
+    def f(v):
+        ranked = sorted(range(1, 50), key=lambda x: (-v[x], x))
+        return ranked[:n]
+    return f
+
+
+# ROI 前5 + 盈利(profit)前3 并集去重 = 7 方案：
+# ROI前5：=3票 > ≥3票 > Top1号 > Top2号 > Top3号
+# profit前3：Top5号 / ≥2票（Top3号 已在 ROI前5 去重）
+SIZU_ORDER_PLANS = [
+    ("eq3", "=3票", lambda v: [x for x in range(1, 50) if v[x] == 3]),
+    ("ge3", "≥3票", lambda v: [x for x in range(1, 50) if v[x] >= 3]),
+    ("top1", "Top1号", _sizu_top_n_pick(1)),
+    ("top2", "Top2号", _sizu_top_n_pick(2)),
+    ("top3", "Top3号", _sizu_top_n_pick(3)),
+    ("top5", "Top5号", _sizu_top_n_pick(5)),
+    ("ge2", "≥2票", lambda v: [x for x in range(1, 50) if v[x] >= 2]),
+]
+
+
+def _sizu_votes_at_db(db, period_date):
+    """内联版：读指定日期 4 好运字段投票（复用已有连接，不重开）。返回 votes dict 或 None。"""
+    row = db.execute("SELECT * FROM multi_group_summary WHERE draw_date=?", (period_date,)).fetchone()
+    if not row:
+        return None
+    votes = {n: 0 for n in range(1, 50)}
+    for src in SIZU_SOURCES:
+        for n in _parse_codes(row[src["col"]]):
+            if 1 <= n <= 49:
+                votes[n] += 1
+    return votes
+
+
+def _sizu_votes_at(period_date):
+    """读 multi_group_summary 指定日期的 4 好运字段，投票算 1-49 号码得票。返回 votes dict 或 None。"""
+    db = get_db()
+    votes = _sizu_votes_at_db(db, period_date)
+    db.close()
+    return votes
+
+
+def _ensure_sizu_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS sizu_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT, period TEXT,
+      plan_key TEXT, plan_name TEXT,
+      picks TEXT, num_count INTEGER,
+      per REAL DEFAULT 5, invest REAL,
+      open_num INTEGER, hit INTEGER, profit REAL, capital REAL,
+      create_time TEXT,
+      UNIQUE(bet_date, plan_key)
+    )""")
+
+
+def _ensure_sizu_state_table(db):
+    """每方案止损状态表：active(正常下单) / stopped(止损停手，虚拟跟踪中)。"""
+    db.execute("""CREATE TABLE IF NOT EXISTS sizu_plan_state (
+      plan_key TEXT PRIMARY KEY,
+      plan_name TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      stop_date TEXT DEFAULT '',      -- 触发止损的日期（最后一期结算日）
+      stop_streak INTEGER DEFAULT 0,  -- 触发时连亏期数
+      resume_date TEXT DEFAULT '',    -- 释放恢复日期
+      watch_hit_date TEXT DEFAULT '', -- 停手观察期间命中的日期
+      create_time TEXT, update_time TEXT
+    )""")
+
+
+def _update_sizu_stop_state(db):
+    """止损状态机（结算后调用）：
+    active 且连亏 ≥ SIZU_STOP_STREAK → stopped（真正止损停手）；
+    stopped 则虚拟跟踪 stop_date 之后每期选号，命中一次 → 释放回 active（下一轮恢复下单）。
+    无前视偏差：虚拟跟踪用已开奖历史判断是否该恢复。"""
+    _ensure_sizu_state_table(db)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for key, name, fn in SIZU_ORDER_PLANS:
+        db.execute("INSERT OR IGNORE INTO sizu_plan_state (plan_key, plan_name, status, create_time) VALUES (?,?,?,?)",
+                   (key, name, "active", now))
+    # 开奖映射
+    opens = {}
+    for r in db.execute("SELECT record_date, source_number FROM number_knowledge_record WHERE status=1 AND source_number IS NOT NULL AND source_number != ''").fetchall():
+        try:
+            opens[r["record_date"]] = int(r["source_number"])
+        except (TypeError, ValueError):
+            continue
+    # 投票日期（有数据的日期）
+    vote_dates = sorted({r["draw_date"] for r in db.execute("SELECT draw_date FROM multi_group_summary WHERE draw_date IS NOT NULL").fetchall()})
+    for key, name, fn in SIZU_ORDER_PLANS:
+        st = db.execute("SELECT * FROM sizu_plan_state WHERE plan_key=?", (key,)).fetchone()
+        status = st["status"] if st else "active"
+        stop_date = st["stop_date"] if st else ""
+        # 当前连亏（基于已结算真实下单，仅统计实际下注的期）
+        rows = db.execute("SELECT bet_date, hit, num_count FROM sizu_order WHERE plan_key=? AND hit IS NOT NULL ORDER BY bet_date", (key,)).fetchall()
+        cur_miss = 0
+        last_date = ""
+        for r in rows:
+            if r["num_count"] and r["num_count"] > 0:
+                last_date = r["bet_date"]
+                if r["hit"] == 1:
+                    cur_miss = 0
+                else:
+                    cur_miss += 1
+        if status == "active":
+            if cur_miss >= SIZU_STOP_STREAK:
+                db.execute("UPDATE sizu_plan_state SET status='stopped', stop_date=?, stop_streak=?, resume_date='', watch_hit_date='', update_time=? WHERE plan_key=?",
+                           (last_date, cur_miss, now, key))
+        else:  # stopped：虚拟跟踪，命中则释放
+            hit_date = ""
+            for d in vote_dates:
+                if stop_date and d <= stop_date:
+                    continue
+                votes = _sizu_votes_at_db(db, d)
+                if votes is None:
+                    continue
+                picks = fn(votes)
+                o = opens.get(d)
+                if o is not None and o in picks:
+                    hit_date = d
+                    break
+            if hit_date:
+                db.execute("UPDATE sizu_plan_state SET status='active', resume_date=?, watch_hit_date=?, stop_streak=0, update_time=? WHERE plan_key=?",
+                           (hit_date, hit_date, now, key))
+
+
+def _generate_sizu_order():
+    """固化最新期 ROI 前5 方案的真实下单（每方案独立本金）。止损停手中的方案跳过。"""
+    db = get_db()
+    _ensure_sizu_order_table(db)
+    _ensure_sizu_state_table(db)
+    stopped = {r["plan_key"] for r in db.execute("SELECT plan_key FROM sizu_plan_state WHERE status='stopped'").fetchall()}
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": "", "stopped": sorted(stopped)}
+    d, period = row["draw_date"], row["period"]
+    votes = _sizu_votes_at_db(db, d)
+    if votes is None:
+        db.close()
+        return {"generated": 0, "date": d, "stopped": sorted(stopped)}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    n_gen = 0
+    n_skip = 0
+    for key, name, fn in SIZU_ORDER_PLANS:
+        if key in stopped:
+            n_skip += 1
+            continue
+        picks = fn(votes)
+        N = len(picks)
+        picks_str = ".".join(f"{x:02d}" for x in picks)
+        invest = round(SIZU_ORDER_PER * N, 2)
+        cur = db.execute("SELECT id FROM sizu_order WHERE bet_date=? AND plan_key=?", (d, key)).fetchone()
+        if cur is None:
+            db.execute("INSERT INTO sizu_order (bet_date, period, plan_key, plan_name, picks, num_count, per, invest, open_num, hit, profit, capital, create_time) VALUES (?,?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,?)",
+                       (d, period, key, name, picks_str, N, SIZU_ORDER_PER, invest, now))
+            n_gen += 1
+    db.commit()
+    db.close()
+    return {"generated": n_gen, "date": d, "skipped_stopped": n_skip, "stopped": sorted(stopped)}
+
+
+def _settle_sizu_order():
+    """结算 pending 下单（开奖已出），每方案独立重算累计本金。"""
+    db = get_db()
+    _ensure_sizu_order_table(db)
+    pending = db.execute("SELECT id, bet_date, plan_key, num_count, per FROM sizu_order WHERE open_num IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        prow = db.execute("SELECT picks FROM sizu_order WHERE id=?", (p["id"],)).fetchone()
+        picks = [int(x) for x in prow["picks"].split(".")] if prow["picks"] else []
+        hit = 1 if open_num in picks else 0
+        N = p["num_count"]
+        per = p["per"]
+        profit = round(((47 - N) * per) if hit else (-N * per), 2)
+        db.execute("UPDATE sizu_order SET open_num=?, hit=?, profit=? WHERE id=?", (open_num, hit, profit, p["id"]))
+        settled += 1
+    # 每方案独立重算累计本金
+    for pl in db.execute("SELECT DISTINCT plan_key FROM sizu_order").fetchall():
+        pk = pl["plan_key"]
+        capital = SIZU_ORDER_CAPITAL
+        rows = db.execute("SELECT id, profit FROM sizu_order WHERE plan_key=? AND profit IS NOT NULL ORDER BY bet_date", (pk,)).fetchall()
+        for r in rows:
+            capital += (r["profit"] or 0)
+            db.execute("UPDATE sizu_order SET capital=? WHERE id=?", (round(capital, 2), r["id"]))
+    # 止损状态机：结算后更新（触发止损停手 / 虚拟跟踪命中释放）
+    _update_sizu_stop_state(db)
+    db.commit()
+    db.close()
+    return settled
+
+
+def _sizu_order_overview():
+    """四组汇 ROI 前5 台账：每方案独立本金统计 + 逐笔 + 最新期下单指南（止损停手中方案不进指南）。"""
+    db = get_db()
+    _ensure_sizu_order_table(db)
+    _ensure_sizu_state_table(db)
+    state = {r["plan_key"]: dict(r) for r in db.execute("SELECT * FROM sizu_plan_state").fetchall()}
+    plans = []
+    for key, name, fn in SIZU_ORDER_PLANS:
+        rows = db.execute("SELECT * FROM sizu_order WHERE plan_key=? ORDER BY bet_date", (key,)).fetchall()
+        betting = [r for r in rows if r["num_count"] and r["num_count"] > 0]  # 实际下注的期（排除空仓 N=0）
+        settled = [r for r in betting if r["hit"] is not None]
+        hits = sum(1 for r in settled if r["hit"] == 1)
+        total_profit = sum(r["profit"] or 0 for r in rows if r["profit"] is not None)
+        capital = SIZU_ORDER_CAPITAL + total_profit
+        st = state.get(key, {})
+        plans.append({
+            "key": key, "name": name,
+            "capital": round(capital, 2),
+            "init_capital": SIZU_ORDER_CAPITAL,
+            "total_profit": round(total_profit, 2),
+            "total_orders": len(rows),
+            "settled": len(settled),
+            "hits": hits,
+            "hit_rate": round(hits / len(settled) * 100, 1) if settled else 0,
+            "status": st.get("status", "active"),
+            "stop_date": st.get("stop_date", ""),
+            "stop_streak": st.get("stop_streak", 0),
+            "resume_date": st.get("resume_date", ""),
+            "records": [dict(r) for r in reversed(rows)],
+        })
+    guide = None
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if row:
+        votes = _sizu_votes_at_db(db, row["draw_date"])
+        if votes is not None:
+            guide_plans = []
+            guide_stopped = []
+            for key, name, fn in SIZU_ORDER_PLANS:
+                st = state.get(key, {})
+                picks = fn(votes)
+                item = {
+                    "key": key, "name": name,
+                    "picks": picks,
+                    "picks_str": ".".join(f"{x:02d}" for x in picks),
+                    "N": len(picks),
+                    "invest": round(SIZU_ORDER_PER * len(picks), 2),
+                }
+                if st.get("status") == "stopped":
+                    # 止损停手：不进下单指南，仅列示止损信息
+                    guide_stopped.append({"key": key, "name": name,
+                                          "stop_date": st.get("stop_date", ""),
+                                          "stop_streak": st.get("stop_streak", 0)})
+                    continue
+                guide_plans.append(item)
+            guide = {"date": row["draw_date"], "period": row["period"],
+                     "plans": guide_plans, "stopped": guide_stopped}
+    db.close()
+    return {"per": SIZU_ORDER_PER, "init_capital": SIZU_ORDER_CAPITAL, "plans": plans, "guide": guide}
+
+
+@app.get("/api/sizuOrder")
+def sizu_order(user=Header(None, alias="authorization")):
+    """四组汇 7 方案真实下单台账。"""
+    require_user(user)
+    _generate_sizu_order()  # 固化最新采集期下单（若无），确保刷新即更新到最新期
+    _settle_sizu_order()    # 结算 pending（开奖数据可能晚于 cron 入库）
+    return _sizu_order_overview()
+
+
+# ── 四组汇 7 方案 分析演算预测 + 止损（AI 分析）──
+def _sizu_order_ai_data():
+    """收集 7 方案台账数据供 AI 分析：每方案命中率/盈亏/连中连亏/当前连亏/月度/最近走势 + 止损信号。"""
+    from datetime import datetime as _dt, timedelta
+    db = get_db()
+    _ensure_sizu_order_table(db)
+    _ensure_sizu_state_table(db)
+    state = {r["plan_key"]: dict(r) for r in db.execute("SELECT * FROM sizu_plan_state").fetchall()}
+    plans = []
+    for key, name, fn in SIZU_ORDER_PLANS:
+        rows = db.execute("SELECT * FROM sizu_order WHERE plan_key=? ORDER BY bet_date", (key,)).fetchall()
+        settled = [r for r in rows if r["hit"] is not None and r["num_count"] and r["num_count"] > 0]
+        n = len(settled)
+        hits = sum(1 for r in settled if r["hit"] == 1)
+        profit = sum(r["profit"] or 0 for r in settled)
+        # 连中/连亏（cur 正=连中，负=连亏）
+        cur = 0; max_hit = 0; max_miss = 0
+        cum = 0.0; peak = 0.0; max_dd = 0.0
+        for r in settled:
+            if r["hit"] == 1:
+                cur = cur + 1 if cur > 0 else 1
+            else:
+                cur = cur - 1 if cur < 0 else -1
+            max_hit = max(max_hit, cur); max_miss = min(max_miss, cur)
+            cum += (r["profit"] or 0); peak = max(peak, cum); max_dd = max(max_dd, peak - cum)
+        cur_miss = -cur if cur < 0 else 0  # 当前连亏期数
+        # 月度
+        monthly = {}
+        for r in settled:
+            m = r["bet_date"][:7]
+            b = monthly.setdefault(m, {"periods": 0, "hits": 0, "profit": 0.0})
+            b["periods"] += 1
+            b["hits"] += 1 if r["hit"] == 1 else 0
+            b["profit"] += (r["profit"] or 0)
+        # 最近 20 期
+        recent = [{
+            "date": r["bet_date"], "period": r["period"], "picks": r["picks"],
+            "open": r["open_num"], "hit": r["hit"], "profit": r["profit"],
+        } for r in rows[-20:] if r["hit"] is not None]
+        # 止损信号（真实状态机：stopped=已止损停手；active 仅提示观察）
+        hist_max_miss = -max_miss
+        st = state.get(key, {})
+        stop = None
+        if st.get("status") == "stopped":
+            stop = {"level": "danger",
+                    "text": f"已止损停手（连亏 {st.get('stop_streak', 0)} 期，{st.get('stop_date', '')} 起），虚拟跟踪中，命中后再释放"}
+        elif n and cur_miss >= 8:
+            if hist_max_miss > 0 and cur_miss >= hist_max_miss * 0.8:
+                stop = {"level": "warn", "text": f"当前连亏 {cur_miss} 期，逼近历史最长 {hist_max_miss} 期，观察是否止损"}
+            elif cur_miss >= 10:
+                stop = {"level": "warn", "text": f"当前连亏 {cur_miss} 期，偏长需观察"}
+        plans.append({
+            "key": key, "name": name,
+            "hits": hits, "total": n,
+            "hit_rate": round(hits / n * 100, 1) if n else 0,
+            "profit": round(profit, 2),
+            "capital": round(SIZU_ORDER_CAPITAL + profit, 2),
+            "cur_streak": cur, "cur_miss": cur_miss,
+            "max_hit_streak": max_hit, "max_miss_streak": hist_max_miss,
+            "max_drawdown": round(max_dd, 2),
+            "status": st.get("status", "active"),
+            "stop_date": st.get("stop_date", ""),
+            "stop_streak": st.get("stop_streak", 0),
+            "resume_date": st.get("resume_date", ""),
+            "monthly": {k: {"periods": v["periods"], "hits": v["hits"],
+                            "profit": round(v["profit"], 2)} for k, v in monthly.items()},
+            "recent": recent,
+            "stop": stop,
+        })
+    db.close()
+    return {"plans": plans, "per": SIZU_ORDER_PER, "init_capital": SIZU_ORDER_CAPITAL, "stop_threshold": SIZU_STOP_STREAK}
+
+
+def _sizu_order_ai_analysis():
+    """调用 DeepSeek 分析 7 方案台账：各方案盈利/趋势 + 哪些方案需超期止损。"""
+    import json as _json
+    import urllib.request
+    key = _load_deepseek_key()
+    if not key:
+        return {"ok": False, "error": "未配置 DeepSeek API Key"}
+    data = _sizu_order_ai_data()
+    if not data["plans"]:
+        return {"ok": False, "error": "无台账数据"}
+
+    L = []
+    L.append("你是六合彩数据分析助手。以下是「四组汇 7 方案真实下单台账」的历史数据。")
+    L.append("规则：4来源（好运八一~八四，各8码）投票得 1-49 号码票数，7个方案按票数/阈值买号；每号5元、赔率47倍；命中赚(47-N)×5、未中亏N×5；每方案独立本金3000。")
+    L.append("")
+    for p in data["plans"]:
+        L.append(f"【{p['name']}】命中 {p['hits']}/{p['total']}（{p['hit_rate']}%），盈亏 {p['profit']:+.2f}，本金 {p['capital']}；当前连{'中' if p['cur_streak']>0 else '亏'} {abs(p['cur_streak'])} 期，历史最长连亏 {p['max_miss_streak']} 期，最大回撤 {p['max_drawdown']}。")
+    L.append("")
+    L.append("【按月盈亏】")
+    for p in data["plans"]:
+        L.append(f"{p['name']}: " + "；".join(f"{m} {v['profit']:+.0f}" for m, v in sorted(p["monthly"].items())))
+    L.append("")
+    L.append("【最近走势（各方案近10期）】")
+    for p in data["plans"]:
+        L.append(f"{p['name']}: " + "，".join(f"{rc['period']}{'✓' if rc['hit'] else '✗'}" for rc in p["recent"][-10:]))
+    L.append("")
+    L.append("【各方案当前止损状态（真实执行，非建议）】")
+    for p in data["plans"]:
+        if p["status"] == "stopped":
+            L.append(f"{p['name']}: 已止损停手（连亏 {p['stop_streak']} 期，{p['stop_date']} 起），虚拟跟踪中，命中后再释放恢复下单。")
+        else:
+            L.append(f"{p['name']}: 正常下单中（当前连亏 {p['cur_miss']} 期）。")
+    L.append("")
+    L.append("请分点回答（简洁中文，350字内）：")
+    L.append("1. 7 个方案整体盈利/亏损的客观结论，哪些方案相对最稳、哪些最差（注意：这7个方案高度重叠，是同一信号的不同买法，别当独立策略）。")
+    L.append("2. 按月趋势有无拐点（哪些方案最近明显变差）。")
+    L.append("3. 止损规则：连亏≥20期自动停手（不进下单指南），虚拟跟踪命中一次后释放恢复。请点评当前哪些方案已被停手、是否合理，哪些接近止损线需警惕；明确这是历史回测概率、非投注建议。")
+    prompt = "\n".join(L)
+
+    body = _json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "stream": False,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    resp = _json.loads(urllib.request.urlopen(req, timeout=90).read())
+    content = resp["choices"][0]["message"]["content"]
+    return {"ok": True, "analysis": content}
+
+
+@app.get("/api/sizuOrder/aiAnalysis")
+def sizu_order_ai(user=Header(None, alias="authorization")):
+    """四组汇 7 方案台账 AI 分析 + 止损（按钮触发）。"""
+    require_user(user)
+    try:
+        return _sizu_order_ai_analysis()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/sizuOrder/stats")
+def sizu_order_stats(user=Header(None, alias="authorization")):
+    """四组汇 7 方案结构化分析数据 + 止损信号（不含 AI，即时返回）。"""
+    require_user(user)
+    return _sizu_order_ai_data()
+
+
+# ── Top1 肖 样本外前向跟踪（铁律：固化用开奖前采集的预测，结算用当期开奖，攒样本外数据）──
+def _ensure_zodiac_top1_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS zodiac_top1_forward (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE, period TEXT,
+      top1_zodiac TEXT, top1_votes INTEGER,
+      open_zodiac TEXT, open_num INTEGER, hit INTEGER, profit REAL,
+      create_time TEXT
+    )""")
+
+
+def _zodiac_top1_vote(period_date):
+    """读 multi_group_summary2 指定日期的 4 来源预测，投票算 Top1 肖。返回 (top1, votes) 或 None。"""
+    db = get_db()
+    row = db.execute("SELECT * FROM multi_group_summary2 WHERE draw_date=?", (period_date,)).fetchone()
+    db.close()
+    if not row:
+        return None
+    votes = {z: 0 for z in ZODIAC_ORDER}
+    for src in ZODIAC_SOURCES:
+        for z in _parse_zodiacs(row[src["col"]]):
+            votes[z] += 1
+    if not any(votes.values()):
+        return None
+    ranked = sorted(ZODIAC_ORDER, key=lambda z: (-votes[z], ZODIAC_ORDER.index(z)))
+    return ranked[0], votes[ranked[0]]
+
+
+def _zodiac_full_vote(period_date, min_ticket=4):
+    """读 multi_group_summary2 指定日期的 4 来源预测，返回所有 ≥min_ticket 票的生肖（按 ZODIAC_ORDER 顺序）。"""
+    db = get_db()
+    row = db.execute("SELECT * FROM multi_group_summary2 WHERE draw_date=?", (period_date,)).fetchone()
+    db.close()
+    if not row:
+        return []
+    votes = {z: 0 for z in ZODIAC_ORDER}
+    for src in ZODIAC_SOURCES:
+        for z in _parse_zodiacs(row[src["col"]]):
+            votes[z] += 1
+    return [z for z in ZODIAC_ORDER if votes[z] >= min_ticket]
+
+
+def _generate_zodiac_top1_forward():
+    """固化最新采集期的 Top1 肖到前向表（bet_date=该期 draw_date）。"""
+    db = get_db()
+    _ensure_zodiac_top1_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary2 ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d, period = row["draw_date"], row["period"]
+    top1 = _zodiac_top1_vote(d)
+    if not top1:
+        db.close()
+        return {"generated": 0, "date": d}
+    z, v = top1
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT OR IGNORE INTO zodiac_top1_forward (bet_date, period, top1_zodiac, top1_votes, open_zodiac, open_num, hit, profit, create_time) VALUES (?,?,?,?,NULL,NULL,NULL,NULL,?)",
+               (d, period, z, v, now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "top1": z, "votes": v}
+
+
+def _settle_zodiac_top1_forward():
+    """结算 pending（open_zodiac 为空）且 bet_date 开奖已出的前向记录。"""
+    db = get_db()
+    _ensure_zodiac_top1_table(db)
+    pending = db.execute("SELECT id, bet_date, top1_zodiac FROM zodiac_top1_forward WHERE open_zodiac IS NULL").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        open_z = _num_to_zodiac(open_num, DEFAULT_ZODIAC)
+        hit = 1 if open_z == p["top1_zodiac"] else 0
+        N = len(DEFAULT_ZODIAC.get(p["top1_zodiac"], []))
+        profit = (47 - N) if hit else -N
+        db.execute("UPDATE zodiac_top1_forward SET open_zodiac=?, open_num=?, hit=?, profit=? WHERE id=?",
+                   (open_z, open_num, hit, profit, p["id"]))
+        settled += 1
+    db.commit()
+    db.close()
+    return settled
+
+
+def _zodiac_top1_forward_stats():
+    """样本外前向统计：命中率/盈亏/z 值（vs 随机基线）。"""
+    import math
+    db = get_db()
+    _ensure_zodiac_top1_table(db)
+    rows = db.execute("SELECT top1_zodiac, hit, profit FROM zodiac_top1_forward WHERE hit IS NOT NULL ORDER BY id").fetchall()
+    db.close()
+    n = len(rows)
+    if not n:
+        return {"n": 0, "hits": 0, "hit_rate": 0.0, "profit": 0.0, "rand_base": 0.0, "z": 0.0}
+    hits = sum(1 for r in rows if r["hit"] == 1)
+    profit = sum(r["profit"] or 0 for r in rows)
+    avg_p = sum(len(DEFAULT_ZODIAC.get(r["top1_zodiac"], [])) for r in rows) / n / 49
+    hit_rate = hits / n
+    se = math.sqrt(avg_p * (1 - avg_p) / n)
+    z = (hit_rate - avg_p) / se if se else 0
+    return {"n": n, "hits": hits, "hit_rate": round(hit_rate * 100, 1),
+            "profit": round(profit, 2), "rand_base": round(avg_p * 100, 1), "z": round(z, 2)}
+
+
+@app.get("/api/zodiacTop1/forward")
+def zodiac_top1_forward(user=Header(None, alias="authorization")):
+    """Top1 肖样本外前向跟踪进度。"""
+    require_user(user)
+    _settle_zodiac_top1_forward()  # 先结算已开奖的 pending（开奖数据可能晚于 cron 入库），再返回
+    db = get_db()
+    _ensure_zodiac_top1_table(db)
+    rows = db.execute("SELECT * FROM zodiac_top1_forward ORDER BY id DESC").fetchall()
+    db.close()
+    return {"stats": _zodiac_top1_forward_stats(), "records": [dict(r) for r in rows]}
+
+
+def _zodiac_decision():
+    """生肖购买决策：各生肖作为 Top1 的历史盈利稳定性评级（命中率/z值/盈亏/月度稳定性）。"""
+    import math
+    from collections import defaultdict
+    data = _compute_zodiac_source_vote()
+    records = [r for r in data["records"] if not r.get("pending")]
+    result = []
+    for z in ZODIAC_ORDER:
+        subs = [r for r in records if r["top1"] == z]
+        n = len(subs)
+        if n == 0:
+            continue
+        hits = sum(1 for r in subs if r["open_zodiac"] == z)
+        N = len(DEFAULT_ZODIAC.get(z, []))
+        profit = sum((47 - N) if r["open_zodiac"] == z else -N for r in subs)
+        p0 = N / 49
+        se = math.sqrt(p0 * (1 - p0) / n) if n else 0
+        zscore = (hits / n - p0) / se if se else 0
+        # 月度稳定性（正盈利月份占比）
+        monthly = defaultdict(lambda: {"profit": 0.0, "total": 0})
+        for r in subs:
+            m = r["date"][:7]
+            monthly[m]["total"] += 1
+            monthly[m]["profit"] += (47 - N) if r["open_zodiac"] == z else -N
+        pos_months = sum(1 for b in monthly.values() if b["profit"] > 0)
+        total_months = len(monthly)
+        # 评级（样本数是硬门槛，样本不足的高命中率视为运气）
+        if n >= 10 and zscore >= 1.96 and profit > 0:
+            level = "stable"       # 稳定盈利：样本够 + 显著 + 正盈亏
+        elif n >= 10 and zscore >= 1.96:
+            level = "significant"  # 显著但盈亏待观察
+        elif profit > 0 and n >= 10:
+            level = "weak"         # 微正但不显著
+        elif profit > 0:
+            level = "small"        # 样本不足（<10），正盈亏不可靠
+        else:
+            level = "avoid"        # 负盈亏或≈随机
+        result.append({
+            "zodiac": z, "n": n, "hits": hits,
+            "hit_rate": round(hits / n * 100, 1),
+            "rand_base": round(p0 * 100, 1),
+            "z": round(zscore, 2),
+            "profit": round(profit, 1),
+            "per_period": round(profit / n, 2),
+            "pos_months": pos_months, "total_months": total_months,
+            "level": level,
+        })
+    result.sort(key=lambda x: (-x["profit"], -x["z"], -x["n"]))
+    return {"zodiacs": result, "total_periods": len(records)}
+
+
+@app.get("/api/zodiacDecision")
+def zodiac_decision(user=Header(None, alias="authorization")):
+    """生肖购买决策：各生肖稳定盈利评级。"""
+    require_user(user)
+    return _zodiac_decision()
+
+
+def _zodiac_buy_plan():
+    """按投票演算如何购买：各购买策略历史盈亏对比 + 今天（最新期）该买什么。"""
+    from collections import defaultdict
+    data = _compute_zodiac_source_vote()
+    records = [r for r in data["records"] if not r.get("pending")]
+    latest = data["records"][-1] if data["records"] else None
+
+    strategies = [
+        {"key": "top1", "name": "买 Top1（票数最高 1 肖）", "pick": lambda r: [r["top1"]]},
+        {"key": "top2", "name": "买 Top2（票数最高 2 肖）", "pick": lambda r: [r["top1"], r["top2"]]},
+        {"key": "top3", "name": "买 Top3（票数最高 3 肖）", "pick": lambda r: [r["top1"], r["top2"], r["top3"]]},
+        {"key": "ge3", "name": "买 ≥3票（高票共识）", "pick": lambda r: [z for z, v in r["votes"].items() if v >= 3]},
+        {"key": "eq4", "name": "买 4票（4 来源全投）", "pick": lambda r: [z for z, v in r["votes"].items() if v == 4]},
+    ]
+
+    result = []
+    for s in strategies:
+        hits = 0; total = 0; profit = 0.0; total_bet = 0
+        monthly = defaultdict(lambda: {"profit": 0.0, "total": 0})
+        for r in records:
+            picks = s["pick"](r)
+            if not picks:
+                continue
+            nums = set()
+            for z in picks:
+                nums.update(DEFAULT_ZODIAC.get(z, []))
+            N = len(nums)
+            hit = r["open_zodiac"] in picks
+            if hit:
+                hits += 1; profit += (47 - N)
+            else:
+                profit += -N
+            total += 1; total_bet += N
+            m = r["date"][:7]
+            monthly[m]["total"] += 1
+            monthly[m]["profit"] += (47 - N) if hit else -N
+        pos_months = sum(1 for b in monthly.values() if b["profit"] > 0)
+        result.append({
+            "key": s["key"], "name": s["name"],
+            "hits": hits, "total": total,
+            "hit_rate": round(hits / total * 100, 1) if total else 0,
+            "profit": round(profit, 1),
+            "roi": round(profit / total_bet * 100, 2) if total_bet else 0,
+            "pos_months": pos_months, "total_months": len(monthly),
+        })
+
+    # 今天（最新期）各策略该买的生肖
+    today = {}
+    if latest:
+        for s in strategies:
+            today[s["key"]] = s["pick"](latest)
+        today["period"] = latest["period"]
+        today["date"] = latest["date"]
+        today["votes"] = {z: v for z, v in latest["votes"].items() if v > 0}
+
+    result.sort(key=lambda x: (-x["profit"],))
+    # 下单指南：前3方案（按历史盈亏降序）今天该买什么生肖→号码→投入（对齐四组汇下单指南方案）
+    guide = None
+    if latest:
+        pick_map = {s["key"]: s["pick"] for s in strategies}
+        guide_plans = []
+        for s in result[:3]:
+            zs = pick_map[s["key"]](latest)
+            nums = sorted({n for z in zs for n in DEFAULT_ZODIAC.get(z, [])})
+            guide_plans.append({
+                "key": s["key"], "name": s["name"],
+                "zodiacs": zs,
+                "picks": nums,
+                "picks_str": ".".join(f"{n:02d}" for n in nums),
+                "N": len(nums),
+                "invest": round(ZODIAC_ORDER_PER * len(nums), 2),
+            })
+        guide = {"date": latest["date"], "period": latest["period"], "plans": guide_plans}
+    return {"strategies": result, "today": today, "guide": guide, "total_periods": len(records)}
+
+
+@app.get("/api/zodiacBuyPlan")
+def zodiac_buy_plan(user=Header(None, alias="authorization")):
+    """按投票演算如何购买。"""
+    require_user(user)
+    return _zodiac_buy_plan()
+
+
+# ── Top1 肖 真实下单记录（买 Top1 生肖，每号固定金额，开奖结算盈亏+本金台账）──
+ZODIAC_ORDER_PER = 5.0        # 每号下注金额（元）
+ZODIAC_ORDER_CAPITAL = 3000.0  # 初始本金
+
+
+def _ensure_zodiac_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS zodiac_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE, period TEXT,
+      zodiac TEXT, votes INTEGER,
+      per REAL DEFAULT 5, num_count INTEGER, invest REAL,
+      open_num INTEGER, open_zodiac TEXT,
+      hit INTEGER, profit REAL, capital REAL,
+      create_time TEXT
+    )""")
+
+
+def _generate_zodiac_order():
+    """按「买 Top1 肖」策略真实下单：固化最新采集期的下单记录（bet_date=该期日期）。"""
+    db = get_db()
+    _ensure_zodiac_order_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary2 ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d, period = row["draw_date"], row["period"]
+    top1 = _zodiac_top1_vote(d)
+    if not top1:
+        db.close()
+        return {"generated": 0, "date": d}
+    z, v = top1
+    N = len(DEFAULT_ZODIAC.get(z, []))
+    per = ZODIAC_ORDER_PER
+    invest = round(per * N, 2)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT OR IGNORE INTO zodiac_order (bet_date, period, zodiac, votes, per, num_count, invest, open_num, open_zodiac, hit, profit, capital, create_time) VALUES (?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,?)",
+               (d, period, z, v, per, N, invest, now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "zodiac": z, "num_count": N, "invest": invest}
+
+
+def _settle_zodiac_order():
+    """结算 pending 下单（开奖已出），更新盈亏，并按顺序重算累计本金。"""
+    db = get_db()
+    _ensure_zodiac_order_table(db)
+    pending = db.execute("SELECT id, bet_date, zodiac, num_count, per FROM zodiac_order WHERE open_zodiac IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        open_z = _num_to_zodiac(open_num, DEFAULT_ZODIAC)
+        hit = 1 if open_z == p["zodiac"] else 0
+        N = p["num_count"]
+        per = p["per"]
+        profit = round(((47 - N) * per) if hit else (-N * per), 2)
+        db.execute("UPDATE zodiac_order SET open_num=?, open_zodiac=?, hit=?, profit=? WHERE id=?",
+                   (open_num, open_z, hit, profit, p["id"]))
+        settled += 1
+    # 按 bet_date 顺序重算累计本金
+    rows = db.execute("SELECT id, profit FROM zodiac_order WHERE profit IS NOT NULL ORDER BY bet_date").fetchall()
+    capital = ZODIAC_ORDER_CAPITAL
+    for r in rows:
+        capital += (r["profit"] or 0)
+        db.execute("UPDATE zodiac_order SET capital=? WHERE id=?", (round(capital, 2), r["id"]))
+    db.commit()
+    db.close()
+    return settled
+
+
+def _zodiac_order_overview():
+    """下单台账：统计 + 逐笔记录。"""
+    db = get_db()
+    _ensure_zodiac_order_table(db)
+    rows = db.execute("SELECT * FROM zodiac_order ORDER BY bet_date").fetchall()
+    db.close()
+    settled = [r for r in rows if r["hit"] is not None]
+    hits = sum(1 for r in settled if r["hit"] == 1)
+    total_profit = sum(r["profit"] or 0 for r in settled)
+    capital = ZODIAC_ORDER_CAPITAL + total_profit
+    return {
+        "per": ZODIAC_ORDER_PER,
+        "init_capital": ZODIAC_ORDER_CAPITAL,
+        "capital": round(capital, 2),
+        "total_orders": len(rows),
+        "settled": len(settled),
+        "hits": hits,
+        "hit_rate": round(hits / len(settled) * 100, 1) if settled else 0,
+        "total_profit": round(total_profit, 2),
+        "records": [dict(r) for r in reversed(rows)],
+    }
+
+
+@app.get("/api/zodiacOrder")
+def zodiac_order(user=Header(None, alias="authorization")):
+    """Top1 肖真实下单台账。"""
+    require_user(user)
+    _generate_zodiac_order()  # 固化最新采集期下单（若无），确保刷新即更新到最新期
+    _settle_zodiac_order()    # 结算 pending（开奖数据可能晚于 cron 入库）
+    return _zodiac_order_overview()
+
+
+# ── 满票肖（≥4票）真实下单台账（买所有满票肖，每号固定金额，开奖结算盈亏+本金）──
+ZODIAC_FULL_ORDER_PER = 5.0        # 每号下注金额（元）
+ZODIAC_FULL_ORDER_CAPITAL = 3000.0  # 初始本金
+
+
+def _ensure_zodiac_full_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS zodiac_order_full (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE, period TEXT,
+      zodiac TEXT, votes INTEGER,
+      per REAL DEFAULT 5, num_count INTEGER, invest REAL,
+      open_num INTEGER, open_zodiac TEXT,
+      hit INTEGER, profit REAL, capital REAL,
+      create_time TEXT
+    )""")
+
+
+def _generate_zodiac_full_order():
+    """按「买所有满票肖（≥4票）」策略真实下单：固化最新采集期的下单记录。
+    zodiac 存满票肖拼接（如"牛龙"），空仓期存空串；votes=满票肖数；num_count=总号码数。"""
+    db = get_db()
+    _ensure_zodiac_full_order_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary2 ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d, period = row["draw_date"], row["period"]
+    top1 = _zodiac_top1_vote(d)
+    if top1 is None:
+        db.close()
+        return {"generated": 0, "date": d}  # 数据未采集，跳过
+    full = _zodiac_full_vote(d)
+    zodiac = "".join(full)
+    N = sum(len(DEFAULT_ZODIAC.get(z, [])) for z in full)
+    per = ZODIAC_FULL_ORDER_PER
+    invest = round(per * N, 2)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT OR IGNORE INTO zodiac_order_full (bet_date, period, zodiac, votes, per, num_count, invest, open_num, open_zodiac, hit, profit, capital, create_time) VALUES (?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,?)",
+               (d, period, zodiac, len(full), per, N, invest, now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "zodiac": zodiac, "num_count": N, "invest": invest}
+
+
+def _settle_zodiac_full_order():
+    """结算 pending 满票肖下单（开奖已出），更新盈亏，并按顺序重算累计本金。"""
+    db = get_db()
+    _ensure_zodiac_full_order_table(db)
+    pending = db.execute("SELECT id, bet_date, zodiac, num_count, per FROM zodiac_order_full WHERE open_zodiac IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        open_z = _num_to_zodiac(open_num, DEFAULT_ZODIAC)
+        zodiacs = list(p["zodiac"] or "")  # 满票肖拼接字符串 → 单字列表；空仓期为空串
+        hit = 1 if open_z in zodiacs else 0
+        N = p["num_count"]
+        per = p["per"]
+        profit = round(((47 - N) * per) if hit else (-N * per), 2)
+        db.execute("UPDATE zodiac_order_full SET open_num=?, open_zodiac=?, hit=?, profit=? WHERE id=?",
+                   (open_num, open_z, hit, profit, p["id"]))
+        settled += 1
+    rows = db.execute("SELECT id, profit FROM zodiac_order_full WHERE profit IS NOT NULL ORDER BY bet_date").fetchall()
+    capital = ZODIAC_FULL_ORDER_CAPITAL
+    for r in rows:
+        capital += (r["profit"] or 0)
+        db.execute("UPDATE zodiac_order_full SET capital=? WHERE id=?", (round(capital, 2), r["id"]))
+    db.commit()
+    db.close()
+    return settled
+
+
+def _zodiac_full_order_overview():
+    """满票肖下单台账：统计 + 逐笔记录。空仓期（num_count=0）不计入命中率。"""
+    db = get_db()
+    _ensure_zodiac_full_order_table(db)
+    rows = db.execute("SELECT * FROM zodiac_order_full ORDER BY bet_date").fetchall()
+    db.close()
+    betting = [r for r in rows if r["num_count"] and r["num_count"] > 0]  # 实际下注的期（排除空仓）
+    settled = [r for r in betting if r["hit"] is not None]
+    hits = sum(1 for r in settled if r["hit"] == 1)
+    total_profit = sum(r["profit"] or 0 for r in rows if r["profit"] is not None)
+    capital = ZODIAC_FULL_ORDER_CAPITAL + total_profit
+    return {
+        "per": ZODIAC_FULL_ORDER_PER,
+        "init_capital": ZODIAC_FULL_ORDER_CAPITAL,
+        "capital": round(capital, 2),
+        "total_orders": len(rows),
+        "settled": len(settled),
+        "hits": hits,
+        "hit_rate": round(hits / len(settled) * 100, 1) if settled else 0,
+        "total_profit": round(total_profit, 2),
+        "records": [dict(r) for r in reversed(rows)],
+    }
+
+
+@app.get("/api/zodiacOrderFull")
+def zodiac_order_full(user=Header(None, alias="authorization")):
+    """满票肖（≥4票）真实下单台账。"""
+    require_user(user)
+    _generate_zodiac_full_order()  # 固化最新采集期下单（若无），确保刷新即更新到最新期
+    _settle_zodiac_full_order()    # 结算 pending（开奖数据可能晚于 cron 入库）
+    return _zodiac_full_order_overview()
+
+
+# ── 购买策略前3方案 真实下单台账 + 止损状态机 + AI（对齐四组汇 sizu_order）──
+ZODIAC_BP_PER = 5.0           # 每号下注金额（元）
+ZODIAC_BP_CAPITAL = 3000.0    # 每方案独立初始本金
+ZODIAC_BP_STOP_STREAK = 20    # 止损连亏阈值：连亏≥此期数 → 停手，虚拟跟踪命中后释放
+
+# 前3方案（按历史盈亏降序：Top1/Top2/买4票）
+ZODIAC_BP_PLANS = [
+    ("top1", "买 Top1", "top1"),
+    ("top2", "买 Top2", "top2"),
+    ("eq4", "买 4票", "eq4"),
+]
+
+
+def _zodiac_bp_pick(key, vd):
+    """按方案 key 从投票数据 vd（含 votes/top1/top2/top3）选生肖列表。"""
+    if key == "top1":
+        return [vd["top1"]]
+    if key == "top2":
+        return [vd["top1"], vd["top2"]]
+    if key == "eq4":
+        return [z for z in ZODIAC_ORDER if vd["votes"].get(z, 0) == 4]
+    return []
+
+
+def _zodiac_bp_votes_db(db, period_date):
+    """内联版：读指定日期 4 来源生肖投票，返回 votes/top1/top2/top3/period，或 None。"""
+    row = db.execute("SELECT * FROM multi_group_summary2 WHERE draw_date=?", (period_date,)).fetchone()
+    if not row:
+        return None
+    votes = {z: 0 for z in ZODIAC_ORDER}
+    for src in ZODIAC_SOURCES:
+        for z in _parse_zodiacs(row[src["col"]]):
+            if z in votes:
+                votes[z] += 1
+    ranked = sorted(ZODIAC_ORDER, key=lambda z: (-votes[z], ZODIAC_ORDER.index(z)))
+    return {
+        "date": period_date,
+        "period": row["period"] if "period" in row.keys() else "",
+        "votes": votes,
+        "top1": ranked[0], "top2": ranked[1], "top3": ranked[2],
+    }
+
+
+def _ensure_zodiac_bp_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS zodiac_bp_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT, period TEXT,
+      plan_key TEXT, plan_name TEXT,
+      zodiacs TEXT, picks TEXT, num_count INTEGER,
+      per REAL DEFAULT 5, invest REAL,
+      open_num INTEGER, hit INTEGER, profit REAL, capital REAL,
+      create_time TEXT,
+      UNIQUE(bet_date, plan_key)
+    )""")
+
+
+def _ensure_zodiac_bp_state_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS zodiac_bp_state (
+      plan_key TEXT PRIMARY KEY,
+      plan_name TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      stop_date TEXT DEFAULT '',
+      stop_streak INTEGER DEFAULT 0,
+      resume_date TEXT DEFAULT '',
+      watch_hit_date TEXT DEFAULT '',
+      create_time TEXT, update_time TEXT
+    )""")
+
+
+def _update_zodiac_bp_stop_state(db):
+    """止损状态机（结算后调用）：active 连亏≥阈值→stopped；stopped 虚拟跟踪命中→释放。"""
+    _ensure_zodiac_bp_state_table(db)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for key, name, _ in ZODIAC_BP_PLANS:
+        db.execute("INSERT OR IGNORE INTO zodiac_bp_state (plan_key, plan_name, status, create_time) VALUES (?,?,?,?)",
+                   (key, name, "active", now))
+    opens = {}
+    for r in db.execute("SELECT record_date, source_number FROM number_knowledge_record WHERE status=1 AND source_number IS NOT NULL AND source_number != ''").fetchall():
+        try:
+            z = _num_to_zodiac(int(r["source_number"]), DEFAULT_ZODIAC)
+            if z:
+                opens[r["record_date"]] = z
+        except (TypeError, ValueError):
+            continue
+    vote_dates = sorted({r["draw_date"] for r in db.execute("SELECT draw_date FROM multi_group_summary2 WHERE draw_date IS NOT NULL").fetchall()})
+    for key, name, _ in ZODIAC_BP_PLANS:
+        st = db.execute("SELECT * FROM zodiac_bp_state WHERE plan_key=?", (key,)).fetchone()
+        status = st["status"] if st else "active"
+        stop_date = st["stop_date"] if st else ""
+        rows = db.execute("SELECT bet_date, hit, num_count FROM zodiac_bp_order WHERE plan_key=? AND hit IS NOT NULL ORDER BY bet_date", (key,)).fetchall()
+        cur_miss = 0
+        last_date = ""
+        for r in rows:
+            if r["num_count"] and r["num_count"] > 0:
+                last_date = r["bet_date"]
+                if r["hit"] == 1:
+                    cur_miss = 0
+                else:
+                    cur_miss += 1
+        if status == "active":
+            if cur_miss >= ZODIAC_BP_STOP_STREAK:
+                db.execute("UPDATE zodiac_bp_state SET status='stopped', stop_date=?, stop_streak=?, resume_date='', watch_hit_date='', update_time=? WHERE plan_key=?",
+                           (last_date, cur_miss, now, key))
+        else:
+            hit_date = ""
+            for d in vote_dates:
+                if stop_date and d <= stop_date:
+                    continue
+                vd = _zodiac_bp_votes_db(db, d)
+                if vd is None:
+                    continue
+                zs = _zodiac_bp_pick(key, vd)
+                o = opens.get(d)
+                if o is not None and o in zs:
+                    hit_date = d
+                    break
+            if hit_date:
+                db.execute("UPDATE zodiac_bp_state SET status='active', resume_date=?, watch_hit_date=?, stop_streak=0, update_time=? WHERE plan_key=?",
+                           (hit_date, hit_date, now, key))
+
+
+def _generate_zodiac_bp_order():
+    """固化最新期前3方案真实下单（每方案独立本金）。止损停手中的方案跳过。"""
+    db = get_db()
+    _ensure_zodiac_bp_order_table(db)
+    _ensure_zodiac_bp_state_table(db)
+    stopped = {r["plan_key"] for r in db.execute("SELECT plan_key FROM zodiac_bp_state WHERE status='stopped'").fetchall()}
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary2 ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": "", "stopped": sorted(stopped)}
+    d, period = row["draw_date"], row["period"]
+    vd = _zodiac_bp_votes_db(db, d)
+    if vd is None:
+        db.close()
+        return {"generated": 0, "date": d, "stopped": sorted(stopped)}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    n_gen = 0
+    n_skip = 0
+    for key, name, _ in ZODIAC_BP_PLANS:
+        if key in stopped:
+            n_skip += 1
+            continue
+        zs = _zodiac_bp_pick(key, vd)
+        nums = sorted({n for z in zs for n in DEFAULT_ZODIAC.get(z, [])})
+        N = len(nums)
+        picks_str = ".".join(f"{n:02d}" for n in nums)
+        invest = round(ZODIAC_BP_PER * N, 2)
+        cur = db.execute("SELECT id FROM zodiac_bp_order WHERE bet_date=? AND plan_key=?", (d, key)).fetchone()
+        if cur is None:
+            db.execute("INSERT INTO zodiac_bp_order (bet_date, period, plan_key, plan_name, zodiacs, picks, num_count, per, invest, open_num, hit, profit, capital, create_time) VALUES (?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,?)",
+                       (d, period, key, name, "".join(zs), picks_str, N, ZODIAC_BP_PER, invest, now))
+            n_gen += 1
+    db.commit()
+    db.close()
+    return {"generated": n_gen, "date": d, "skipped_stopped": n_skip, "stopped": sorted(stopped)}
+
+
+def _settle_zodiac_bp_order():
+    """结算 pending 下单（开奖已出），每方案独立重算累计本金 + 更新止损状态机。"""
+    db = get_db()
+    _ensure_zodiac_bp_order_table(db)
+    pending = db.execute("SELECT id, bet_date, plan_key, num_count, per FROM zodiac_bp_order WHERE open_num IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        open_z = _num_to_zodiac(open_num, DEFAULT_ZODIAC)
+        prow = db.execute("SELECT zodiacs FROM zodiac_bp_order WHERE id=?", (p["id"],)).fetchone()
+        zodiacs = list(prow["zodiacs"] or "")
+        hit = 1 if open_z in zodiacs else 0
+        N = p["num_count"]
+        per = p["per"]
+        profit = round(((47 - N) * per) if hit else (-N * per), 2)
+        db.execute("UPDATE zodiac_bp_order SET open_num=?, hit=?, profit=? WHERE id=?", (open_num, hit, profit, p["id"]))
+        settled += 1
+    # 每方案独立重算累计本金
+    for pl in db.execute("SELECT DISTINCT plan_key FROM zodiac_bp_order").fetchall():
+        pk = pl["plan_key"]
+        capital = ZODIAC_BP_CAPITAL
+        rows = db.execute("SELECT id, profit FROM zodiac_bp_order WHERE plan_key=? AND profit IS NOT NULL ORDER BY bet_date", (pk,)).fetchall()
+        for r in rows:
+            capital += (r["profit"] or 0)
+            db.execute("UPDATE zodiac_bp_order SET capital=? WHERE id=?", (round(capital, 2), r["id"]))
+    _update_zodiac_bp_stop_state(db)
+    db.commit()
+    db.close()
+    return settled
+
+
+def _zodiac_bp_overview():
+    """前3方案台账：每方案独立本金统计 + 逐笔 + 最新期下单指南（止损停手方案不进指南）。"""
+    db = get_db()
+    _ensure_zodiac_bp_order_table(db)
+    _ensure_zodiac_bp_state_table(db)
+    state = {r["plan_key"]: dict(r) for r in db.execute("SELECT * FROM zodiac_bp_state").fetchall()}
+    plans = []
+    for key, name, _ in ZODIAC_BP_PLANS:
+        rows = db.execute("SELECT * FROM zodiac_bp_order WHERE plan_key=? ORDER BY bet_date", (key,)).fetchall()
+        betting = [r for r in rows if r["num_count"] and r["num_count"] > 0]
+        settled = [r for r in betting if r["hit"] is not None]
+        hits = sum(1 for r in settled if r["hit"] == 1)
+        total_profit = sum(r["profit"] or 0 for r in rows if r["profit"] is not None)
+        capital = ZODIAC_BP_CAPITAL + total_profit
+        st = state.get(key, {})
+        plans.append({
+            "key": key, "name": name,
+            "capital": round(capital, 2),
+            "init_capital": ZODIAC_BP_CAPITAL,
+            "total_profit": round(total_profit, 2),
+            "total_orders": len(rows),
+            "settled": len(settled),
+            "hits": hits,
+            "hit_rate": round(hits / len(settled) * 100, 1) if settled else 0,
+            "status": st.get("status", "active"),
+            "stop_date": st.get("stop_date", ""),
+            "stop_streak": st.get("stop_streak", 0),
+            "resume_date": st.get("resume_date", ""),
+            "records": [dict(r) for r in reversed(rows)],
+        })
+    guide = None
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary2 ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if row:
+        vd = _zodiac_bp_votes_db(db, row["draw_date"])
+        if vd is not None:
+            guide_plans = []
+            guide_stopped = []
+            for key, name, _ in ZODIAC_BP_PLANS:
+                st = state.get(key, {})
+                zs = _zodiac_bp_pick(key, vd)
+                nums = sorted({n for z in zs for n in DEFAULT_ZODIAC.get(z, [])})
+                item = {
+                    "key": key, "name": name,
+                    "zodiacs": zs,
+                    "picks": nums,
+                    "picks_str": ".".join(f"{n:02d}" for n in nums),
+                    "N": len(nums),
+                    "invest": round(ZODIAC_BP_PER * len(nums), 2),
+                }
+                if st.get("status") == "stopped":
+                    guide_stopped.append({"key": key, "name": name,
+                                          "stop_date": st.get("stop_date", ""),
+                                          "stop_streak": st.get("stop_streak", 0)})
+                    continue
+                guide_plans.append(item)
+            guide = {"date": row["draw_date"], "period": row["period"],
+                     "plans": guide_plans, "stopped": guide_stopped}
+    db.close()
+    return {"per": ZODIAC_BP_PER, "init_capital": ZODIAC_BP_CAPITAL, "plans": plans, "guide": guide}
+
+
+@app.get("/api/zodiacBpOrder")
+def zodiac_bp_order(user=Header(None, alias="authorization")):
+    """购买策略前3方案真实下单台账。"""
+    require_user(user)
+    _generate_zodiac_bp_order()  # 固化最新采集期下单（若无），确保刷新即更新到最新期
+    _settle_zodiac_bp_order()    # 结算 pending（开奖数据可能晚于 cron 入库）
+    return _zodiac_bp_overview()
+
+
+def _zodiac_bp_ai_data():
+    """收集前3方案台账数据供 AI 分析：命中率/盈亏/连中连亏/当前连亏/月度/最近走势 + 止损状态。"""
+    db = get_db()
+    _ensure_zodiac_bp_order_table(db)
+    _ensure_zodiac_bp_state_table(db)
+    state = {r["plan_key"]: dict(r) for r in db.execute("SELECT * FROM zodiac_bp_state").fetchall()}
+    plans = []
+    for key, name, _ in ZODIAC_BP_PLANS:
+        rows = db.execute("SELECT * FROM zodiac_bp_order WHERE plan_key=? ORDER BY bet_date", (key,)).fetchall()
+        settled = [r for r in rows if r["hit"] is not None and r["num_count"] and r["num_count"] > 0]
+        n = len(settled)
+        hits = sum(1 for r in settled if r["hit"] == 1)
+        profit = sum(r["profit"] or 0 for r in settled)
+        cur = 0; max_hit = 0; max_miss = 0
+        cum = 0.0; peak = 0.0; max_dd = 0.0
+        for r in settled:
+            if r["hit"] == 1:
+                cur = cur + 1 if cur > 0 else 1
+            else:
+                cur = cur - 1 if cur < 0 else -1
+            max_hit = max(max_hit, cur); max_miss = min(max_miss, cur)
+            cum += (r["profit"] or 0); peak = max(peak, cum); max_dd = max(max_dd, peak - cum)
+        cur_miss = -cur if cur < 0 else 0
+        monthly = {}
+        for r in settled:
+            m = r["bet_date"][:7]
+            b = monthly.setdefault(m, {"periods": 0, "hits": 0, "profit": 0.0})
+            b["periods"] += 1
+            b["hits"] += 1 if r["hit"] == 1 else 0
+            b["profit"] += (r["profit"] or 0)
+        recent = [{
+            "date": r["bet_date"], "period": r["period"], "zodiacs": r["zodiacs"], "picks": r["picks"],
+            "open": r["open_num"], "hit": r["hit"], "profit": r["profit"],
+        } for r in rows[-20:] if r["hit"] is not None]
+        hist_max_miss = -max_miss
+        st = state.get(key, {})
+        stop = None
+        if st.get("status") == "stopped":
+            stop = {"level": "danger",
+                    "text": f"已止损停手（连亏 {st.get('stop_streak', 0)} 期，{st.get('stop_date', '')} 起），虚拟跟踪中，命中后再释放"}
+        elif n and cur_miss >= 8:
+            if hist_max_miss > 0 and cur_miss >= hist_max_miss * 0.8:
+                stop = {"level": "warn", "text": f"当前连亏 {cur_miss} 期，逼近历史最长 {hist_max_miss} 期，观察是否止损"}
+            elif cur_miss >= 10:
+                stop = {"level": "warn", "text": f"当前连亏 {cur_miss} 期，偏长需观察"}
+        plans.append({
+            "key": key, "name": name,
+            "hits": hits, "total": n,
+            "hit_rate": round(hits / n * 100, 1) if n else 0,
+            "profit": round(profit, 2),
+            "capital": round(ZODIAC_BP_CAPITAL + profit, 2),
+            "cur_streak": cur, "cur_miss": cur_miss,
+            "max_hit_streak": max_hit, "max_miss_streak": hist_max_miss,
+            "max_drawdown": round(max_dd, 2),
+            "status": st.get("status", "active"),
+            "stop_date": st.get("stop_date", ""),
+            "stop_streak": st.get("stop_streak", 0),
+            "resume_date": st.get("resume_date", ""),
+            "monthly": {k: {"periods": v["periods"], "hits": v["hits"],
+                            "profit": round(v["profit"], 2)} for k, v in monthly.items()},
+            "recent": recent,
+            "stop": stop,
+        })
+    db.close()
+    return {"plans": plans, "per": ZODIAC_BP_PER, "init_capital": ZODIAC_BP_CAPITAL, "stop_threshold": ZODIAC_BP_STOP_STREAK}
+
+
+def _zodiac_bp_ai_analysis():
+    """调用 DeepSeek 分析前3方案台账：盈利趋势 + 超期止损建议。"""
+    import json as _json
+    import urllib.request
+    key = _load_deepseek_key()
+    if not key:
+        return {"ok": False, "error": "未配置 DeepSeek API Key"}
+    data = _zodiac_bp_ai_data()
+    if not data["plans"]:
+        return {"ok": False, "error": "无台账数据"}
+
+    L = []
+    L.append("你是六合彩数据分析助手。以下是「多组肖汇 购买策略前3方案真实下单台账」的历史数据。")
+    L.append("规则：4来源（哪吒八肖/聚宝八肖/米老网红七肖/米老七肖）投票得生肖票数，前3方案（买Top1/买Top2/买4票满票）买号；生肖→号码展开，每号5元、赔率47倍；命中赚(47-N)×5、未中亏N×5；每方案独立本金3000。")
+    L.append("")
+    for p in data["plans"]:
+        L.append(f"【{p['name']}】命中 {p['hits']}/{p['total']}（{p['hit_rate']}%），盈亏 {p['profit']:+.2f}，本金 {p['capital']}；当前连{'中' if p['cur_streak']>0 else '亏'} {abs(p['cur_streak'])} 期，历史最长连亏 {p['max_miss_streak']} 期，最大回撤 {p['max_drawdown']}。")
+    L.append("")
+    L.append("【按月盈亏】")
+    for p in data["plans"]:
+        L.append(f"{p['name']}: " + "；".join(f"{m} {v['profit']:+.0f}" for m, v in sorted(p["monthly"].items())))
+    L.append("")
+    L.append("【最近走势（各方案近10期）】")
+    for p in data["plans"]:
+        L.append(f"{p['name']}: " + "，".join(f"{rc['period']}{'✓' if rc['hit'] else '✗'}" for rc in p["recent"][-10:]))
+    L.append("")
+    L.append("【各方案当前止损状态（真实执行，非建议）】")
+    for p in data["plans"]:
+        if p["status"] == "stopped":
+            L.append(f"{p['name']}: 已止损停手（连亏 {p['stop_streak']} 期，{p['stop_date']} 起），虚拟跟踪中，命中后再释放恢复下单。")
+        else:
+            L.append(f"{p['name']}: 正常下单中（当前连亏 {p['cur_miss']} 期）。")
+    L.append("")
+    L.append("请分点回答（简洁中文，350字内）：")
+    L.append("1. 3 个方案整体盈利/亏损的客观结论，哪个相对最稳、哪个最差（注意：这3个方案高度重叠，是同一信号的不同买法，别当独立策略）。")
+    L.append("2. 按月趋势有无拐点（哪个方案最近明显变差）。")
+    L.append("3. 止损规则：连亏≥20期自动停手（不进下单指南），虚拟跟踪命中一次后释放恢复。请点评当前哪些方案已被停手、是否合理，哪些接近止损线需警惕；明确这是历史回测概率、非投注建议。")
+    prompt = "\n".join(L)
+
+    body = _json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "stream": False,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    resp = _json.loads(urllib.request.urlopen(req, timeout=90).read())
+    content = resp["choices"][0]["message"]["content"]
+    return {"ok": True, "analysis": content}
+
+
+@app.get("/api/zodiacBpOrder/aiAnalysis")
+def zodiac_bp_order_ai(user=Header(None, alias="authorization")):
+    """购买策略前3方案台账 AI 分析 + 止损（按钮触发）。"""
+    require_user(user)
+    try:
+        return _zodiac_bp_ai_analysis()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/zodiacBpOrder/stats")
+def zodiac_bp_order_stats(user=Header(None, alias="authorization")):
+    """购买策略前3方案结构化分析数据 + 止损状态（不含 AI，即时返回）。"""
+    require_user(user)
+    return _zodiac_bp_ai_data()
+
+
+# ── 前24号/后25号 真实下单台账（买筹码最多24号 vs 其余25号，每号固定金额，开奖结算盈亏）──
+FRONTBACK_PER = 5.0  # 每号下注金额（元）
+
+
+def _ensure_frontback_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS frontback_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE, period TEXT,
+      front_nums TEXT, front_count INTEGER, front_invest REAL,
+      back_nums TEXT, back_count INTEGER, back_invest REAL,
+      per REAL DEFAULT 5,
+      open_num INTEGER,
+      front_hit INTEGER, back_hit INTEGER,
+      front_profit REAL, back_profit REAL,
+      create_time TEXT
+    )""")
+
+
+def _frontback_day_cnt(db, d):
+    """计算某天（draw_date）各号码被预测次数 count（4家28栏目展开）。返回 {num: count}。"""
+    r = db.execute("SELECT * FROM multi_group_summary WHERE draw_date=?", (d,)).fetchone()
+    if not r:
+        return {}
+    cnt = {}
+    for f, label, fam, expect, kind in NUM_TRACK_FIELDS:
+        for n in _expand_field_nums(f, r[f], kind):
+            cnt[n] = cnt.get(n, 0) + 1
+    return cnt
+
+
+def _generate_frontback_order():
+    """按「前24号（筹码最多24号）+ 后25号（其余）」策略真实下单：固化最新采集期下单记录。"""
+    db = get_db()
+    _ensure_frontback_order_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d, period = row["draw_date"], row["period"]
+    cnt = _frontback_day_cnt(db, d)
+    if not cnt:
+        db.close()
+        return {"generated": 0, "date": d}
+    ranked = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
+    front = ranked[:24]
+    front_set = {n for n, c in front}
+    # 后25号 = 其余25个号（1-49 除前24号外，含 count=0 未被预测的号），每组5元 N×5 叠加
+    back = [(n, cnt.get(n, 0)) for n in range(1, 50) if n not in front_set]
+    front_nums = '.'.join(f"{n:02d}" for n, c in front)
+    back_nums = '.'.join(f"{n:02d}" for n, c in back)
+    per = FRONTBACK_PER
+    front_invest = round(sum(c * per for n, c in front), 2)
+    back_invest = round(sum(c * per for n, c in back), 2)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("""INSERT OR IGNORE INTO frontback_order
+      (bet_date, period, front_nums, front_count, front_invest, back_nums, back_count, back_invest, per, open_num, front_hit, back_hit, front_profit, back_profit, create_time)
+      VALUES (?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,?)""",
+      (d, period, front_nums, len(front), front_invest, back_nums, len(back), back_invest, per, now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "front_count": len(front), "back_count": len(back),
+            "front_invest": front_invest, "back_invest": back_invest}
+
+
+def _settle_frontback_order():
+    """结算 pending 下单（开奖已出）：前24/后25 各自判命中 + 盈亏（N×5 叠加口径）。"""
+    db = get_db()
+    _ensure_frontback_order_table(db)
+    pending = db.execute("SELECT id, bet_date, front_nums, back_nums, front_invest, back_invest, per FROM frontback_order WHERE front_hit IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        front_nums = [int(x) for x in (p["front_nums"] or "").split(".") if x]
+        back_nums = [int(x) for x in (p["back_nums"] or "").split(".") if x]
+        front_hit = 1 if open_num in front_nums else 0
+        back_hit = 1 if open_num in back_nums else 0
+        per = p["per"]
+        front_invest = p["front_invest"] or 0
+        back_invest = p["back_invest"] or 0
+        # 命中赢 = 47 × count(开奖号) × per（N×5 叠加）；count 需按当日 28 栏目重算
+        cnt = _frontback_day_cnt(db, p["bet_date"])
+        win = 47 * cnt.get(open_num, 0) * per
+        front_profit = round((win - front_invest) if front_hit else (-front_invest), 2)
+        back_profit = round((win - back_invest) if back_hit else (-back_invest), 2)
+        db.execute("UPDATE frontback_order SET open_num=?, front_hit=?, back_hit=?, front_profit=?, back_profit=? WHERE id=?",
+                   (open_num, front_hit, back_hit, front_profit, back_profit, p["id"]))
+        settled += 1
+    db.commit()
+    db.close()
+    return settled
+
+
+def _frontback_order_overview(date_from="", date_to=""):
+    """前24/后25 下单台账：各自命中率/盈亏/ROI/连中连亏 + 整体合计 + 逐笔记录。支持日期段过滤。"""
+    db = get_db()
+    _ensure_frontback_order_table(db)
+    where = []
+    args = []
+    if date_from:
+        where.append("bet_date >= ?")
+        args.append(date_from)
+    if date_to:
+        where.append("bet_date <= ?")
+        args.append(date_to)
+    w = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(f"SELECT * FROM frontback_order{w} ORDER BY bet_date", args).fetchall()
+    db.close()
+    settled = [r for r in rows if r["front_hit"] is not None]
+    n = len(settled)
+
+    def _group(prefix):
+        hits = sum(1 for r in settled if r[f"{prefix}_hit"] == 1)
+        profit = sum(r[f"{prefix}_profit"] or 0 for r in settled)
+        invest = sum(r[f"{prefix}_invest"] or 0 for r in settled)
+        profits = [r[f"{prefix}_profit"] or 0 for r in settled]
+        # 连中连亏（正=连中，负=连亏）
+        cur = 0
+        max_hit = 0
+        max_miss = 0
+        for r in settled:
+            h = r[f"{prefix}_hit"]
+            if h == 1:
+                cur = cur + 1 if cur > 0 else 1
+                max_hit = max(max_hit, cur)
+            else:
+                cur = cur - 1 if cur < 0 else -1
+                max_miss = max(max_miss, -cur)
+        N = 24 if prefix == "front" else 25
+        return {
+            "hits": hits,
+            "hit_rate": round(hits / n * 100, 1) if n else 0,
+            "profit": round(profit, 2),
+            "invest": round(invest, 2),
+            "roi": round(profit / invest * 100, 2) if invest else 0,
+            "avg_profit": round(profit / n, 2) if n else 0,
+            "avg_invest": round(invest / n, 2) if n else 0,
+            "max_profit": round(max(profits), 2) if profits else 0,
+            "max_loss": round(min(profits), 2) if profits else 0,
+            "max_hit_streak": max_hit,
+            "max_miss_streak": max_miss,
+            "rand_base": round(N / 49 * 100, 1),
+        }
+
+    front = _group("front")
+    back = _group("back")
+    total_invest = round(front["invest"] + back["invest"], 2)
+    total_profit = round(front["profit"] + back["profit"], 2)
+    # 逐月聚合（前24/后25 各自月度命中+盈亏，真实下单口径）
+    monthly = {}
+    for r in settled:
+        m = r["bet_date"][:7]
+        b = monthly.setdefault(m, {"periods": 0, "front_hits": 0, "back_hits": 0, "front_profit": 0.0, "back_profit": 0.0})
+        b["periods"] += 1
+        b["front_hits"] += 1 if r["front_hit"] == 1 else 0
+        b["back_hits"] += 1 if r["back_hit"] == 1 else 0
+        b["front_profit"] += r["front_profit"] or 0
+        b["back_profit"] += r["back_profit"] or 0
+    monthly_list = [{
+        "month": m,
+        "periods": b["periods"],
+        "front_hits": b["front_hits"],
+        "back_hits": b["back_hits"],
+        "front_profit": round(b["front_profit"], 2),
+        "back_profit": round(b["back_profit"], 2),
+        "total_profit": round(b["front_profit"] + b["back_profit"], 2),
+    } for m, b in sorted(monthly.items())]
+    return {
+        "per": FRONTBACK_PER,
+        "date_from": date_from,
+        "date_to": date_to,
+        "total_orders": len(rows),
+        "settled": n,
+        "front": front,
+        "back": back,
+        "total": {
+            "invest": total_invest,
+            "profit": total_profit,
+            "roi": round(total_profit / total_invest * 100, 2) if total_invest else 0,
+        },
+        "monthly": monthly_list,
+        "records": [dict(r) for r in reversed(rows)],
+    }
+
+
+@app.get("/api/frontbackOrder")
+def frontback_order(date_from: str = "", date_to: str = "", user=Header(None, alias="authorization")):
+    """前24号/后25号 真实下单台账。支持日期段过滤。"""
+    require_user(user)
+    _settle_frontback_order()  # 先结算已开奖的 pending，再返回
+    return _frontback_order_overview(date_from, date_to)
+
+
+# ── 前24/后25 台账 AI 分析（按钮触发，不自动调用）──
+def _load_deepseek_key():
+    """加载 DeepSeek API Key（~/.keys.env）。"""
+    import os
+    key = ""
+    try:
+        p = os.path.expanduser("~/.keys.env")
+        if os.path.exists(p):
+            with open(p, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line.startswith("DEEPSEEK_API_KEY="):
+                        key = line.split("=", 1)[1].strip()
+                        break
+    except Exception:
+        pass
+    return key
+
+
+def _frontback_ai_data(date_from="", date_to=""):
+    """收集台账数据供 AI 分析：总结果 + 按月/周聚合 + 最近走势。"""
+    from datetime import datetime as _dt, timedelta
+    db = get_db()
+    _ensure_frontback_order_table(db)
+    where = []
+    args = []
+    if date_from:
+        where.append("bet_date >= ?")
+        args.append(date_from)
+    if date_to:
+        where.append("bet_date <= ?")
+        args.append(date_to)
+    w = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(f"SELECT * FROM frontback_order{w} ORDER BY bet_date", args).fetchall()
+    db.close()
+    settled = [r for r in rows if r["front_hit"] is not None]
+    n = len(settled)
+    total_invest = sum((r["front_invest"] or 0) + (r["back_invest"] or 0) for r in settled)
+    total_profit = sum((r["front_profit"] or 0) + (r["back_profit"] or 0) for r in settled)
+    front_hits = sum(1 for r in settled if r["front_hit"] == 1)
+    back_hits = sum(1 for r in settled if r["back_hit"] == 1)
+    monthly = {}
+    weekly = {}
+    for r in settled:
+        m = r["bet_date"][:7]
+        b = monthly.setdefault(m, {"periods": 0, "front_hits": 0, "back_hits": 0, "front_profit": 0, "back_profit": 0})
+        b["periods"] += 1
+        b["front_hits"] += 1 if r["front_hit"] == 1 else 0
+        b["back_hits"] += 1 if r["back_hit"] == 1 else 0
+        b["front_profit"] += r["front_profit"] or 0
+        b["back_profit"] += r["back_profit"] or 0
+        d = _dt.strptime(r["bet_date"], "%Y-%m-%d")
+        wk = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        ww = weekly.setdefault(wk, {"periods": 0, "front_hits": 0, "back_hits": 0, "front_profit": 0, "back_profit": 0})
+        ww["periods"] += 1
+        ww["front_hits"] += 1 if r["front_hit"] == 1 else 0
+        ww["back_hits"] += 1 if r["back_hit"] == 1 else 0
+        ww["front_profit"] += r["front_profit"] or 0
+        ww["back_profit"] += r["back_profit"] or 0
+    recent = [{
+        "date": r["bet_date"], "period": r["period"], "open": r["open_num"],
+        "front_hit": r["front_hit"], "back_hit": r["back_hit"],
+    } for r in settled[-20:]]
+    return {
+        "settled": n,
+        "total": {"invest": round(total_invest, 1), "profit": round(total_profit, 1),
+                  "roi": round(total_profit / total_invest * 100, 2) if total_invest else 0},
+        "front": {"hits": front_hits, "total": n,
+                  "hit_rate": round(front_hits / n * 100, 1) if n else 0,
+                  "profit": round(sum(r["front_profit"] or 0 for r in settled), 1)},
+        "back": {"hits": back_hits, "total": n,
+                 "hit_rate": round(back_hits / n * 100, 1) if n else 0,
+                 "profit": round(sum(r["back_profit"] or 0 for r in settled), 1)},
+        "monthly": monthly, "weekly": weekly, "recent": recent,
+    }
+
+
+def _frontback_ai_analysis(date_from="", date_to=""):
+    """调用 DeepSeek 分析台账：为什么正反都亏 + 月/周趋势 + 下一期预测。"""
+    import json as _json
+    import urllib.request
+    key = _load_deepseek_key()
+    if not key:
+        return {"ok": False, "error": "未配置 DeepSeek API Key"}
+    data = _frontback_ai_data(date_from, date_to)
+    if not data["settled"]:
+        return {"ok": False, "error": "该日期段无已结算数据"}
+
+    L = []
+    L.append("你是六合彩数据分析助手。以下是「前24号/后25号 真实下单台账」的历史数据。")
+    L.append("规则：每天买两组——前24号=当天被预测次数最多的24个号，后25号=其余25个号；每组每号5元、赔率47倍；命中赚(47-N)×5、未中亏N×5。")
+    L.append("")
+    L.append("【总结果】")
+    t, f, b = data["total"], data["front"], data["back"]
+    L.append(f"已结算 {data['settled']} 期；总投入 {t['invest']}，总盈亏 {t['profit']:+.2f}，总ROI {t['roi']}%。")
+    L.append(f"前24号：命中 {f['hits']}/{f['total']}（{f['hit_rate']}%），盈亏 {f['profit']:+.2f}。")
+    L.append(f"后25号：命中 {b['hits']}/{b['total']}（{b['hit_rate']}%），盈亏 {b['profit']:+.2f}。")
+    L.append("")
+    L.append("【按月趋势】")
+    for m in sorted(data["monthly"]):
+        mm = data["monthly"][m]
+        L.append(f"{m}：前24 命中{mm['front_hits']}/{mm['periods']} 盈亏{mm['front_profit']:+.0f}；后25 命中{mm['back_hits']}/{mm['periods']} 盈亏{mm['back_profit']:+.0f}")
+    L.append("")
+    L.append("【按周趋势】")
+    for wk in sorted(data["weekly"]):
+        ww = data["weekly"][wk]
+        L.append(f"{wk}：前24 命中{ww['front_hits']}/{ww['periods']} 盈亏{ww['front_profit']:+.0f}；后25 命中{ww['back_hits']}/{ww['periods']} 盈亏{ww['back_profit']:+.0f}")
+    L.append("")
+    L.append("【最近20期走势】")
+    for rc in data["recent"]:
+        fb = "前24" if rc["front_hit"] else ("后25" if rc["back_hit"] else "都不中")
+        L.append(f"{rc['date']} {rc['period']} 开{rc['open']} → {fb}")
+    L.append("")
+    L.append("请分点回答（简洁中文，250字内）：")
+    L.append("1. 为什么「正反买」（前24+后25 几乎覆盖全部49号）整体还是亏？从47赔率<49号的数学期望角度解释。")
+    L.append("2. 按月、按周的盈亏趋势，有无明显变差/变好的拐点。")
+    L.append("3. 预计下一期走势（前24还是后25更可能命中，或两者都纯随机无edge），诚实说明这只是历史概率、非投注建议。")
+    prompt = "\n".join(L)
+
+    body = _json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "stream": False,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    resp = _json.loads(urllib.request.urlopen(req, timeout=90).read())
+    content = resp["choices"][0]["message"]["content"]
+    return {"ok": True, "analysis": content}
+
+
+@app.get("/api/frontbackOrder/aiAnalysis")
+def frontback_order_ai(date_from: str = "", date_to: str = "", user=Header(None, alias="authorization")):
+    """前24/后25 台账 AI 分析（按钮触发）。"""
+    require_user(user)
+    try:
+        return _frontback_ai_analysis(date_from, date_to)
+    except Exception as e:
+        return {"ok": False, "error": f"AI 分析失败：{e}"}
+
+
+# ── 反向筹码真实下单台账（反向筹码 = 最大筹码 − 各号正向筹码，反追冷门号）──
+REVERSE_CHIP_PER = 5.0  # 每号基础下注金额（元）
+
+
+def _ensure_reverse_chip_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS reverse_chip_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE, period TEXT,
+      max_chip REAL, invest REAL,
+      nums TEXT,
+      open_num INTEGER,
+      hit INTEGER, win REAL, profit REAL,
+      open_rev_chip REAL,
+      create_time TEXT
+    )""")
+    # 兼容旧表：补 open_rev_chip 列
+    cols = [c[1] for c in db.execute("PRAGMA table_info(reverse_chip_order)")]
+    if "open_rev_chip" not in cols:
+        db.execute("ALTER TABLE reverse_chip_order ADD COLUMN open_rev_chip REAL")
+
+
+def _generate_reverse_chip_order():
+    """固化最新采集期的反向筹码下单：每号 rev_chip = 最大筹码 − count×5，反追冷门号。"""
+    db = get_db()
+    _ensure_reverse_chip_order_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d, period = row["draw_date"], row["period"]
+    cnt = _frontback_day_cnt(db, d)
+    if not cnt:
+        db.close()
+        return {"generated": 0, "date": d}
+    max_count = max(cnt.values())
+    max_chip = max_count * REVERSE_CHIP_PER
+    # 反向筹码 = (max_count - count) × 5；>0 的号才下单
+    rev_nums = sorted(n for n in range(1, 50) if (max_count - cnt.get(n, 0)) > 0)
+    invest = round(sum((max_count - cnt.get(n, 0)) * REVERSE_CHIP_PER for n in rev_nums), 2)
+    nums = '.'.join(f"{n:02d}" for n in rev_nums)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("""INSERT OR IGNORE INTO reverse_chip_order
+      (bet_date, period, max_chip, invest, nums, open_num, hit, win, profit, create_time)
+      VALUES (?,?,?,?,?,NULL,NULL,NULL,NULL,?)""",
+      (d, period, round(max_chip, 1), invest, nums, now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "max_chip": round(max_chip, 1), "invest": invest,
+            "num_count": len(rev_nums)}
+
+
+def _settle_reverse_chip_order():
+    """结算 pending 反向筹码下单（开奖已出）：命中赢 47×rev_chip(开奖号)，未中亏总投入。"""
+    db = get_db()
+    _ensure_reverse_chip_order_table(db)
+    pending = db.execute("SELECT id, bet_date, max_chip, invest, nums FROM reverse_chip_order WHERE hit IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        cnt = _frontback_day_cnt(db, p["bet_date"])
+        max_count = max(cnt.values()) if cnt else 0
+        rev_chip_open = (max_count - cnt.get(open_num, 0)) * REVERSE_CHIP_PER
+        hit = 1 if rev_chip_open > 0 else 0
+        win = round(47 * rev_chip_open, 2) if hit else 0.0
+        invest = p["invest"] or 0
+        profit = round(win - invest, 2)
+        db.execute("UPDATE reverse_chip_order SET open_num=?, hit=?, win=?, profit=?, open_rev_chip=? WHERE id=?",
+                   (open_num, hit, win, profit, round(rev_chip_open, 1), p["id"]))
+        settled += 1
+    db.commit()
+    db.close()
+    return settled
+
+
+def _reverse_chip_order_overview(date_from="", date_to=""):
+    """反向筹码下单台账：命中率/盈亏/ROI/连中连亏 + 逐月 + 逐笔。支持日期段过滤。"""
+    db = get_db()
+    _ensure_reverse_chip_order_table(db)
+    where = []
+    args = []
+    if date_from:
+        where.append("bet_date >= ?")
+        args.append(date_from)
+    if date_to:
+        where.append("bet_date <= ?")
+        args.append(date_to)
+    w = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(f"SELECT * FROM reverse_chip_order{w} ORDER BY bet_date", args).fetchall()
+    db.close()
+    settled = [r for r in rows if r["hit"] is not None]
+    n = len(settled)
+    hits = sum(1 for r in settled if r["hit"] == 1)
+    profit = round(sum(r["profit"] or 0 for r in settled), 2)
+    invest = round(sum(r["invest"] or 0 for r in settled), 2)
+    profits = [r["profit"] or 0 for r in settled]
+    cur = 0; max_hit = 0; max_miss = 0
+    for r in settled:
+        if r["hit"] == 1:
+            cur = cur + 1 if cur > 0 else 1
+            max_hit = max(max_hit, cur)
+        else:
+            cur = cur - 1 if cur < 0 else -1
+            max_miss = max(max_miss, -cur)
+    monthly = {}
+    for r in settled:
+        m = r["bet_date"][:7]
+        b = monthly.setdefault(m, {"periods": 0, "hits": 0, "profit": 0.0})
+        b["periods"] += 1
+        b["hits"] += 1 if r["hit"] == 1 else 0
+        b["profit"] += r["profit"] or 0
+    monthly_list = [{
+        "month": m, "periods": b["periods"], "hits": b["hits"],
+        "profit": round(b["profit"], 2),
+    } for m, b in sorted(monthly.items())]
+    return {
+        "per": REVERSE_CHIP_PER,
+        "date_from": date_from, "date_to": date_to,
+        "total_orders": len(rows),
+        "settled": n,
+        "summary": {
+            "hits": hits,
+            "hit_rate": round(hits / n * 100, 1) if n else 0,
+            "profit": profit,
+            "invest": invest,
+            "roi": round(profit / invest * 100, 2) if invest else 0,
+            "avg_profit": round(profit / n, 2) if n else 0,
+            "avg_invest": round(invest / n, 2) if n else 0,
+            "max_profit": round(max(profits), 2) if profits else 0,
+            "max_loss": round(min(profits), 2) if profits else 0,
+            "max_hit_streak": max_hit,
+            "max_miss_streak": max_miss,
+        },
+        "monthly": monthly_list,
+        "records": [dict(r) for r in reversed(rows)],
+    }
+
+
+@app.get("/api/reverseChipOrder")
+def reverse_chip_order(date_from: str = "", date_to: str = "", user=Header(None, alias="authorization")):
+    """反向筹码真实下单台账。支持日期段过滤。"""
+    require_user(user)
+    _settle_reverse_chip_order()
+    return _reverse_chip_order_overview(date_from, date_to)
+
+
+# ============================================================
 # 尾数跟踪（5-9尾 / 买同上期尾数，达朗贝尔±5 演算）
 # ============================================================
 def _compute_tail_track(start_date="2025-01-01", odds=47, base=5, step=5, chip_cap=70):
@@ -4009,6 +6455,10 @@ def _compute_tail_track(start_date="2025-01-01", odds=47, base=5, step=5, chip_c
     for t in range(5, 10):
         g1_nums.update(tail_map[t])
 
+    g_small_nums = set()
+    for t in range(5):
+        g_small_nums.update(tail_map[t])
+
     def run(strategy):
         chip = base
         daily = []
@@ -4024,7 +6474,11 @@ def _compute_tail_track(start_date="2025-01-01", odds=47, base=5, step=5, chip_c
                                   "hit": False, "chip": chip, "chip_after": chip, "profit": 0.0})
                     continue
                 prev_tail = int(rows[i - 1]["source_number"]) % 10
-                nums = set(tail_map[prev_tail])
+                if strategy == "g3":
+                    # 反向大小尾：上期小尾(0-4)→买大尾(5-9)；上期大尾(5-9)→买小尾(0-4)
+                    nums = g1_nums if prev_tail <= 4 else g_small_nums
+                else:
+                    nums = set(tail_map[prev_tail])
             N = len(nums)
             hit = open_num in nums
             chip_before = chip
@@ -4120,8 +6574,10 @@ def _compute_tail_track(start_date="2025-01-01", odds=47, base=5, step=5, chip_c
 
     g1_daily = run("g1")
     g2_daily = run("g2")
+    g3_daily = run("g3")
     g1_agg = aggregate(g1_daily)
     g2_agg = aggregate(g2_daily)
+    g3_agg = aggregate(g3_daily)
 
     return {
         "start_date": rows[0]["record_date"] if rows else "",
@@ -4133,6 +6589,9 @@ def _compute_tail_track(start_date="2025-01-01", odds=47, base=5, step=5, chip_c
         "g2": {"name": "买同上期尾数", "nums": [], "N": 0,
                "summary": g2_agg, "daily": g2_daily,
                "guide": guide(g2_daily, g2_agg, round(5 / 49 * 100, 1))},
+        "g3": {"name": "反向大小尾", "nums": [], "N": 0,
+               "summary": g3_agg, "daily": g3_daily,
+               "guide": guide(g3_daily, g3_agg, round(25 / 49 * 100, 1))},
     }
 
 
@@ -4310,6 +6769,377 @@ def tail_track_smart(start_date: str = "2025-01-01", user=Header(None, alias="au
     """尾数跟踪·智能演算：两种策略独立，连续失败3次停手、等待命中再恢复，依次循环。"""
     require_user(user)
     return _compute_tail_track_smart(start_date)
+
+
+# ============================================================
+# 号码跟踪（4家号码栏目 → 去重叠加 N×5 元 → 前24/后25 区分 → 逐期演算）
+# ============================================================
+def _parse_codes(v):
+    """号码列 '35.47.21' / '35 47 21' / '35-47-21' → [35,47,21]（限 1-49）。"""
+    if not v:
+        return []
+    s = str(v).strip().replace(" ", "").replace("，", ".").replace(",", ".")
+    nums = []
+    for tok in s.replace("-", ".").replace("、", ".").split("."):
+        tok = tok.strip()
+        if tok.isdigit():
+            n = int(tok)
+            if 1 <= n <= 49:
+                nums.append(n)
+    return nums
+
+
+def _zodiac_to_nums(zodiacs):
+    """生肖字符串 '蛇猪龙猴虎' → 对应号码列表（2026 马年 DEFAULT_ZODIAC）。"""
+    nums = []
+    for z in (zodiacs or ""):
+        nums.extend(DEFAULT_ZODIAC.get(z, []))
+    return nums
+
+
+def _size_to_nums(val):
+    v = (val or "").strip()
+    if v == "大":
+        return list(range(25, 50))
+    if v == "小":
+        return list(range(1, 25))
+    return []
+
+
+def _oddeven_to_nums(val):
+    v = (val or "").strip()
+    if v == "单":
+        return [n for n in range(1, 50) if n % 2 == 1]
+    if v == "双":
+        return [n for n in range(1, 50) if n % 2 == 0]
+    return []
+
+
+def _tail_to_nums(val):
+    """尾数（支持多尾 '0-1尾'/'0.4'）→ 对应号码列表。"""
+    if not val:
+        return []
+    tails = set()
+    for m in re.finditer(r"\d", str(val)):
+        tails.add(int(m.group()))
+    nums = set()
+    for t in tails:
+        nums.update(n for n in range(1, 50) if n % 10 == t)
+    return sorted(nums)
+
+
+def _jaye_to_nums(val):
+    """家野 '野兽'/'家禽'/'家畜' → 对应生肖号码列表。"""
+    v = (val or "").strip()
+    if v == "野兽":
+        zodiacs = _ANIMAL.get("野兽", [])
+    elif v in ("家禽", "家畜"):
+        zodiacs = _ANIMAL.get("家禽", [])
+    else:
+        return []
+    nums = []
+    for z in zodiacs:
+        nums.extend(DEFAULT_ZODIAC.get(z, []))
+    return nums
+
+
+def _expand_field_nums(field, value, kind):
+    """按字段类型把字段值展开为号码列表。"""
+    if kind == "codes":
+        return _parse_codes(value)
+    if kind == "zodiac":
+        return _zodiac_to_nums(value)
+    if kind == "size":
+        return _size_to_nums(value)
+    if kind == "oddeven":
+        return _oddeven_to_nums(value)
+    if kind == "tail":
+        return _tail_to_nums(value)
+    if kind == "jaye":
+        return _jaye_to_nums(value)
+    return []
+
+
+# (field, label, fam, expect, kind)  kind: codes=号码 / zodiac=生肖 / size=大小 / oddeven=单双 / tail=尾数
+NUM_TRACK_FIELDS = [
+    ("gui_codes10", "鬼十码", "鬼谷子", 10, "codes"),
+    ("dajia_codes10", "大家十码", "大家发", 10, "codes"),
+    ("zhuge_codes4", "诸葛四码", "诸葛亮", 4, "codes"),
+    ("zhuge_codes10", "诸葛十码", "诸葛亮", 10, "codes"),
+    ("haoyun_81", "好运八一", "好运通", 8, "codes"),
+    ("haoyun_82", "好运八二", "好运通", 8, "codes"),
+    ("haoyun_83", "好运八三", "好运通", 8, "codes"),
+    ("haoyun_84", "好运八四", "好运通", 8, "codes"),
+    ("gui_zodiac5", "鬼五肖", "鬼谷子", 5, "zodiac"),
+    ("gui_size", "大小", "鬼谷子", 2, "size"),
+    ("gui_oddeven", "单双", "鬼谷子", 2, "oddeven"),
+    ("gui_pingte_zodiac1", "平特一肖", "鬼谷子", 1, "zodiac"),
+    ("gui_pingte_tail", "平特一尾", "鬼谷子", 1, "tail"),
+    # 大家发
+    ("dajia_pingte_zodiac1", "大家平特一肖", "大家发", 1, "zodiac"),
+    ("dajia_codes24", "大家24码", "大家发", 24, "codes"),
+    ("dajia_jaye", "大家家野", "大家发", 1, "jaye"),
+    ("dajia_sixiao3q", "大家三期四肖", "大家发", 4, "zodiac"),
+    # 诸葛亮
+    ("zhuge_tail2", "诸葛二尾", "诸葛亮", 2, "tail"),
+    ("zhuge_zodiac2", "诸葛二肖", "诸葛亮", 2, "zodiac"),
+    ("zhuge_zodiac5", "诸葛五肖", "诸葛亮", 5, "zodiac"),
+    ("zhuge_zodiac3", "诸葛三肖", "诸葛亮", 3, "zodiac"),
+    ("zhuge_pingte_tail", "诸葛平特一尾", "诸葛亮", 1, "tail"),
+    ("zhuge_size", "诸葛大小中特", "诸葛亮", 1, "size"),
+    # 好运通
+    ("haoyun_zodiac5", "好运五肖", "好运通", 5, "zodiac"),
+    ("haoyun_zodiac1", "好运一肖", "好运通", 1, "zodiac"),
+    ("haoyun_codes6", "好运六码", "好运通", 6, "codes"),
+    ("haoyun_codes5", "好运五码", "好运通", 5, "codes"),
+    ("haoyun_codes24", "好运24码", "好运通", 24, "codes"),
+]
+
+
+def _compute_num_track(start_date="2026-05-04", bet=5.0, odds=47):
+    """号码跟踪演算：4家8个号码栏目，每期解析号码，统计每号被预测次数 N，
+    每号投 N×bet 元（叠加），命中开奖号赢 odds×bet×N，未中亏全部投入。
+    区分前24号（筹码最多24号）/后25号（其余号码），逐期演算 + 汇总。"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM multi_group_summary WHERE draw_date >= ? ORDER BY draw_date",
+        (start_date,),
+    ).fetchall()
+    open_map = {r["record_date"]: int(r["source_number"])
+                for r in db.execute("SELECT record_date, source_number FROM number_knowledge_record "
+                                    "WHERE source_number IS NOT NULL").fetchall()}
+    db.close()
+
+    daily = []
+    total_invest = 0.0
+    total_win = 0.0
+    hit_count = 0
+    cum = 0.0
+    for row in rows:
+        d = row["draw_date"]
+        cnt = {}
+        for f, label, fam, expect, kind in NUM_TRACK_FIELDS:
+            for n in _expand_field_nums(f, row[f], kind):
+                cnt[n] = cnt.get(n, 0) + 1
+        if not cnt:
+            continue
+        picks = sorted(cnt.keys())
+        N_picks = len(picks)
+        invest = sum(c * bet for c in cnt.values())
+        open_num = open_map.get(d)
+        # 前24/后25 按筹码（count）降序分组：前24=筹码最多24号，后25=其余25号（含count=0）
+        ranked = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
+        front_items = ranked[:24]
+        front_set = {n for n, c in front_items}
+        front_n = len(front_items)
+        back_n = 49 - front_n   # 其余号码（含 count=0），共 49-前24 个
+        # 每组（栏目）各5元 → 汇总后每号按被预测次数 N×5 叠加；前24/后25 统一此口径
+        front_invest = sum(c * bet for n, c in front_items)
+        back_invest = sum(c * bet for n, c in ranked[24:])
+        pending = open_num is None
+        if pending:
+            # 开奖结果未出：pnl=None 待开，不计入结算统计，cum 保持上期累计值
+            daily.append({
+                "date": d, "period": row["period"], "N": N_picks,
+                "invest": round(invest, 1), "open": None, "side": "",
+                "pending": True, "hit": False, "pnl": None, "cum": round(cum, 1),
+                "front_n": front_n, "back_n": back_n,
+                "front_invest": round(front_invest, 1), "back_invest": round(back_invest, 1),
+                "picks": picks,
+            })
+            continue
+        hit = open_num in cnt
+        win = odds * bet * cnt[open_num] if hit else 0.0
+        pnl = win - invest
+        cum += pnl
+        total_invest += invest
+        total_win += win
+        if hit:
+            hit_count += 1
+        side = "前24" if open_num in front_set else "后25"
+        # 前24号/后25号 各自独立下单盈亏（N×5 叠加：每组5元，命中赢 47×count×5）
+        back_set = {n for n in range(1, 50) if n not in front_set}
+        front_pnl = (win - front_invest) if open_num in front_set else (-front_invest)
+        back_pnl = (win - back_invest) if open_num in back_set else (-back_invest)
+        daily.append({
+            "date": d, "period": row["period"], "N": N_picks,
+            "invest": round(invest, 1), "open": open_num, "side": side,
+            "pending": False, "hit": hit, "pnl": round(pnl, 1), "cum": round(cum, 1),
+            "front_n": front_n, "back_n": back_n,
+            "front_invest": round(front_invest, 1), "back_invest": round(back_invest, 1),
+            "front_pnl": round(front_pnl, 1), "back_pnl": round(back_pnl, 1),
+            "picks": picks,
+        })
+
+    settled = [x for x in daily if not x.get("pending")]
+    periods = len(settled)
+    front_hit = sum(1 for x in settled if x["side"] == "前24")
+    front_total = sum(1 for x in settled if x["side"] == "前24")
+    back_hit = sum(1 for x in settled if x["side"] == "后25")
+    back_total = sum(1 for x in settled if x["side"] == "后25")
+    front_pnl = round(sum(x["front_pnl"] for x in settled), 1)
+    back_pnl = round(sum(x["back_pnl"] for x in settled), 1)
+    front_total_invest = round(sum(x["front_invest"] for x in settled), 1)
+    back_total_invest = round(sum(x["back_invest"] for x in settled), 1)
+
+    # 按被预测次数 N 的命中分布
+    n_hit = {}
+    n_total = {}
+    for row in rows:
+        cnt = {}
+        for f, label, fam, expect, kind in NUM_TRACK_FIELDS:
+            for n in _expand_field_nums(f, row[f], kind):
+                cnt[n] = cnt.get(n, 0) + 1
+        on = open_map.get(row["draw_date"])
+        for num, c in cnt.items():
+            n_total[c] = n_total.get(c, 0) + 1
+            if on == num:
+                n_hit[c] = n_hit.get(c, 0) + 1
+    n_dist = []
+    for c in sorted(n_total):
+        if n_total[c] >= 10:
+            n_dist.append({"n": c, "hits": n_hit.get(c, 0), "total": n_total[c],
+                           "rate": round(n_hit.get(c, 0) / n_total[c] * 100, 1)})
+
+    monthly = {}
+    for x in daily:
+        if x.get("pending"):
+            continue
+        m = x["date"][:7]
+        monthly.setdefault(m, {"month": m, "invest": 0.0, "pnl": 0.0, "hits": 0, "periods": 0,
+                               "front_pnl": 0.0, "back_pnl": 0.0,
+                               "front_hits": 0, "back_hits": 0, "front_periods": 0, "back_periods": 0})
+        monthly[m]["invest"] += x["invest"]
+        monthly[m]["pnl"] += x["pnl"]
+        monthly[m]["hits"] += 1 if x["hit"] else 0
+        monthly[m]["periods"] += 1
+        monthly[m]["front_pnl"] += x["front_pnl"]
+        monthly[m]["back_pnl"] += x["back_pnl"]
+        if x["side"] == "前24":
+            monthly[m]["front_hits"] += 1
+            monthly[m]["front_periods"] += 1
+        elif x["side"] == "后25":
+            monthly[m]["back_hits"] += 1
+            monthly[m]["back_periods"] += 1
+    monthly = [monthly[m] for m in sorted(monthly)]
+    for m in monthly:
+        m["invest"] = round(m["invest"], 1)
+        m["pnl"] = round(m["pnl"], 1)
+        m["hit_rate"] = round(m["hits"] / m["periods"] * 100, 1) if m["periods"] else 0.0
+        m["front_pnl"] = round(m["front_pnl"], 1)
+        m["back_pnl"] = round(m["back_pnl"], 1)
+        m["front_hit_rate"] = round(m["front_hits"] / m["front_periods"] * 100, 1) if m["front_periods"] else 0.0
+        m["back_hit_rate"] = round(m["back_hits"] / m["back_periods"] * 100, 1) if m["back_periods"] else 0.0
+
+    # 逐期列表倒序：最新期排在最上方（cum 为累计值，倒序后显示为最新→最早递减）
+    daily.reverse()
+
+    return {
+        "start_date": rows[0]["draw_date"] if rows else "",
+        "end_date": rows[-1]["draw_date"] if rows else "",
+        "bet": bet, "odds": odds,
+        "fields": [{"field": f, "label": l, "fam": fam, "expect": e, "kind": k} for f, l, fam, e, k in NUM_TRACK_FIELDS],
+        "summary": {
+            "periods": periods, "hits": hit_count,
+            "hit_rate": round(hit_count / periods * 100, 1) if periods else 0.0,
+            "total_invest": round(total_invest, 1), "total_win": round(total_win, 1),
+            "net": round(total_win - total_invest, 1),
+            "avg_picks": round(sum(x["N"] for x in settled) / periods, 1) if periods else 0,
+            "avg_invest": round(total_invest / periods, 1) if periods else 0,
+            "front_hit_rate": round(front_hit / periods * 100, 1) if periods else 0.0,
+            "back_hit_rate": round(back_hit / periods * 100, 1) if periods else 0.0,
+            "front_hits": front_hit, "front_total": front_total,
+            "back_hits": back_hit, "back_total": back_total,
+            "front_pnl": front_pnl, "back_pnl": back_pnl,
+            "front_total_invest": front_total_invest, "back_total_invest": back_total_invest,
+        },
+        "n_dist": n_dist,
+        "monthly": monthly,
+        "daily": daily,
+    }
+
+
+@app.get("/api/numTrack/calc")
+def num_track_calc(start_date: str = "2026-05-04", bet: float = 5.0, user=Header(None, alias="authorization")):
+    """号码跟踪演算：4家号码栏目 N×bet 叠加 → 前24/后25 区分 → 逐期列表 + 汇总。"""
+    require_user(user)
+    return _compute_num_track(start_date, bet=bet)
+
+
+@app.get("/api/numTrack/daily")
+def num_track_daily(date: str, user=Header(None, alias="authorization")):
+    """按日期查询号码跟踪分组明细：8 栏目号码 + 每号被预测次数/来源 + 前24/后25 分组 + 开奖结果。"""
+    require_user(user)
+    db = get_db()
+    row = db.execute("SELECT * FROM multi_group_summary WHERE draw_date = ?", (date,)).fetchone()
+    open_row = db.execute(
+        "SELECT source_number, tail_number FROM number_knowledge_record "
+        "WHERE record_date = ? AND status=1", (date,)).fetchone()
+    db.close()
+    if not row:
+        return {"date": date, "found": False}
+
+    fields = []
+    count_map = {}
+    source_map = {}
+    for f, label, fam, expect, kind in NUM_TRACK_FIELDS:
+        nums = _expand_field_nums(f, row[f], kind)
+        fields.append({"label": label, "fam": fam, "expect": expect, "kind": kind, "nums": nums})
+        for n in nums:
+            count_map[n] = count_map.get(n, 0) + 1
+            source_map.setdefault(n, []).append(label)
+
+    open_num = int(open_row["source_number"]) if open_row and open_row["source_number"] is not None else None
+    open_tail = int(open_row["tail_number"]) if open_row and open_row["tail_number"] is not None else None
+
+    bet = 5.0
+    odds = 47
+    invest = sum(c * bet for c in count_map.values())
+    pending = open_num is None
+    hit = open_num is not None and open_num in count_map
+    win = odds * bet * count_map[open_num] if hit else 0.0
+    pnl = None if pending else round(win - invest, 1)
+
+    picks_sorted = sorted(count_map.items(), key=lambda kv: (-kv[1], kv[0]))
+    ranked_nums = [n for n, c in picks_sorted]
+    front_nums = ranked_nums[:24]   # 筹码（被预测次数 count）最多的前24号
+    front_set = set(front_nums)
+    back_nums = [n for n in range(1, 50) if n not in front_set]   # 其余号码（含 count=0），共 25 个
+    front_invest = sum(count_map[n] * bet for n in front_nums)
+    back_invest = sum(count_map.get(n, 0) * bet for n in back_nums)
+
+    # 当期 1-49 全号筹码表（每号 count 次 → 筹码 = count × bet 元）
+    # 反向筹码 rev_chip = 最大筹码 - 当前筹码（原重仓号反向后变轻，原轻仓号反向后变重）
+    max_chip = max((count_map.get(n, 0) * bet for n in range(1, 50)), default=0.0)
+    all49 = [{
+        "num": n,
+        "count": count_map.get(n, 0),
+        "chip": round(count_map.get(n, 0) * bet, 1),
+        "rev_chip": round(max_chip - count_map.get(n, 0) * bet, 1),
+        "in_front": n in front_set,
+    } for n in range(1, 50)]
+
+    return {
+        "date": date,
+        "found": True,
+        "period": row["period"],
+        "open": open_num,
+        "open_tail": open_tail,
+        "pending": pending,
+        "hit": hit,
+        "bet": bet, "odds": odds,
+        "max_chip": round(max_chip, 1),
+        "fields": fields,
+        "picks_sorted": [{"num": n, "count": c, "sources": source_map[n]} for n, c in picks_sorted],
+        "all49": all49,
+        "front24": [{"num": n, "count": count_map[n], "sources": source_map[n]} for n in front_nums],
+        "back25": [{"num": n, "count": count_map.get(n, 0), "sources": source_map.get(n, [])} for n in back_nums],
+        "front_invest": round(front_invest, 1),
+        "back_invest": round(back_invest, 1),
+        "total_invest": round(invest, 1),
+        "win": round(win, 1),
+        "pnl": pnl,
+    }
 
 
 @app.post("/api/strategyOrder/place")
@@ -5712,6 +8542,30 @@ MULTI_GROUP_COLS = [
     ("haoyun_codes24", "好运24码", "好运", "codes", 24),
     ("haoyun_codes16", "好运16码", "好运", "codes", 16),
     ("haoyun_santou", "好运三头", "好运", "head", 3),
+    # ── 风云站（澳门风云 49315.com，2026-09-20 从多组汇总2迁入）──
+    ("fengyun_codes1", "风云①码", "风云", "codes", 1),
+    ("fengyun_codes5", "风云⑤码", "风云", "codes", 5),
+    ("fengyun_codes10", "风云⑩码", "风云", "codes", 10),
+    ("fengyun_zodiac1", "风云一肖", "风云", "zodiac", 1),
+    ("fengyun_zodiac2", "风云二肖", "风云", "zodiac", 2),
+    ("fengyun_zodiac3", "风云三肖", "风云", "zodiac", 3),
+    ("fengyun_zodiac4", "风云四肖", "风云", "zodiac", 4),
+    ("fengyun_zodiac5", "风云五肖", "风云", "zodiac", 5),
+    ("fengyun_zodiac6", "风云六肖", "风云", "zodiac", 6),
+    ("fengyun_zodiac7", "风云七肖", "风云", "zodiac", 7),
+    ("fengyun_zodiac9", "风云九肖", "风云", "zodiac", 9),
+    ("fengyun_shengsuan3", "风云神算③肖", "风云", "zodiac", 3),
+    ("fengyun_pingte1", "风云平特一肖", "风云", "zodiac", 1),
+    ("fengyun_wave1", "风云波一", "风云", "wave", 1),
+    ("fengyun_wave2", "风云波二", "风云", "wave", 1),
+    ("fengyun_jinpai6", "风云金牌⑥肖", "风云", "zodiac", 6),
+    ("fengyun_sanqi3", "风云三期必开", "风云", "zodiac", 3),
+    ("fengyun_touzi6", "风云投资六码", "风云", "codes", 6),
+    ("fengyun_wei4", "风云④尾", "风云", "tail", 4),
+    ("fengyun_wei4_codes", "风云④尾⑧码", "风云", "codes", 8),
+    ("fengyun_size", "风云大小中特", "风云", "size", 1),
+    ("fengyun_danshuang", "风云单双", "风云", "oddeven", 1),
+    ("fengyun_danshuang3", "风云单双主三肖", "风云", "zodiac", 3),
 ]
 
 MULTI_GROUP_CONSTRAINTS = {
@@ -5957,7 +8811,7 @@ def multi_group_hit_rate(user=Header(None, alias="authorization")):
         return 0.0
 
     result = []
-    for fam in ["鬼", "大家", "诸葛", "好运"]:
+    for fam in ["鬼", "大家", "诸葛", "好运", "风云"]:
         cols = []
         for c in fam_cols.get(fam, []):
             total = c["total"]
@@ -5981,6 +8835,24 @@ def multi_group_hit_rate(user=Header(None, alias="authorization")):
 MULTI_GROUP2_COLS = [
     ("nezha_zodiac8", "哪吒八肖", "哪吒", "zodiac", 8),
     ("nezha_tail5", "哪吒五尾", "哪吒", "tail", 5),
+    # ── 哪吒采集器新增字段（①肖①码中特系列 + 三头/绝杀/前后/七肖中特/内幕/13码）──
+    ("nezha_zodiac7", "哪吒七肖", "哪吒", "zodiac", 7),
+    ("nezha_zodiac6", "哪吒六肖", "哪吒", "zodiac", 6),
+    ("nezha_zodiac4", "哪吒四肖", "哪吒", "zodiac", 4),
+    ("nezha_zodiac3", "哪吒三肖", "哪吒", "zodiac", 3),
+    ("nezha_zodiac2", "哪吒二肖", "哪吒", "zodiac", 2),
+    ("nezha_zodiac1", "哪吒一肖", "哪吒", "zodiac", 1),
+    ("nezha_codes1", "哪吒①码", "哪吒", "codes", 1),
+    ("nezha_codes3", "哪吒③码", "哪吒", "codes", 3),
+    ("nezha_codes5", "哪吒⑤码", "哪吒", "codes", 5),
+    ("nezha_codes10", "哪吒⑩码", "哪吒", "codes", 10),
+    ("nezha_santou", "哪吒三头", "哪吒", "head", 3),
+    ("nezha_juesha3", "哪吒绝杀三肖", "哪吒", "zodiac", 3),
+    ("nezha_qianhou3", "哪吒前后主三肖", "哪吒", "zodiac", 3),
+    ("nezha_qianhou6", "哪吒前后主六码", "哪吒", "codes", 6),
+    ("nezha_qizhong7", "哪吒七肖中特", "哪吒", "zodiac", 7),
+    ("nezha_neimu1", "哪吒内幕平特", "哪吒", "zodiac", 1),
+    ("nezha_codes13", "哪吒5期13码", "哪吒", "codes", 13),
     ("zhongte_wave1", "中特波一", "中特", "wave", 1),
     ("zhongte_wave2", "中特波二", "中特", "wave", 1),
     ("zhongte_codes6", "中特六码", "中特", "codes", 6),
@@ -6054,11 +8926,24 @@ MULTI_GROUP2_COLS = [
     ("jubao_codes12", "聚宝12码", "聚宝", "codes", 12),
     ("jubao_santou", "聚宝三头", "聚宝", "head", 3),
     ("jubao_codes16", "聚宝16码", "聚宝", "codes", 16),
+    # ── 大赢站『头条内幕』栏目（#toubu18）──
+    ("daying_zodiac7", "大赢七肖", "大赢", "zodiac", 7),
+    ("daying_codes7", "大赢7码", "大赢", "codes", 7),
+    ("daying_zodiac4", "大赢四肖", "大赢", "zodiac", 4),
+    ("daying_codes5", "大赢5码", "大赢", "codes", 5),
+    ("daying_zodiac2", "大赢二肖", "大赢", "zodiac", 2),
+    ("daying_codes3", "大赢3码", "大赢", "codes", 3),
+    ("daying_neimu", "大赢内部赠送", "大赢", "zodiac", 1),
+    # ── 大赢站『最牛好料·大赢家单双』+『站长推荐·金牌家野』栏目 ──
+    ("daying_danshuang", "大赢单双", "大赢", "oddeven", 1),
+    ("daying_danshuang_zodiac2", "大赢单双两肖", "大赢", "zodiac", 2),
+    ("daying_jiaye", "大赢家野", "大赢", "jaye", 1),
+    ("daying_jiaye_zodiac2", "大赢家野两肖", "大赢", "zodiac", 2),
 ]
 
 # 随机基准：生肖按实际覆盖生肖数/12、号码按实际号码数/49、尾数按实际尾数/10；
 # 大小/单双 = 25/49、波色 = 17/49（与 V1 口径一致）。
-MULTI_GROUP2_FAMILIES = ["哪吒", "中特", "金算", "聚宝", "米老"]
+MULTI_GROUP2_FAMILIES = ["哪吒", "中特", "金算", "聚宝", "米老", "大赢"]
 
 
 @app.get("/api/multiGroup2/meta")
@@ -7008,6 +9893,9 @@ V2_SITE_NAMES = {
     "jinsuan": "金算",
     "jubao": "聚宝",
     "milao": "米老",
+    "nezha": "哪吒",
+    "daying": "大赢",
+    "fengyun": "风云",
 }
 
 
@@ -7027,7 +9915,7 @@ def fetch_site(site_key, target_period=None):
         # V2 站点：CDP 采集 → multi_group_summary2
         if site_key in V2_SITE_NAMES:
             import fetch_predict
-            r = fetch_predict.fetch_and_save(V2_SITE_NAMES[site_key], cfg["url"].strip(), target_period=target_period)
+            r = fetch_predict.fetch_and_save(V2_SITE_NAMES[site_key], cfg["url"].strip(), force_period=target_period)
             status = r.get("status", "fail")
             detail = (f"入库成功 期数={r.get('period')} 字段={len(r.get('fields', {}))}"
                       if status == "ok" else r.get("error", ""))
@@ -7067,6 +9955,15 @@ def fetch_site(site_key, target_period=None):
 _scheduler = None
 
 
+def _close_cdp():
+    """批量/单次采集结束后优雅关闭 CDP 实例（Browser.close，不影响用户其它 Edge）。"""
+    try:
+        import fetch_predict
+        fetch_predict.close_cdp()
+    except Exception:
+        pass
+
+
 def _scheduled_fetch(site_keys):
     """定时批量采集。"""
     for sk in site_keys:
@@ -7074,6 +9971,7 @@ def _scheduled_fetch(site_keys):
             fetch_site(sk)
         except Exception:
             pass
+    _close_cdp()
 
 
 def reload_scheduler():
@@ -7166,7 +10064,9 @@ def predict_site_fetch(body: dict, user=Header(None, alias="authorization")):
             period = int(str(period).strip())
         except (ValueError, TypeError):
             period = None
-    return fetch_site(site_key, target_period=period)
+    r = fetch_site(site_key, target_period=period)
+    _close_cdp()
+    return r
 
 
 @app.post("/api/predictSite/fetchAll")
@@ -7177,6 +10077,7 @@ def predict_site_fetch_all(user=Header(None, alias="authorization")):
     sites = db.execute("SELECT site_key FROM predict_site_config WHERE enabled=1").fetchall()
     db.close()
     results = [fetch_site(s["site_key"]) for s in sites]
+    _close_cdp()
     ok = sum(1 for r in results if r.get("status") == "ok")
     return {"ok": ok, "total": len(results), "results": results}
 

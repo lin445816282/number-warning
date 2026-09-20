@@ -5,13 +5,64 @@
 采集目标 = 下一期（最新开奖期 + 1）的预测值；占位符字段跳过。
 哪吒/米老有滑块验证码，暂不支持（待后续）。
 """
-import json, time, re, sqlite3, os, urllib.request, urllib.parse
+import json, time, re, sqlite3, os, subprocess, urllib.request, urllib.parse
 import websocket
 from datetime import date, timedelta
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE, "data", "number_warning.db")
 CDP_HTTP = "http://172.23.128.1:9224"
+RESTART_PS1 = r"C:\Temp\restart_cdp_nw.ps1"
+
+
+def ensure_cdp(timeout=3):
+    """确保 CDP Edge 实例存活：9224 不通则拉起独立实例（幂等）。返回 True/False。"""
+    try:
+        urllib.request.urlopen(CDP_HTTP + "/json/version", timeout=timeout)
+        return True
+    except Exception:
+        pass
+    # 拉起独立 CDP 实例（不 taskkill，9222 已监听则脚本内跳过）
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", RESTART_PS1],
+            capture_output=True, timeout=60,
+        )
+    except Exception:
+        pass
+    # 等 Edge 就绪（最多 ~14 秒）
+    for _ in range(7):
+        try:
+            urllib.request.urlopen(CDP_HTTP + "/json/version", timeout=3)
+            return True
+        except Exception:
+            time.sleep(2)
+    return False
+
+
+def close_cdp():
+    """Browser.close 优雅关闭 CDP 实例（只关独立实例，不影响用户其它 Edge 窗口）。"""
+    try:
+        req = urllib.request.Request(CDP_HTTP + "/json/version", method="GET")
+        info = json.loads(urllib.request.urlopen(req, timeout=5).read())
+        ws_url = info.get("webSocketDebuggerUrl")
+        if not ws_url:
+            return False
+        ws = websocket.create_connection(ws_url, timeout=10, suppress_origin=True)
+        ws.send(json.dumps({"id": 1, "method": "Browser.close"}))
+        # Browser.close 后连接会断开，recv/close 抛异常属正常，send 成功即视为已关闭
+        try:
+            ws.recv()
+        except Exception:
+            pass
+        try:
+            ws.close()
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
 
 ZODIACS = "鼠牛虎兔龙蛇马羊猴鸡狗猪"
 WAVES = {"红波": "红", "蓝波": "蓝", "绿波": "绿"}
@@ -97,6 +148,12 @@ def target_period(text):
 def milao_target_period(text):
     """米老站目标期：'第X期' 最大值（开奖播报区标题，避开栏目期号/占位符）。"""
     nums = [int(n) for n in re.findall(r'第(\d+)期', text)]
+    return max(nums) if nums else 0
+
+
+def fengyun_target_period(text):
+    """风云站目标期：'X期;①码' 最大值（一肖一码系列只有真实值期才有①码，占位期无）。"""
+    nums = [int(n) for n in re.findall(r'(\d+)期;①码', text)]
     return max(nums) if nums else 0
 
 
@@ -438,11 +495,210 @@ def parse_milao(text, t):
     return f
 
 
+def parse_nezha(text, t):
+    """哪吒站 parser：①肖①码中特系列（七肖~一肖 + ①③⑤⑩码）/ 八肖 / 五尾 / 三头 / 绝杀三肖 / 前后主六码 / 七肖中特 / 内幕平特 / 5期13码。"""
+    f = {}
+    Z = ZODIACS
+    # 八肖：60100【三太子】八肖挑战全网！\n261期:【蛇狗龙马鸡猴鼠牛】
+    m = re.search(rf'{t}期[:：]【([{Z}]{{8}})】', text)
+    if m and not is_placeholder(m.group(1)):
+        f['nezha_zodiac8'] = m.group(1)
+    # 五尾：哪吒【五尾中特】60100.com\n261期:五尾【2.9.7.3.4尾】
+    m = re.search(rf'{t}期[:：]五尾【([0-9.]+尾)】', text)
+    if m:
+        tails = re.findall(r'\d', m.group(1))
+        if len(tails) == 5:
+            f['nezha_tail5'] = '.'.join(tails) + '尾'
+    # ── ①肖①码中特系列（tab 分隔：七肖~一肖 + ①③⑤⑩码）──
+    for field, name, expect in [
+        ('nezha_zodiac7', '七肖', 7), ('nezha_zodiac6', '六肖', 6),
+        ('nezha_zodiac4', '四肖', 4), ('nezha_zodiac3', '三肖', 3),
+        ('nezha_zodiac2', '二肖', 2), ('nezha_zodiac1', '一肖', 1),
+    ]:
+        m = re.search(rf'{t}期{name}[\t ]+([{Z}]+)', text)
+        if m and not is_placeholder(m.group(1)):
+            f[field] = m.group(1)
+    m = re.search(rf'{t}期①码[\t ]+(\d+)', text)
+    if m:
+        f['nezha_codes1'] = f"{int(m.group(1)):02d}"
+    for field, mark in [('nezha_codes3', '③码'), ('nezha_codes5', '⑤码')]:
+        m = re.search(rf'{t}期{mark}[\t ]+([\d.]+)', text)
+        if m:
+            c = extract_codes(m.group(1))
+            if c:
+                f[field] = c
+    # ⑩码跨两行：261期⑩码\t48.12.27.15.20\n44.11.35.25.49\t开:？00
+    m = re.search(rf'{t}期⑩码[\t ]+([\d.]+)\s*\n([\d.]+)', text)
+    if m:
+        c = extract_codes(m.group(1) + ' ' + m.group(2))
+        if len(c.split('.')) == 10:
+            f['nezha_codes10'] = c
+    # 三头中特：261期:三头中特【1.4.2头】
+    m = re.search(rf'{t}期[:：]三头中特【([\d.]+)头】', text)
+    if m:
+        heads = re.findall(r'\d', m.group(1))
+        if heads:
+            f['nezha_santou'] = '.'.join(heads)
+    # 绝杀三肖：261期:绝杀三肖【牛马猴】
+    m = re.search(rf'{t}期[:：]绝杀三肖【([{Z}]+)】', text)
+    if m and not is_placeholder(m.group(1)):
+        f['nezha_juesha3'] = m.group(1)
+    # 前后主六码：261期:【前后中特】…主三肖【马狗羊】…精选六码【13.49.09.33.48.24】
+    m = re.search(rf'{t}期[:：]【前后中特】.*?主三肖【([{Z}]+)】', text, re.DOTALL)
+    if m and not is_placeholder(m.group(1)):
+        f['nezha_qianhou3'] = m.group(1)
+    m = re.search(rf'{t}期[:：]【前后中特】.*?精选六码【([\d.]+)】', text, re.DOTALL)
+    if m:
+        c = extract_codes(m.group(1))
+        if c:
+            f['nezha_qianhou6'] = c
+    # 七肖中特（独立栏目）：261期:七肖【龙鸡猪狗牛虎鼠】
+    m = re.search(rf'{t}期[:：]七肖【([{Z}]+)】', text)
+    if m and not is_placeholder(m.group(1)):
+        f['nezha_qizhong7'] = m.group(1)
+    # 内幕平特：261期内幕平特【狗】下900万
+    m = re.search(rf'{t}期内幕平特【([{Z}])】', text)
+    if m:
+        f['nezha_neimu1'] = m.group(1)
+    # 5期13码：本轮257期至261期:开: 1期\n01.03.05.07.12.13\n15.28.32.33.34.41.43
+    for m in re.finditer(r'本轮(\d+)期至(\d+)期[^\n]*\n([\d.]+)\n([\d.]+)', text):
+        x, y = int(m.group(1)), int(m.group(2))
+        if x <= t <= y:
+            c = extract_codes(m.group(3) + ' ' + m.group(4))
+            if len(c.split('.')) == 13:
+                f['nezha_codes13'] = c
+                break
+    return f
+
+
+def parse_fengyun(text, t):
+    """风云站（澳门风云 49315.com，hash 路由 JS 渲染）：22 字段。
+    一肖一码系列（①⑤⑩码 + 一~九肖）+ 神算③肖/平特一肖/精选波色/金牌⑥肖/
+    三期必开/投资六码/④尾⑧码/大小中特/单双主③肖。"""
+    f = {}
+    Z = ZODIACS
+    # ── 一肖一码系列 ──
+    m = re.search(rf'{t}期;①码\s+([\d.]+)', text)
+    if m:
+        c = extract_codes(m.group(1))
+        if c:
+            f['fengyun_codes1'] = c
+    m = re.search(rf'{t}期;⑤码\s+([\d.]+)', text)
+    if m:
+        c = extract_codes(m.group(1))
+        if c:
+            f['fengyun_codes5'] = c
+    m = re.search(rf'{t}期;⑩码\s+([\d.]+)', text)
+    if m:
+        c = extract_codes(m.group(1))
+        if c:
+            f['fengyun_codes10'] = c
+    for cn, field in [('一', 'fengyun_zodiac1'), ('二', 'fengyun_zodiac2'), ('三', 'fengyun_zodiac3'),
+                      ('四', 'fengyun_zodiac4'), ('五', 'fengyun_zodiac5'), ('六', 'fengyun_zodiac6'),
+                      ('七', 'fengyun_zodiac7'), ('九', 'fengyun_zodiac9')]:
+        m = re.search(rf'{t}期;{cn}肖\s+([{Z}]+)', text)
+        if m:
+            f[field] = m.group(1)
+    # ── 神算③肖 ──
+    m = re.search(rf'{t}期-神算③肖【([{Z}]+)】', text)
+    if m:
+        f['fengyun_shengsuan3'] = m.group(1)
+    # ── 平特一肖 ──
+    m = re.search(rf'{t}期;平特①肖【([{Z}]+)】', text)
+    if m:
+        f['fengyun_pingte1'] = m.group(1)[0]
+    # ── 精选波色 ──
+    m = re.search(rf'{t}期;双波必中【(红波|蓝波|绿波)\+(红波|蓝波|绿波)】', text)
+    if m:
+        f['fengyun_wave1'] = WAVES.get(m.group(1), '')
+        f['fengyun_wave2'] = WAVES.get(m.group(2), '')
+    # ── 金牌⑥肖 ──
+    m = re.search(rf'{t}期-六肖【([{Z}]+)】', text)
+    if m:
+        f['fengyun_jinpai6'] = m.group(1)
+    # ── 三期必开 ──
+    m = re.search(rf'{t-2}期-{t}期〖([{Z}]+)〗', text)
+    if m:
+        f['fengyun_sanqi3'] = m.group(1)
+    # ── 投资六码 ──
+    m = re.search(rf'{t-4}期-{t}期〖六码〗.*?〖([\d.]+)〗', text, re.DOTALL)
+    if m:
+        c = extract_codes(m.group(1))
+        if c:
+            f['fengyun_touzi6'] = c
+    # ── ④尾⑧码 ──
+    m = re.search(rf'{t}期：④尾⑧码[^\n]*\n(\d)尾\(主([\d.]+)\)(\d)尾\(主([\d.]+)\)\n(\d)尾\(主([\d.]+)\)(\d)尾\(主([\d.]+)\)', text)
+    if m:
+        f['fengyun_wei4'] = '.'.join([m.group(1), m.group(3), m.group(5), m.group(7)])
+        allc = []
+        for g in [m.group(2), m.group(4), m.group(6), m.group(8)]:
+            allc += extract_codes(g).split('.')
+        f['fengyun_wei4_codes'] = '.'.join(allc)
+    # ── 大小中特 ──
+    m = re.search(rf'{t}期-大小中特【(大数|小数)】', text)
+    if m:
+        f['fengyun_size'] = '大' if m.group(1) == '大数' else '小'
+    # ── 单双主③肖 ──
+    m = re.search(rf'{t}期-〖(单数|双数)〗主〖([{Z}]+)〗', text)
+    if m:
+        f['fengyun_danshuang'] = '单' if m.group(1) == '单数' else '双'
+        f['fengyun_danshuang3'] = m.group(2)
+    return f
+
+
+def parse_daying(text, t):
+    """大赢站『头条内幕』栏目（#toubu18）：七肖/7码/四肖/5码/二肖/3码/内部赠送。"""
+    f = {}
+    Z = ZODIACS
+    # 目标期块：从 "{t}期:关注" 到 "{t}期:内部赠送"
+    blk_m = re.search(rf'{t}期:关注[^\n]*\n(.*?){t}期:内部赠送', text, re.DOTALL)
+    blk = blk_m.group(1) if blk_m else text
+    # 七肖 + 7码：七肖:狗虎鸡龙兔蛇猴\t7码:45 05 34 21 29 33 46
+    m = re.search(rf'七肖[:：]([{Z}]+)[\t ]+7码[:：]([\d\s.]+)', blk)
+    if m:
+        f['daying_zodiac7'] = m.group(1)
+        c = extract_codes(m.group(2))
+        if len(c.split('.')) == 7:
+            f['daying_codes7'] = c
+    # 四肖 + 5码：四肖:狗虎鸡龙\t5码:45 05 34 21 29
+    m = re.search(rf'四肖[:：]([{Z}]+)[\t ]+5码[:：]([\d\s.]+)', blk)
+    if m:
+        f['daying_zodiac4'] = m.group(1)
+        c = extract_codes(m.group(2))
+        if len(c.split('.')) == 5:
+            f['daying_codes5'] = c
+    # 二肖 + 3码：二肖:狗虎\t3码:45 05 34
+    m = re.search(rf'二肖[:：]([{Z}]+)[\t ]+3码[:：]([\d\s.]+)', blk)
+    if m:
+        f['daying_zodiac2'] = m.group(1)
+        c = extract_codes(m.group(2))
+        if len(c.split('.')) == 3:
+            f['daying_codes3'] = c
+    # 内部赠送：263期:内部赠送<狗-45>（1肖1码）
+    m = re.search(rf'{t}期:内部赠送<([{Z}])-(\d+)>', text)
+    if m:
+        f['daying_neimu'] = f"{m.group(1)}{int(m.group(2)):02d}"
+    # 大赢家单双：263期:专家单双王【单数+鸡兔】开:？00准
+    m = re.search(rf'{t}期:专家单双王【(单数|双数)\+([{Z}]+)】', text)
+    if m:
+        f['daying_danshuang'] = '单' if m.group(1) == '单数' else '双'
+        f['daying_danshuang_zodiac2'] = m.group(2)
+    # 金牌家野：263期:大赢家•家野【野兽+狗鸡】开？00准
+    m = re.search(rf'{t}期:大赢家[•·・.]家野【(家禽|野兽)\+([{Z}]+)】', text)
+    if m:
+        f['daying_jiaye'] = '家畜' if m.group(1) == '家禽' else '野兽'
+        f['daying_jiaye_zodiac2'] = m.group(2)
+    return f
+
+
 PARSERS = {
     "中特": parse_zhongte,
     "金算": parse_jinsuan,
     "聚宝": parse_jubao,
     "米老": parse_milao,
+    "哪吒": parse_nezha,
+    "大赢": parse_daying,
+    "风云": parse_fengyun,
 }
 
 
@@ -451,9 +707,14 @@ def period_to_date(period):
 
 
 def period_ceiling():
-    """采集期号上限 = 今天对应期号（今天 9-17 = 260期，防止采到未来期）。"""
+    """采集期号上限 = 今天对应期号；每晚 21:30 开奖后站点翻到下一期（明天期号）+1。"""
+    from datetime import datetime as _dt
     today = date.today()
-    return (today - date(2026, 5, 4)).days + 124
+    base = (today - date(2026, 5, 4)).days + 124
+    now = _dt.now()
+    if now.hour > 21 or (now.hour == 21 and now.minute >= 30):
+        base += 1
+    return base
 
 
 def save_fields(site, period, fields):
@@ -463,8 +724,10 @@ def save_fields(site, period, fields):
     db = sqlite3.connect(DB_PATH)
     cols = list(fields.keys())
     sets = ", ".join([f"{c}=excluded.{c}" for c in cols])
+    # 风云站已迁到 multi_group_summary（多组汇总 V1），其余 V2 站仍写 summary2
+    table = "multi_group_summary" if site == "风云" else "multi_group_summary2"
     db.execute(
-        f"INSERT INTO multi_group_summary2 (draw_date, period, {', '.join(cols)}) "
+        f"INSERT INTO {table} (draw_date, period, {', '.join(cols)}) "
         f"VALUES (?, ?, {', '.join('?' * len(cols))}) "
         f"ON CONFLICT(draw_date) DO UPDATE SET {sets}, period=excluded.period",
         [draw_date, f"{period}期"] + [fields[c] for c in cols],
@@ -474,20 +737,34 @@ def save_fields(site, period, fields):
     return draw_date
 
 
-def fetch_and_save(site, url, wait=10, target_period=None):
+def fetch_and_save(site, url, wait=10, force_period=None):
+    if not ensure_cdp():
+        return {"site": site, "status": "fail", "error": "CDP Edge 实例启动失败（9224 不通）"}
     text = fetch_text(url, wait)
-    if not text:
-        return {"site": site, "status": "fail", "error": "采集文本为空"}
-    if target_period:
-        t = int(target_period)
-    elif site == "米老":
-        t = milao_target_period(text)
+    if force_period:
+        t = int(force_period)
     else:
-        t = target_period(text)
+        if site == "风云":
+            t = fengyun_target_period(text)
+        elif site in ("米老", "哪吒"):
+            t = milao_target_period(text)
+        else:
+            t = target_period(text)
+        # CDP 冷启动首访常加载慢/空，重试一次（第二次站点已预热）
+        if not text or not t:
+            text = fetch_text(url, wait + 5)
+            if not text:
+                return {"site": site, "status": "fail", "error": "采集文本为空"}
+            if site == "风云":
+                t = fengyun_target_period(text)
+            elif site in ("米老", "哪吒"):
+                t = milao_target_period(text)
+            else:
+                t = target_period(text)
     if not t:
         return {"site": site, "status": "fail", "error": "未识别到目标期号"}
     # 未指定期号时约束上限，防止采到未来期
-    if target_period is None and t > period_ceiling():
+    if force_period is None and t > period_ceiling():
         t = period_ceiling()
     fields = PARSERS[site](text, t)
     if not fields:
@@ -503,9 +780,14 @@ if __name__ == "__main__":
         "金算": "https://01491111qaz916.0149z62.app:2026/77770149.app",
         "聚宝": "https://jb2fhsa817jb.0149a55.app:2026/01493456.app",
         "米老": "https://zzxxtt12151.12151c.app:8450/ok.html#ai5",
+        "哪吒": "https://qgpy8713071.13071fj.app:8447/ok.html",
+        "大赢": "https://77770149qaz524.0149a18.app:2026/01493333.app#toubu18",
+        "风云": "https://f4d9-x1b6n3.r8n2q5k0l.dev:2028/#26210gg",
     }
     sel = {k: SITES[k] for k in sys.argv[1:] if k in SITES} if len(sys.argv) > 1 else SITES
     for site, url in sel.items():
         print(f"\n===== 采集 {site} =====")
         r = fetch_and_save(site, url)
         print(json.dumps(r, ensure_ascii=False, indent=2))
+    close_cdp()
+    print("\n（CDP 实例已关闭）")
