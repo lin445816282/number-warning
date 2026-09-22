@@ -10010,7 +10010,13 @@ def reload_scheduler():
 
 @app.on_event("startup")
 def _startup_scheduler():
-    reload_scheduler()
+    try:
+        r = reload_scheduler()
+        import threading
+        print(f"[scheduler] startup reload_scheduler -> {r}", flush=True)
+        print(f"[scheduler] threads after reload: {[t.name for t in threading.enumerate()]}", flush=True)
+    except Exception as e:
+        print(f"[scheduler] startup reload_scheduler EXCEPTION: {type(e).__name__}: {e}", flush=True)
 
 
 @app.get("/api/predictSite/config")
