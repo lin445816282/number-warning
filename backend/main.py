@@ -7598,6 +7598,87 @@ def front_dim_rank(limit: int = 30, token: str = ""):
     return [dict(r) for r in rows]
 
 
+@app.get("/api/front/zodiacChip")
+def front_zodiac_chip(token: str = ""):
+    """前台公开：多组肖汇总（4来源投票 Top1/Top2/Top3）+ 号码筹码汇总（下注金额）。
+
+    供 number-counter.html「抽取」按钮调用。复用 _zodiac_buy_plan() 的 today（投票）+ guide（前3方案号码）。
+    """
+    if not front_token_valid(token):
+        raise HTTPException(401, "需要访问密码")
+    plan = _zodiac_buy_plan()
+    today = plan.get("today") or {}
+    guide = plan.get("guide") or {}
+    # 号码筹码汇总：前3方案 picks 号码 × 每号5元，按金额分组
+    per = 5
+    chips = {}
+    for p in (guide.get("plans") or []):
+        for n in (p.get("picks") or []):
+            chips[n] = chips.get(n, 0) + per
+    by_amt = {}
+    for n, amt in chips.items():
+        by_amt.setdefault(amt, []).append(n)
+    chip_groups = [
+        {"amount": amt, "nums": sorted(by_amt[amt])}
+        for amt in sorted(by_amt, reverse=True)
+    ]
+    return {
+        "period": today.get("period", ""),
+        "date": today.get("date", ""),
+        "votes": today.get("votes", {}),
+        "top1": today.get("top1", []),
+        "top2": today.get("top2", []),
+        "top3": today.get("top3", []),
+        "eq4": today.get("eq4", []),
+        "plans": [
+            {"name": p.get("name"), "zodiacs": p.get("zodiacs", []),
+             "picks_str": p.get("picks_str", ""), "N": p.get("N", 0),
+             "invest": p.get("invest", 0)}
+            for p in (guide.get("plans") or [])
+        ],
+        "chip_groups": chip_groups,
+    }
+
+
+@app.get("/api/front/sizuChip")
+def front_sizu_chip(token: str = ""):
+    """前台公开：四组汇（好运4组号码投票）+ 号码筹码汇总（下注金额）。
+
+    供 number-counter.html「抽取四组」按钮调用。复用 _sizu_order_overview() 的 guide（7方案 ROI前5 下单指南）。
+    """
+    if not front_token_valid(token):
+        raise HTTPException(401, "需要访问密码")
+    ov = _sizu_order_overview()
+    guide = ov.get("guide") or {}
+    per = ov.get("per") or 5
+    # 号码筹码汇总：guide.plans 各方案 picks 号码 × 每号 per 元，按金额分组
+    chips = {}
+    for p in (guide.get("plans") or []):
+        for n in (p.get("picks") or []):
+            chips[n] = chips.get(n, 0) + per
+    by_amt = {}
+    for n, amt in chips.items():
+        by_amt.setdefault(amt, []).append(n)
+    chip_groups = [
+        {"amount": amt, "nums": sorted(by_amt[amt])}
+        for amt in sorted(by_amt, reverse=True)
+    ]
+    return {
+        "period": guide.get("period", ""),
+        "date": guide.get("date", ""),
+        "per": per,
+        "plans": [
+            {"key": p.get("key"), "name": p.get("name"),
+             "picks_str": p.get("picks_str", ""), "N": p.get("N", 0),
+             "invest": p.get("invest", 0)}
+            for p in (guide.get("plans") or [])
+        ],
+        "stopped": guide.get("stopped", []),
+        "chip_groups": chip_groups,
+    }
+
+
+
 # ============================================================
 # 十七、肖跟踪（生肖遗漏≥12期 → 单肖跟踪持有下单 + 预警）
 # ============================================================
