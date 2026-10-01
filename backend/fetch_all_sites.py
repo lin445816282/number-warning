@@ -19,7 +19,7 @@ def _post(path, body=None, token=None, timeout=900):
     if token:
         headers["Authorization"] = "Bearer " + token
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(BASE + path, data=data, headers=headers)
+    req = urllib.request.Request(BASE + path, data=data, headers=headers, method="POST")
     return json.loads(urllib.request.urlopen(req, timeout=timeout).read())
 
 

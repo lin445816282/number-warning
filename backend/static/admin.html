@@ -2042,6 +2042,284 @@ table.data tr.warn td{background:var(--warnbg)}
         </div>
       </template>
 
+      <!-- 高超额信号池 -->
+      <template v-if="cur==='/highexcess'">
+        <div class="topbar"><h2>高超额 · 高超额信号池</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">🎯 高超额信号池
+            <button class="btn btn-sm" @click="loadHighExcess()" style="float:right;padding:3px 10px;font-size:12px">🔄 刷新</button>
+          </div>
+          <div style="font-size:12px;color:var(--ink2);line-height:1.9;margin-bottom:6px">
+            汇总 <b>多组汇总 + 多组汇总2</b> 全部预测项，筛选 <b style="color:#2e9e4f">命中基础量(统计样本期数) 大于 100</b> 且 <b style="color:#2e9e4f">超额(命中率 − 随机基准) 大于 3%</b> 的字段，构成「高超额信号集合」。
+          </div>
+          <div style="font-size:11px;color:#b8b0a0;line-height:1.7">
+            随机基准：号码 N/49 · 生肖 N/12 · 尾数 N/10 · 大小单双 25/49 · 波色 17/49 · 头数 N/5 · 家野 1/2。当前统计 <b>{{ highExcess ? highExcess.matched_periods : 0 }}</b> 期，命中 <b style="color:#2e9e4f">{{ highExcessList.length }}</b> 个高超额项。
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">⚠️ 滚动窗口预警 <span style="font-size:11px;color:var(--ink2);font-weight:400">（近一周 7 期 / 近一月 30 期，超额 <b style="color:#d84343">低于 2%</b> 预警）</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+            <div v-for="it in highExcessList" :key="it.field" :style="{background: it.alert ? '#fef2f2' : '#fbf8f1', border: it.alert ? '2px solid #dc2626' : '1px solid var(--line)', borderRadius:'10px', padding:'10px'}">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-weight:700;font-size:13px;color:var(--ink)">{{ it.label }}<span style="color:#b8b0a0;font-size:10px;font-weight:400">（{{ it.family }}）</span></span>
+                <span :style="{color: it.alert ? '#dc2626' : '#2e9e4f', fontWeight:800, fontSize:'12px'}">{{ it.alert ? '⚠️ 预警' : '✓ 正常' }}</span>
+              </div>
+              <div style="font-size:11px;color:var(--ink2);line-height:1.8">
+                <div>全量超额：<b style="color:var(--ink)">{{ (it.excess>0?'+':'') }}{{ (it.excess*100).toFixed(2) }}%</b></div>
+                <div>近一周(7期)：<b :style="{color: it.w7 && it.w7.excess < 0.02 ? '#dc2626' : 'var(--ink)'}">{{ it.w7 ? (it.w7.excess>0?'+':'')+(it.w7.excess*100).toFixed(2)+'%' : '—' }}</b> <span style="color:#b8b0a0">(命中 {{ it.w7 ? it.w7.hit + '/' + it.w7.total : '—' }})</span></div>
+                <div>近一月(30期)：<b :style="{color: it.w30 && it.w30.excess < 0.02 ? '#dc2626' : 'var(--ink)'}">{{ it.w30 ? (it.w30.excess>0?'+':'')+(it.w30.excess*100).toFixed(2)+'%' : '—' }}</b> <span style="color:#b8b0a0">(命中 {{ it.w30 ? it.w30.hit + '/' + it.w30.total : '—' }})</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px" v-if="highExcessBuyFields.length">
+          <div class="card-title">🎯 今日可下单号码 <span style="font-size:11px;color:var(--ink2);font-weight:400">（全量超额 &gt; 3% 且 近一周 &gt; 2% 的字段，转号码 · 每号 5 元）</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
+            <div v-for="q in highExcessBuyFields" :key="q.field" style="background:#f0fdf4;border:2px solid #16a34a;border-radius:10px;padding:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-weight:700;font-size:14px;color:var(--ink)">{{ q.label }}<span style="color:#b8b0a0;font-size:10px;font-weight:400">（{{ q.family }} · {{ highExcessTypeLabel(q.type) }}）</span></span>
+                <span style="color:#16a34a;font-weight:800;font-size:12px">买{{ q.num_count_today }}号 · {{ q.invest_today }}元</span>
+              </div>
+              <div style="font-size:14px;font-weight:700;color:var(--ink);line-height:1.9">{{ (q.nums_today || []).map(n => pad(n)).join('.') }}</div>
+              <div style="font-size:11px;color:var(--ink2);margin-top:4px">全量超额 {{ (q.excess*100).toFixed(2) }}% · 近一周 {{ q.w7 ? (q.w7.excess*100).toFixed(2) : '—' }}%</div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">📅 年月</span>
+            <input type="month" v-model="highExcessYearMonth" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">📂 来源</span>
+            <select v-model="highExcessSource" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+              <option value="">全部</option>
+              <option value="多组汇总">多组汇总</option>
+              <option value="多组汇总2">多组汇总2</option>
+            </select>
+            <span style="font-size:13px;font-weight:600;color:var(--ink)">🏷️ 类型</span>
+            <select v-model="highExcessType" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fbf8f1">
+              <option value="">全部</option>
+              <option value="codes">号码</option>
+              <option value="zodiac">生肖</option>
+              <option value="tail">尾数</option>
+              <option value="wave">波色</option>
+              <option value="size">大小</option>
+              <option value="oddeven">单双</option>
+              <option value="head">头数</option>
+              <option value="jaye">家野</option>
+              <option value="heshu">合数</option>
+            </select>
+            <button class="btn btn-sm" @click="loadHighExcess()" style="padding:6px 16px;font-size:13px;background:var(--warn);color:#fff;border:none;border-radius:8px">查询</button>
+            <button class="btn btn-sm" @click="highExcessYearMonth='';highExcessSource='';highExcessType='';loadHighExcess()" style="padding:6px 14px;font-size:13px;background:#f3efe5;color:var(--ink2);border:1px solid var(--line);border-radius:8px">重置</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">📋 高超额字段列表 <span style="font-size:11px;color:var(--ink2);font-weight:400">（命中基础量 &gt; 100 且 超额 &gt; 3%，按超额降序）</span></div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>来源</th><th>家族</th><th>内容(预测项)</th><th>类型</th><th>命中数</th><th>命中基础量(期数)</th><th>命中率</th><th>随机基准</th><th>超额</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="it in highExcessList" :key="it.field">
+                  <td>{{ it.source }}</td>
+                  <td>{{ it.family }}</td>
+                  <td style="font-weight:600">{{ it.label }}</td>
+                  <td>{{ highExcessTypeLabel(it.type) }}</td>
+                  <td>{{ it.hit }}</td>
+                  <td>{{ it.total }}</td>
+                  <td>{{ (it.rate*100).toFixed(1) }}%</td>
+                  <td>{{ (it.random_rate*100).toFixed(1) }}%</td>
+                  <td :style="{color: it.excess>0.03 ? '#2e9e4f' : 'var(--ink)', fontWeight:700}">{{ it.excess>0?'+':'' }}{{ (it.excess*100).toFixed(2) }}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="!highExcessList.length" style="color:#b8b0a0;text-align:center;padding:30px">暂无满足条件的高超额字段</div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="card-title">📅 逐日明细 <span style="font-size:11px;color:var(--ink2);font-weight:400">（每个高超额字段每天的预测内容，命中开奖号 <b style="color:#1890ff">蓝字加粗</b> 高亮，共 {{ highExcessDaily.length }} 期）</span></div>
+          <div style="margin:0 0 12px;padding:10px;border:1px dashed var(--line);border-radius:8px;background:#fbfaf6">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+              <span style="font-weight:700;font-size:13px;color:var(--ink)">🗳️ 组投票选号</span>
+              <span style="font-size:12px;color:var(--ink2)">期号：<b style="color:var(--ink)">{{ highExcessPickPeriod }}</b></span>
+              <span style="font-size:12px;color:var(--ink2)">已选 <b style="color:var(--warn)">{{ highExcessPickedFields.length }}</b> 组（至少 2 组）</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+              <label v-for="f in highExcessDailyFields" :key="f.field" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink2);cursor:pointer;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#fff">
+                <input type="checkbox" :value="f.field" v-model="highExcessPickedFields" @change="loadHighExcessBacktest()" style="accent-color:#d97706"> {{ f.label }}<span style="color:#b8b0a0">（{{ f.family }}）</span>
+              </label>
+            </div>
+            <div v-if="highExcessVoteGroups.length">
+              <div v-for="g in highExcessVoteGroups" :key="g.votes" style="border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:8px;background:#fff">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">
+                  <span style="font-weight:700;font-size:13px;color:var(--ink)">{{ g.votes }} 票 <span style="color:#b8b0a0;font-weight:400;font-size:11px">（{{ g.nums.length }} 个）</span></span>
+                  <button class="btn btn-sm" @click="copyHighExcessVoteGroup(g.nums)" style="padding:2px 10px;font-size:11px">📋 复制 {{ g.votes }} 票</button>
+                </div>
+                <div style="font-family:Roboto Mono,monospace;font-size:14px;font-weight:600;color:var(--ink);line-height:1.8">{{ g.nums.map(n => pad(n)).join('.') }}</div>
+              </div>
+              <div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-sm" @click="copyHighExcessGe2()" style="padding:6px 14px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:8px">📋 复制 2+（{{ highExcessGe2Nums.length }}个）</button>
+                <button class="btn btn-sm" @click="copyHighExcessAll()" style="padding:6px 14px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:8px">📋 复制全部（{{ highExcessAllNums.length }}个）</button>
+              </div>
+            </div>
+            <div v-else style="font-size:12px;color:#d84343;padding:6px 0">⚠️ 请至少选择 2 组参与投票</div>
+          </div>
+          <div v-if="highExcessBacktest && highExcessBacktest.groups && highExcessBacktest.groups.length" style="margin:0 0 12px;padding:10px;border:1px dashed var(--line);border-radius:8px;background:#fbfaf6">
+            <div style="font-weight:700;font-size:13px;color:var(--ink);margin-bottom:8px">📈 历史盈亏比 <span style="font-size:11px;color:var(--ink2);font-weight:400">（选中的组逐期投票 · 恰好N票 · 每号1元 · 命中赚47−N / 未中亏N · 共 {{ highExcessBacktest.total_periods }} 期）</span></div>
+            <div class="table-scroll">
+              <table class="data">
+                <thead><tr>
+                  <th>票数档位</th><th>下注期数</th><th>命中</th><th>命中率</th><th>均投号数</th><th>总投入</th><th>累计盈亏</th><th>ROI</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="g in highExcessBacktest.groups" :key="g.votes">
+                    <td style="font-weight:700">{{ g.votes }} 票</td>
+                    <td>{{ g.bet_periods }}</td>
+                    <td>{{ g.hits }}</td>
+                    <td>{{ g.hit_rate }}%</td>
+                    <td>{{ g.avg_nums }}</td>
+                    <td>{{ g.invest }}</td>
+                    <td :style="{color: g.profit>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ g.profit>=0 ? '+' : '' }}{{ g.profit }}</td>
+                    <td :style="{color: g.roi>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ g.roi>=0 ? '+' : '' }}{{ g.roi }}%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th style="min-width:88px">日期</th><th>期数</th><th>开奖号</th>
+                <th v-for="f in highExcessDailyFields" :key="f.field" :title="f.source + ' · ' + f.family">{{ f.label }}<span style="color:#b8b0a0;font-size:10px;display:block;font-weight:400">({{ f.source === '多组汇总2' ? '汇2' : '汇1' }})</span></th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="r in highExcessDaily" :key="r.date">
+                  <td style="font-family:'Roboto Mono',monospace">{{ r.date }}</td>
+                  <td><b>{{ r.period }}</b></td>
+                  <td style="font-weight:700">{{ r.open_num }}</td>
+                  <td v-for="f in highExcessDailyFields" :key="f.field" style="white-space:normal">
+                    <span v-if="r.vals[f.field]" :style="r.vals[f.field].hit ? {color:'#1890ff',fontWeight:700} : {color:'var(--ink2)'}">{{ r.vals[f.field].raw }}</span>
+                    <span v-else style="color:#c8c0b0">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px" v-if="highExcessOrderRecords.length">
+          <div class="card-title">📒 固化下单台账 <span style="font-size:11px;color:var(--ink2);font-weight:400">（每号 5 元 · 事前固化 + 结算 · 无前视，历史已固化不漂移，仅新增变动）</span></div>
+          <div v-if="highExcessOrderSummary" style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px;font-size:13px">
+            <span>期数 <b>{{ highExcessOrderSummary.periods }}</b></span>
+            <span>已结算 <b>{{ highExcessOrderSummary.settled }}</b></span>
+            <span>总投入 <b>{{ highExcessOrderSummary.total_invest }}</b> 元</span>
+            <span>总盈亏 <b :style="{color: highExcessOrderSummary.total_profit>=0 ? '#2e9e4f' : '#d84343'}">{{ highExcessOrderSummary.total_profit }}</b> 元</span>
+            <span>ROI <b :style="{color: highExcessOrderSummary.total_roi>=0 ? '#2e9e4f' : '#d84343'}">{{ highExcessOrderSummary.total_roi }}%</b></span>
+            <span>命中 <b>{{ highExcessOrderSummary.total_hit }}/{{ highExcessOrderSummary.total_count }}</b>（{{ highExcessOrderSummary.hit_rate }}%）</span>
+          </div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th style="min-width:88px">日期</th><th>期数</th><th>开奖号</th><th style="text-align:left;min-width:260px">下单字段（命中✓/未中✗ · 盈亏）</th><th>投入</th><th>盈亏</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="r in highExcessOrderRecords" :key="r.date">
+                  <td style="font-family:'Roboto Mono',monospace">{{ r.date }}</td>
+                  <td><b>{{ r.period }}</b></td>
+                  <td style="font-weight:700">{{ r.open_num }}</td>
+                  <td style="text-align:left">
+                    <div v-for="f in r.fields" :key="f.field" style="font-size:11px;line-height:1.7">
+                      <span :style="{color: f.hit ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ f.hit ? '✓' : '✗' }}</span>
+                      <span style="color:var(--ink);font-weight:600">{{ f.label }}</span>
+                      <span style="color:#b8b0a0">（{{ highExcessTypeLabel(f.type) }}·{{ f.num_count }}号）</span>
+                      <span :style="{color: f.hit ? '#2e9e4f' : '#d84343', fontWeight:600}">{{ f.profit }}</span>
+                    </div>
+                  </td>
+                  <td>{{ r.invest }}</td>
+                  <td :style="{color: r.profit>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ r.profit }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px" v-if="highExcessTypeStat.length">
+          <div class="card-title">📊 按字段类型拆分盈亏 <span style="font-size:11px;color:var(--ink2);font-weight:400">（固化台账按类型聚合，看哪个类型拖累 / 有 edge）</span></div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>类型</th><th>字段次数</th><th>命中</th><th>命中率</th><th>总投入</th><th>总盈亏</th><th>ROI</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="s in highExcessTypeStat" :key="s.type">
+                  <td style="font-weight:700">{{ highExcessTypeLabel(s.type) }}</td>
+                  <td>{{ s.cnt }}</td>
+                  <td>{{ s.hit }}</td>
+                  <td>{{ s.hit_rate }}%</td>
+                  <td>{{ s.invest }}</td>
+                  <td :style="{color: Number(s.profit)>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ s.profit }}</td>
+                  <td :style="{color: Number(s.roi)>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ s.roi }}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px" v-if="highExcessConsensusRecords.length">
+          <div class="card-title">🔮 共识投票下单 <span style="font-size:11px;color:var(--ink2);font-weight:400">（只买被 &gt; 一半字段同时预测的号码 · 每号 5 元 · 固化台账）</span></div>
+          <div v-if="highExcessConsensusSummary" style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px;font-size:13px">
+            <span>期数 <b>{{ highExcessConsensusSummary.periods }}</b></span>
+            <span>总投入 <b>{{ highExcessConsensusSummary.total_invest }}</b> 元</span>
+            <span>总盈亏 <b :style="{color: highExcessConsensusSummary.total_profit>=0 ? '#2e9e4f' : '#d84343'}">{{ highExcessConsensusSummary.total_profit }}</b> 元</span>
+            <span>ROI <b :style="{color: highExcessConsensusSummary.total_roi>=0 ? '#2e9e4f' : '#d84343'}">{{ highExcessConsensusSummary.total_roi }}%</b></span>
+            <span>命中 <b>{{ highExcessConsensusSummary.total_hit }}/{{ highExcessConsensusSummary.total_count }}</b>（{{ highExcessConsensusSummary.hit_rate }}%）</span>
+          </div>
+          <div class="card-title" style="font-size:13px">📊 按投票数拆分 ROI</div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>票数</th><th>号码数</th><th>命中</th><th>命中率</th><th>投入</th><th>盈亏</th><th>ROI</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="v in highExcessConsensusVoteStat" :key="v.votes">
+                  <td style="font-weight:700">{{ v.votes }}票</td>
+                  <td>{{ v.cnt }}</td>
+                  <td>{{ v.hit }}</td>
+                  <td>{{ v.hit_rate }}%</td>
+                  <td>{{ v.invest }}</td>
+                  <td :style="{color: v.profit>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ v.profit }}</td>
+                  <td :style="{color: v.roi>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ v.roi }}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card-title" style="font-size:13px;margin-top:10px">📋 逐期明细</div>
+          <div class="table-scroll">
+            <table class="data">
+              <thead><tr>
+                <th>日期</th><th>期数</th><th>开奖号</th><th>字段数</th><th>共识号码(票数)</th><th>投入</th><th>盈亏</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="r in highExcessConsensusRecords" :key="r.date">
+                  <td style="font-family:'Roboto Mono',monospace">{{ r.date }}</td>
+                  <td><b>{{ r.period }}</b></td>
+                  <td style="font-weight:700">{{ r.open_num }}</td>
+                  <td>{{ r.field_count }}</td>
+                  <td style="text-align:left">
+                    <span v-for="x in r.nums" :key="x.num" style="font-size:11px;margin-right:6px;white-space:nowrap" :style="{color: x.num === r.open_num ? '#1890ff' : 'var(--ink2)', fontWeight: x.num === r.open_num ? 800 : 400}">{{ String(x.num).padStart(2,'0') }}<span style="color:#b8b0a0">({{ x.votes }})</span></span>
+                  </td>
+                  <td>{{ r.invest }}</td>
+                  <td :style="{color: r.profit>=0 ? '#2e9e4f' : '#d84343', fontWeight:700}">{{ r.profit }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-mask" v-if="highExcessLoading" style="z-index:200">
+          <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
+            <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
+            <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
+          </div>
+        </div>
+      </template>
+
       <template v-if="cur==='/tailsummary'">
         <div class="topbar"><h2>尾数汇总 · 5来源投票 + 达朗贝尔演算</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
 <!-- 尾数来源投票 · 购买决策 -->
@@ -3145,13 +3423,13 @@ table.data tr.warn td{background:var(--warnbg)}
                   <table class="data">
                     <thead><tr><th>栏目（组）</th><th>家</th><th>码数</th><th>号码列表</th></tr></thead>
                     <tbody>
-                      <tr v-for="f in numTrackDaily.fields" :key="f.label">
-                        <td style="font-weight:700">{{ f.label }}</td>
-                        <td>{{ f.fam }}</td>
-                        <td>{{ f.nums.length }}</td>
+                      <tr v-for="f in numTrackDaily.fields" :key="f.label" :style="f.nums.length===0?'background:#fef2f2':''">
+                        <td style="font-weight:700" :style="f.nums.length===0?'color:#dc2626':''">{{ f.label }}<span v-if="f.nums.length===0" style="color:#dc2626;font-size:10px;margin-left:4px">⚠️空</span></td>
+                        <td :style="f.nums.length===0?'color:#dc2626':''">{{ f.fam }}</td>
+                        <td :style="f.nums.length===0?'color:#dc2626;font-weight:800':''">{{ f.nums.length }}</td>
                         <td style="font-family:Roboto Mono,monospace;white-space:normal;line-height:1.8">
                           <span v-for="(n,i) in f.nums" :key="n" :style="numTrackDaily.open===n?'color:var(--ok);font-weight:800;background:#f0fdf4;padding:1px 4px;border-radius:4px':'color:var(--ink)'">{{ i>0?' · ':'' }}{{ pad(n) }}</span>
-                          <span v-if="!f.nums.length" style="color:#b8b0a0">无</span>
+                          <span v-if="!f.nums.length" style="color:#dc2626;font-weight:700">⚠️ 无数据（未采集到）</span>
                         </td>
                       </tr>
                     </tbody>
@@ -3491,6 +3769,20 @@ table.data tr.warn td{background:var(--warnbg)}
               <div class="modal" style="max-width:240px;text-align:center;padding:32px 24px">
                 <div class="spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(30,58,95,.2);border-top-color:#1e3a5f;margin:0 auto 14px"></div>
                 <div style="font-size:14px;color:#1e3a5f;font-weight:600">加载中…</div>
+              </div>
+            </div>
+            <!-- 数据完整性提醒弹框 -->
+            <div class="modal-mask" v-if="numTrackIncompleteOpen" @click.self="numTrackIncompleteOpen=false" style="z-index:300">
+              <div class="modal" style="max-width:520px;max-height:80vh;overflow:auto;padding:20px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                  <div style="font-size:16px;font-weight:800;color:#dc2626">⚠️ 数据不完整提醒</div>
+                  <button class="btn btn-sm" @click="numTrackIncompleteOpen=false" style="padding:2px 10px;font-size:12px">✕ 关闭</button>
+                </div>
+                <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">最新期 <b>{{ numTrackDaily.period }}</b>（{{ numTrackDaily.date }}）有 <b style="color:#dc2626">{{ numTrackEmptyFields.length }}</b> 个栏目未采集到数据：</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                  <span v-for="f in numTrackEmptyFields" :key="f.label" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700">{{ f.label }}<span style="color:#9b1c1c;font-weight:400">（{{ f.fam }}）</span></span>
+                </div>
+                <div style="font-size:11px;color:var(--ink2)">提示：这些栏目在「各栏目（组）号码列表」中已标红。可能是对应预测站尚未更新，可稍后到「预测采集」页重新采集。</div>
               </div>
             </div>
             <!-- 正反筹码复制弹框 -->
@@ -4184,6 +4476,173 @@ createApp({
       } catch(e){}
     }
     function loadMultiGroup2Page(){ loadMultiGroup2Meta(); loadMultiGroup2(); loadMultiGroup2Hit(); }
+
+    // ====== 高超额信号池 ======
+    const highExcess = ref(null);
+    const highExcessOrder = ref(null);
+    const highExcessConsensus = ref(null);
+    const highExcessLoading = ref(false);
+    const highExcessYearMonth = ref('');
+    const highExcessSource = ref('');
+    const highExcessType = ref('');
+    let _heLoadDepth = 0;
+    function _heBegin(){ _heLoadDepth++; highExcessLoading.value = true; }
+    function _heEnd(){ _heLoadDepth--; if(_heLoadDepth<=0){ _heLoadDepth=0; highExcessLoading.value=false; } }
+    const HE_TYPE_LABELS = { codes:'号码', zodiac:'生肖', tail:'尾数', wave:'波色', size:'大小', oddeven:'单双', head:'头数', jaye:'家野', heshu:'合数' };
+    function highExcessTypeLabel(t){ return HE_TYPE_LABELS[t] || t; }
+    async function loadHighExcess(){
+      _heBegin();
+      try {
+        const q = highExcessYearMonth.value ? '?year_month=' + encodeURIComponent(highExcessYearMonth.value) : '';
+        const [d, order, consensus] = await Promise.all([
+          api('GET', '/api/highExcess' + q),
+          api('GET', '/api/highExcessOrder'),
+          api('GET', '/api/highExcessConsensusOrder'),
+        ]);
+        highExcess.value = d;
+        highExcessOrder.value = order;
+        highExcessConsensus.value = consensus;
+        if (!highExcessPickedFields.value.length && d.daily_fields && d.daily_fields.length) {
+          highExcessPickedFields.value = d.daily_fields.map(x => x.field);
+        }
+        await loadHighExcessBacktest();
+      } catch(e){}
+      finally { _heEnd(); }
+    }
+    const highExcessList = computed(() => {
+      const d = highExcess.value;
+      if(!d) return [];
+      let list = d.qualified || [];
+      if (highExcessSource.value) list = list.filter(x => x.source === highExcessSource.value);
+      if (highExcessType.value) list = list.filter(x => x.type === highExcessType.value);
+      return list;
+    });
+    const highExcessDailyFields = computed(() => {
+      const d = highExcess.value;
+      return (d && d.daily_fields) ? d.daily_fields : [];
+    });
+    const highExcessDaily = computed(() => {
+      const d = highExcess.value;
+      return (d && d.daily) ? d.daily : [];
+    });
+    const highExcessBuyFields = computed(() => {
+      const d = highExcess.value;
+      return (d && d.buy_fields) ? d.buy_fields : [];
+    });
+    const highExcessOrderRecords = computed(() => {
+      const o = highExcessOrder.value;
+      return (o && o.records) ? o.records : [];
+    });
+    const highExcessOrderSummary = computed(() => {
+      const o = highExcessOrder.value;
+      return (o && o.summary) ? o.summary : null;
+    });
+    const highExcessTypeStat = computed(() => {
+      const recs = highExcessOrderRecords.value;
+      const stat = {};
+      for (const r of recs) {
+        for (const f of (r.fields || [])) {
+          const t = f.type;
+          const s = stat[t] || (stat[t] = { type: t, cnt: 0, hit: 0, invest: 0, profit: 0 });
+          s.cnt += 1;
+          if (f.hit) s.hit += 1;
+          s.invest += f.invest || 0;
+          s.profit += f.profit || 0;
+        }
+      }
+      return Object.values(stat).map(s => ({
+        type: s.type,
+        cnt: s.cnt,
+        hit: s.hit,
+        hit_rate: s.cnt ? (s.hit / s.cnt * 100).toFixed(1) : '0',
+        invest: s.invest.toFixed(0),
+        profit: s.profit.toFixed(0),
+        roi: s.invest ? (s.profit / s.invest * 100).toFixed(1) : '0',
+      })).sort((a, b) => b.profit - a.profit);
+    });
+    const highExcessConsensusSummary = computed(() => {
+      const o = highExcessConsensus.value;
+      return (o && o.summary) ? o.summary : null;
+    });
+    const highExcessConsensusVoteStat = computed(() => {
+      const o = highExcessConsensus.value;
+      return (o && o.vote_stat) ? o.vote_stat : [];
+    });
+    const highExcessConsensusRecords = computed(() => {
+      const o = highExcessConsensus.value;
+      return (o && o.records) ? o.records : [];
+    });
+    // 高超额：组投票选号（选多组·至少2组·投票选出当前期号码，按票数分组可单独复制）
+    const highExcessPickedFields = ref([]);
+    const highExcessCurrent = computed(() => {
+      const d = highExcess.value;
+      return (d && d.current) ? d.current : null;
+    });
+    const highExcessPickPeriod = computed(() => {
+      const c = highExcessCurrent.value;
+      return c ? (c.period + ' · ' + c.date) : '';
+    });
+    const highExcessVoteResult = computed(() => {
+      const c = highExcessCurrent.value;
+      if (!c) return [];
+      const picks = highExcessPickedFields.value;
+      if (picks.length < 2) return [];
+      const votes = {};
+      for (const f of picks) {
+        const v = c.vals && c.vals[f];
+        if (!v || !v.nums || !v.nums.length) continue;
+        for (const n of v.nums) votes[n] = (votes[n] || 0) + 1;
+      }
+      return Object.entries(votes)
+        .map(([n, cnt]) => ({ num: Number(n), votes: cnt }))
+        .sort((a, b) => (b.votes - a.votes) || (a.num - b.num));
+    });
+    const highExcessVoteGroups = computed(() => {
+      const byVotes = {};
+      for (const x of highExcessVoteResult.value) {
+        if (x.votes < 2) continue;
+        (byVotes[x.votes] = byVotes[x.votes] || []).push(x.num);
+      }
+      for (const k in byVotes) byVotes[k].sort((a, b) => a - b);
+      return Object.entries(byVotes)
+        .map(([votes, nums]) => ({ votes: Number(votes), nums }))
+        .sort((a, b) => b.votes - a.votes);
+    });
+    const highExcessGe2Nums = computed(() => {
+      return highExcessVoteResult.value.filter(x => x.votes >= 2).map(x => x.num).sort((a, b) => a - b);
+    });
+    const highExcessAllNums = computed(() => {
+      return highExcessVoteResult.value.map(x => x.num).sort((a, b) => a - b);
+    });
+    function copyHighExcessVoteGroup(nums) {
+      if (!nums || !nums.length) { toast('无号码'); return; }
+      copyText(nums.map(n => pad(n)).join('.'), '号码' + nums.length + '个');
+    }
+    function copyHighExcessGe2() {
+      const nums = highExcessGe2Nums.value;
+      if (!nums.length) { toast('无票数≥2的号码'); return; }
+      copyText(nums.map(n => pad(n)).join('.'), '2+票号码' + nums.length + '个');
+    }
+    function copyHighExcessAll() {
+      const nums = highExcessAllNums.value;
+      if (!nums.length) { toast('无号码'); return; }
+      copyText(nums.map(n => pad(n)).join('.'), '全部号码' + nums.length + '个');
+    }
+    // 高超额：各票数档位历史盈亏比回测
+    const highExcessBacktest = ref(null);
+    async function loadHighExcessBacktest() {
+      const fields = highExcessPickedFields.value;
+      if (fields.length < 2) { highExcessBacktest.value = null; return; }
+      try {
+        highExcessBacktest.value = await api('GET', '/api/highExcessVoteBacktest?fields=' + encodeURIComponent(fields.join(',')));
+      } catch(e) { highExcessBacktest.value = null; }
+    }
+    // 命中开奖号的号码：codes 类型字段内高亮具体命中号
+    function heHitNum(raw, openNum){
+      if (raw == null) return false;
+      const s = String(raw).replace(/，/g,'.').replace(/,/g,'.').replace(/、/g,'.').replace(/-/g,'.');
+      return s.split('.').some(t => t.trim() !== '' && Number(t) === openNum);
+    }
     function mg2StartEdit(r, c){
       mg2Editing.value = { draw_date: r.draw_date, field: c.field };
       mg2EditVal.value = r[c.field] || '';
@@ -4260,6 +4719,7 @@ createApp({
       else if (cur.value === '/dimstats') loadDimStats();
       else if (cur.value === '/multigroup') loadMultiGroupPage();
       else if (cur.value === '/multigroup2') loadMultiGroup2Page();
+      else if (cur.value === '/highexcess') loadHighExcess();
       else if (cur.value === '/tailsummary') loadTailTrack();
       else if (cur.value === '/zodiacsummary') loadZodiacSource();
       else if (cur.value === '/sizu') loadSizu();
@@ -5023,6 +5483,7 @@ createApp({
         if (!numTrackQueryDate.value && numTrack.value.end_date) {
           numTrackQueryDate.value = numTrack.value.end_date;
           await loadNumTrackDaily();
+          checkNumTrackIncomplete();
         }
       } finally {
         _numTrackLoadEnd();
@@ -5036,6 +5497,16 @@ createApp({
       try { numTrackDaily.value = await api('GET', '/api/numTrack/daily?date=' + numTrackQueryDate.value); }
       catch (e) { numTrackDaily.value = null; }
       finally { _numTrackLoadEnd(); }
+    }
+    // ====== 数据完整性提醒（各栏目为空 → 标红 + 弹框）======
+    const numTrackIncompleteOpen = ref(false);
+    const numTrackEmptyFields = computed(() => {
+      const d = numTrackDaily.value;
+      if (!d || !d.fields) return [];
+      return d.fields.filter(f => !f.nums || f.nums.length === 0);
+    });
+    function checkNumTrackIncomplete() {
+      if (numTrackEmptyFields.value.length > 0) numTrackIncompleteOpen.value = true;
     }
     const frontbackOrder = ref(null);
     const frontbackFrom = ref('');
@@ -5484,7 +5955,7 @@ createApp({
       dash, recs, recPage, recTotal, recTotalPages, recPageSize, recFilter, selectedIds, allSelected,
       cycles, histories, dimStats, st, coreSummary, otherSummary, warnOffset, users, roles, menus_all, selRoleId, selRoleMenus,
       dimTab, dimDict, dimCur, curDim, loadDimDict, tagRankStyle, copyTagNumbers,
-      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailSource, tailLoading, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle, numTrack, loadNumTrack, numTrackLoading, numTrackDaily, numTrackQueryDate, loadNumTrackDaily, copyNumTrackGroup, numTrackChipOpen, openNumTrackChip, copyNumTrackChips, frontbackOrder, frontbackFrom, frontbackTo, loadFrontbackOrder, frontbackAi, frontbackAiLoading, frontbackAiError, runFrontbackAi, setFrontbackRange, reverseChipOrder, reverseChipFrom, reverseChipTo, loadReverseChipOrder, tailQueryDate, tailQueryRec, tailQueryGroups, tailSourceRecords, copyTailGroup, tailTlKey, tailTlView, tailTlData, tailTlConclusion, zodiacSource, loadZodiacSource, zodiacLoading, zodiacQueryDate, zodiacQueryRec, zodiacQueryGroups, zodiacSourceRecords, copyZodiacGroup, zodiacTlKey, zodiacTlView, zodiacTlData, zodiacTlConclusion, zodiacTop1Forward, loadZodiacTop1Forward, zodiacDecision, loadZodiacDecision, zodiacBuyPlan, loadZodiacBuyPlan, zodiacChipGroups, copyZodiacGroup, zodiacOrder, loadZodiacOrder, zodiacOrderFull, loadZodiacOrderFull, zodiacBpOrder, zodiacBpOpen, loadZodiacBpOrder, zodiacBpCurrent, setZodiacBpPlan, zodiacBpChipGroups, copyZodiacBpGroup, zodiacBpStats, zodiacBpAi, zodiacBpAiLoading, zodiacBpAiError, runZodiacBpAi, loadZodiacBpStats, sizu, sizuLoading, sizuOpen, loadSizu, sizuLatest, sizuRecordsReversed, sizuVoteGroups, sizuChipGroups, sizuCurrent, sizuCurrentDetail, toggleSizuPlan, mathPlanKeys, mathPlanKey, mathPlanCurrent, mathPlanDetail, setMathPlan, mathPlanName, mathPlanKelly, sizuOrder, sizuOrderOpen, loadSizuOrder, sizuCurrentOrder, setSizuOrderPlan, copySizuGroup, sizuStats, sizuAi, sizuAiLoading, sizuAiError, runSizuAi, loadSizuStats,
+      suggestVotes, suggestSignals, suggestMax, suggestThreshold, suggestDate, backtestMonths, backtestStart, suggestOptions, suggestKeep, suggestDrop, suggestKeepText, suggestDropText, loadSuggest, loadBacktest, bucketOf, copySuggestKeep, copySuggestDrop, orderTrack, loadOrderTrack, orderTrackLt4, loadOrderTrackLt4, orderTrackEq2, loadOrderTrackEq2, orderTrackClose, loadOrderTrackClose, orderBetRatio, orderOffset, orderScheme, orderBaseBet,      algoTrack, loadAlgoTrack, refreshAlgoTrack, posdimAlgo, strategyScan, loadStrategyScan, loadTrackTab, strategyOrders, schemeCards, schemeCardRow, schemeCardN, schemeCardPicks, loadStrategyOrders, placeStrategyOrder, copyStrategyPicks,      ruleScheme, ruleOffset, ruleRecords, ruleMonths, loadRuleRecords, dimReport, loadDimReport, barWidth, engine, loadEngine, signalWarning, signalPending, signalOffset, showLogicDoc, loadSignals, copySignal,      highTrack, loadHighTrack, highTrackOffset, htScheme, htSchemeData, htMonths, dimAssess, dimForward, fwdOf, promoteDim, demoteDim, coreSignals, coreUnion, copyCore, tailTrack, tailSource, tailLoading, tailView, tailGroups, tailGuideStyle, loadTailTrack, tailTrackSmart, tailSmartView, tailSmartGroups, tailSmartStateStyle, numTrack, loadNumTrack, numTrackLoading, numTrackDaily, numTrackQueryDate, loadNumTrackDaily, numTrackIncompleteOpen, numTrackEmptyFields, copyNumTrackGroup, numTrackChipOpen, openNumTrackChip, copyNumTrackChips, frontbackOrder, frontbackFrom, frontbackTo, loadFrontbackOrder, frontbackAi, frontbackAiLoading, frontbackAiError, runFrontbackAi, setFrontbackRange, reverseChipOrder, reverseChipFrom, reverseChipTo, loadReverseChipOrder, tailQueryDate, tailQueryRec, tailQueryGroups, tailSourceRecords, copyTailGroup, tailTlKey, tailTlView, tailTlData, tailTlConclusion, zodiacSource, loadZodiacSource, zodiacLoading, zodiacQueryDate, zodiacQueryRec, zodiacQueryGroups, zodiacSourceRecords, copyZodiacGroup, zodiacTlKey, zodiacTlView, zodiacTlData, zodiacTlConclusion, zodiacTop1Forward, loadZodiacTop1Forward, zodiacDecision, loadZodiacDecision, zodiacBuyPlan, loadZodiacBuyPlan, zodiacChipGroups, copyZodiacGroup, zodiacOrder, loadZodiacOrder, zodiacOrderFull, loadZodiacOrderFull, zodiacBpOrder, zodiacBpOpen, loadZodiacBpOrder, zodiacBpCurrent, setZodiacBpPlan, zodiacBpChipGroups, copyZodiacBpGroup, zodiacBpStats, zodiacBpAi, zodiacBpAiLoading, zodiacBpAiError, runZodiacBpAi, loadZodiacBpStats, sizu, sizuLoading, sizuOpen, loadSizu, sizuLatest, sizuRecordsReversed, sizuVoteGroups, sizuChipGroups, sizuCurrent, sizuCurrentDetail, toggleSizuPlan, mathPlanKeys, mathPlanKey, mathPlanCurrent, mathPlanDetail, setMathPlan, mathPlanName, mathPlanKelly, sizuOrder, sizuOrderOpen, loadSizuOrder, sizuCurrentOrder, setSizuOrderPlan, copySizuGroup, sizuStats, sizuAi, sizuAiLoading, sizuAiError, runSizuAi, loadSizuStats,
       schemeList, schemeFilter, schemeFilters, schemeScanning, schemeScanMsg, schemeTotal, loadSchemeList, runSchemeScan, runSchemeForward, schemeStatusText, schemeStatusStyle, overfitText, overfitStyle,
       picksList, picksDate, schemeDetailOpen, schemeDetailName, schemeDetailList, schemeDetailLoading, loadSchemePicks, fmtPicks, recentSeqStr, copySchemePicks, copyAllPicks, toggleSchemeDetail,
       featuredList, filteredPicks, showOnlyPicks, schemeDetailSummary, copyFeatured, paperTrade, loadPaperTrade, consensus, loadConsensus, copyConsensus, rolling, loadRolling, showRolling, generalize, loadGeneralize, showGeneralize,
@@ -5492,6 +5963,7 @@ createApp({
       random8, loadRandom8, fixedOrder, loadFixedOrder,
       mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage, mgEditing, mgEditVal, mgStartEdit, mgSaveEdit, mgCancelEdit,
       mg2Family, mg2Families, mg2Constraints, mg2Cols, mg2Rows, mg2Total, mg2Page, mg2Pages, mg2Period, mg2DateFrom, mg2DateTo, mg2HitFamilies, mg2HitPeriods, loadMultiGroup2, loadMultiGroup2Page, mg2Editing, mg2EditVal, mg2StartEdit, mg2SaveEdit, mg2CancelEdit,
+      highExcess, highExcessOrder, highExcessConsensus, highExcessLoading, highExcessYearMonth, highExcessSource, highExcessType, highExcessList, highExcessTypeLabel, highExcessDailyFields, highExcessDaily, highExcessBuyFields, highExcessOrderRecords, highExcessOrderSummary, highExcessTypeStat, highExcessConsensusSummary, highExcessConsensusVoteStat, highExcessConsensusRecords, highExcessPickedFields, highExcessCurrent, highExcessPickPeriod, highExcessVoteGroups, highExcessGe2Nums, highExcessAllNums, copyHighExcessVoteGroup, copyHighExcessGe2, copyHighExcessAll, highExcessBacktest, loadHighExcessBacktest, loadHighExcess,
       predictSites, fetchLogs, fetchLogTotal, fetchLogPage, loadPredictSites, savePredictSite, fetchSite, fetchAllSites, loadFetchLogs, fetchingAll, fetchingSiteKey,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,

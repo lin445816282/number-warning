@@ -109,11 +109,27 @@ def main():
         rc = {"status": "ok", "settled": src, "generated": grc}
     except Exception as e:
         rc = {"status": "error", "msg": str(e)}
+    # 13. 高超额下单固化台账：结算 pending + 固化最新采集期下单
+    he = {"status": "ok"}
+    try:
+        she = M._settle_high_excess_order()
+        ghe = M._generate_high_excess_order()
+        he = {"status": "ok", "settled": she, "generated": ghe}
+    except Exception as e:
+        he = {"status": "error", "msg": str(e)}
+    # 14. 高超额共识投票固化台账：结算 pending + 固化最新采集期下单
+    hc = {"status": "ok"}
+    try:
+        shc = M._settle_high_excess_consensus_order()
+        ghc = M._generate_high_excess_consensus_order()
+        hc = {"status": "ok", "settled": shc, "generated": ghc}
+    except Exception as e:
+        hc = {"status": "error", "msg": str(e)}
     print(f"[{now}] matched={matched} settled={settled} "
           f"generated={gen['generated']} date={gen['date']} "
           f"scheme_updated={upd} scheme_generated={sgen['generated']} "
           f"consensus_generated={cgen['generated']} consensus_N={cgen.get('N', 0)} "
-          f"zodiac_track={zt} random8={r8} zodiac_top1_forward={zt1} zodiac_order={zo} zodiac_order_full={zof} frontback_order={fb} sizu_order={sz} zodiac_bp_order={zbp} reverse_chip_order={rc}")
+          f"zodiac_track={zt} random8={r8} zodiac_top1_forward={zt1} zodiac_order={zo} zodiac_order_full={zof} frontback_order={fb} sizu_order={sz} zodiac_bp_order={zbp} reverse_chip_order={rc} high_excess_order={he} high_excess_consensus={hc}")
 
 
 if __name__ == "__main__":

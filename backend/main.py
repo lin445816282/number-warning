@@ -6860,6 +6860,36 @@ def _expand_field_nums(field, value, kind):
     return []
 
 
+def _field_to_nums(raw, ctype):
+    """把字段值转成号码列表（下单用，支持全部9种类型，含 wave/head/heshu）。"""
+    raw_s = (raw or "").strip()
+    if ctype == "codes":
+        return sorted(set(_parse_codes(raw)))
+    if ctype == "zodiac":
+        return sorted(set(_zodiac_to_nums(raw)))
+    if ctype == "tail":
+        return sorted(set(_tail_to_nums(raw)))
+    if ctype == "head":
+        heads = set(_parse_tails(raw))
+        return sorted(n for n in range(1, 50) if (n - 1) // 10 in heads)
+    if ctype == "size":
+        return _size_to_nums(raw_s)
+    if ctype == "oddeven":
+        return _oddeven_to_nums(raw_s)
+    if ctype == "jaye":
+        return sorted(set(_jaye_to_nums(raw_s)))
+    if ctype == "wave":
+        w = _TAG_ALIAS.get("wave_color", {}).get(raw_s, raw_s)
+        return list(_WAVE.get(w, []))
+    if ctype == "heshu":
+        if raw_s == "大":
+            return sorted(n for n in range(1, 50) if (n // 10 + n % 10) >= 8)
+        if raw_s == "小":
+            return sorted(n for n in range(1, 50) if (n // 10 + n % 10) < 8)
+        return []
+    return []
+
+
 # (field, label, fam, expect, kind)  kind: codes=号码 / zodiac=生肖 / size=大小 / oddeven=单双 / tail=尾数
 NUM_TRACK_FIELDS = [
     ("gui_codes10", "鬼十码", "鬼谷子", 10, "codes"),
@@ -7674,6 +7704,178 @@ def front_sizu_chip(token: str = ""):
             for p in (guide.get("plans") or [])
         ],
         "stopped": guide.get("stopped", []),
+        "chip_groups": chip_groups,
+    }
+
+
+# ── 高超额信号池「组投票选号」辅助（模块级，供 /api/highExcess 与 /api/front/highExcessChip 复用）──
+def _he_field_to_nums(raw, ctype):
+    """把字段原始值转成号码列表（下单用，支持全部类型）。与 high_excess 内 _to_nums 同口径。"""
+    raw_s = (raw or "").strip()
+    if ctype == "codes":
+        return sorted(set(_parse_codes(raw)))
+    if ctype == "zodiac":
+        return sorted(set(_zodiac_to_nums(raw)))
+    if ctype == "tail":
+        return sorted(set(_tail_to_nums(raw)))
+    if ctype == "head":
+        heads = set(_parse_tails(raw))
+        return sorted(n for n in range(1, 50) if (n - 1) // 10 in heads)
+    if ctype == "size":
+        return _size_to_nums(raw_s)
+    if ctype == "oddeven":
+        return _oddeven_to_nums(raw_s)
+    if ctype == "jaye":
+        return sorted(set(_jaye_to_nums(raw_s)))
+    if ctype == "wave":
+        w = _TAG_ALIAS.get("wave_color", {}).get(raw_s, raw_s)
+        return list(_WAVE.get(w, []))
+    if ctype == "heshu":
+        if raw_s == "大":
+            return sorted(n for n in range(1, 50) if (n // 10 + n % 10) >= 8)
+        if raw_s == "小":
+            return sorted(n for n in range(1, 50) if (n // 10 + n % 10) < 8)
+        return []
+    return []
+
+
+def _he_field_judge(raw, ctype, open_num, open_labels):
+    """判断字段原始值是否命中开奖号，返回 (hit, random_base)。与 high_excess 内 _judge 同口径。"""
+    raw_s = str(raw).strip()
+    if ctype == "codes":
+        nums = _parse_codes(raw)
+        return (open_num in nums), len(nums) / 49.0
+    if ctype == "zodiac":
+        zs = _parse_zodiacs(raw)
+        return (open_labels["zodiac"] in zs), len(zs) / 12.0
+    if ctype == "tail":
+        tails = _parse_tails(raw)
+        return ((open_num % 10) in tails), len(tails) / 10.0
+    if ctype == "head":
+        heads = _parse_tails(raw)
+        return (((open_num - 1) // 10) in heads), len(heads) / 5.0
+    if ctype == "jaye":
+        z = open_labels["zodiac"]
+        is_beast = z in "鼠虎兔龙蛇猴"
+        hit = (raw_s == "野兽" and is_beast) or (raw_s == "家畜" and not is_beast)
+        return hit, 0.5
+    if ctype == "heshu":
+        hit = ((open_num // 10 + open_num % 10) >= 8) == (raw_s == "大")
+        return hit, 20.0 / 49.0
+    if ctype == "size":
+        hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(raw_s, raw_s)
+        return hit, 25.0 / 49.0
+    if ctype == "wave":
+        hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(raw_s, raw_s)
+        return hit, 17.0 / 49.0
+    if ctype == "oddeven":
+        hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(raw_s, raw_s)
+        return hit, 25.0 / 49.0
+    return False, 0.0
+
+
+@app.get("/api/front/highExcessChip")
+def front_high_excess_chip(token: str = ""):
+    """前台公开：高超额信号池「组投票选号」的 4票/3票号码 + 号码筹码（每号5元）。
+
+    供 number-counter.html「抽取高超额」按钮调用。
+    口径与 admin.html 高超额 tab「组投票选号」一致：默认选中全部「高超额字段」
+    （命中基础量>100 且 超额>3%），对当前期各字段预测号码投票，统计票数，
+    取票数恰好 =4 / =3 的号码，各按每号 5 元下单。
+    """
+    if not front_token_valid(token):
+        raise HTTPException(401, "需要访问密码")
+    db = get_db()
+    cycle_maps = _load_cycle_maps(db)
+    open_map = {}
+    for r in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[r["record_date"]] = (int(r["source_number"]), r["cycle_id"])
+        except Exception:
+            pass
+
+    field_meta = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+        field_meta[f] = {"table": "multi_group_summary", "type": ctype}
+    for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+        field_meta[f] = {"table": "multi_group_summary2", "type": ctype}
+
+    # 合并两表按日期
+    by_date = {}
+    for r in db.execute("SELECT * FROM multi_group_summary ORDER BY draw_date").fetchall():
+        by_date.setdefault(r["draw_date"], {})["t1"] = r
+    for r in db.execute("SELECT * FROM multi_group_summary2 ORDER BY draw_date").fetchall():
+        by_date.setdefault(r["draw_date"], {})["t2"] = r
+
+    # 全量回测：算每个字段的命中/样本/随机基准 → 超额，筛「高超额字段」
+    agg = {f: {"hit": 0, "total": 0, "rand": 0.0} for f in field_meta}
+    for d in sorted(by_date.keys()):
+        if d not in open_map:
+            continue
+        open_num, cycle_id = open_map[d]
+        zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+        open_labels = match_labels(open_num, zm)
+        t1 = by_date[d].get("t1")
+        t2 = by_date[d].get("t2")
+        for f, meta in field_meta.items():
+            row = t1 if meta["table"] == "multi_group_summary" else t2
+            if row is None:
+                continue
+            raw = row[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            hit, rr = _he_field_judge(raw, meta["type"], open_num, open_labels)
+            agg[f]["total"] += 1
+            agg[f]["rand"] += rr
+            if hit:
+                agg[f]["hit"] += 1
+
+    qualified = []
+    for f, meta in field_meta.items():
+        a = agg[f]
+        t = a["total"]
+        rate = a["hit"] / t if t else 0.0
+        rr = a["rand"] / t if t else 0.0
+        if t > 100 and (rate - rr) > 0.03:
+            qualified.append(f)
+
+    # 当前期（最新采集期）投票：统计每个号码被多少个「高超额字段」预测
+    latest_date = max(by_date.keys()) if by_date else ""
+    lr = by_date.get(latest_date, {})
+    lt1 = lr.get("t1")
+    lt2 = lr.get("t2")
+    cperiod = ""
+    if lt1 and lt1["period"]:
+        cperiod = lt1["period"]
+    elif lt2 and lt2["period"]:
+        cperiod = lt2["period"]
+    votes = {}
+    for f in qualified:
+        meta = field_meta[f]
+        row = lt1 if meta["table"] == "multi_group_summary" else lt2
+        if row is None:
+            continue
+        raw = row[f]
+        if raw is None or str(raw).strip() == "":
+            continue
+        for n in _he_field_to_nums(raw, meta["type"]):
+            votes[n] = votes.get(n, 0) + 1
+    db.close()
+
+    eq4 = sorted(n for n, v in votes.items() if v == 4)
+    eq3 = sorted(n for n, v in votes.items() if v == 3)
+    chip_groups = []
+    if eq4:
+        chip_groups.append({"amount": 5, "nums": eq4})
+    if eq3:
+        chip_groups.append({"amount": 5, "nums": eq3})
+    return {
+        "period": cperiod,
+        "date": latest_date,
+        "votes": votes,
+        "eq4": eq4,
+        "eq3": eq3,
+        "qualified_count": len(qualified),
         "chip_groups": chip_groups,
     }
 
@@ -9237,6 +9439,763 @@ def multi_group2_hit_rate(user=Header(None, alias="authorization")):
         result.append({"family": fam, "cols": cols})
     db.close()
     return {"families": result, "matched_periods": matched_periods}
+
+
+@app.get("/api/highExcess")
+def high_excess(user=Header(None, alias="authorization"), year_month: str = ""):
+    """高超额信号池：汇总「多组汇总 + 多组汇总2」所有预测项的历史命中率，
+    筛选命中基础量(统计样本期数) > 100 且 超额(命中率 − 随机基准) > 3% 的字段，
+    并按日期逐日落地成明细列表（每期各字段预测内容 + 是否命中开奖号）。
+    支持 year_month=YYYY-MM 按月统计（按月时单月样本少，仅按超额>3%筛选）。"""
+    require_user(user)
+    db = get_db()
+    cycle_maps = _load_cycle_maps(db)
+    open_map = {}
+    for r in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[r["record_date"]] = (int(r["source_number"]), r["cycle_id"])
+        except Exception:
+            pass
+
+    def _judge(raw, ctype, open_num, open_labels):
+        raw_s = str(raw).strip()
+        if ctype == "codes":
+            nums = _parse_codes(raw)
+            return (open_num in nums), len(nums) / 49.0
+        if ctype == "zodiac":
+            zs = _parse_zodiacs(raw)
+            return (open_labels["zodiac"] in zs), len(zs) / 12.0
+        if ctype == "tail":
+            tails = _parse_tails(raw)
+            return ((open_num % 10) in tails), len(tails) / 10.0
+        if ctype == "head":
+            heads = _parse_tails(raw)
+            return (((open_num - 1) // 10) in heads), len(heads) / 5.0
+        if ctype == "jaye":
+            z = open_labels["zodiac"]
+            is_beast = z in "鼠虎兔龙蛇猴"
+            hit = (raw_s == "野兽" and is_beast) or (raw_s == "家畜" and not is_beast)
+            return hit, 0.5
+        if ctype == "heshu":
+            hit = ((open_num // 10 + open_num % 10) >= 8) == (raw_s == "大")
+            return hit, 20.0 / 49.0
+        if ctype == "size":
+            hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(raw_s, raw_s)
+            return hit, 25.0 / 49.0
+        if ctype == "wave":
+            hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(raw_s, raw_s)
+            return hit, 17.0 / 49.0
+        if ctype == "oddeven":
+            hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(raw_s, raw_s)
+            return hit, 25.0 / 49.0
+        return False, 0.0
+
+    def _to_nums(raw, ctype):
+        """把字段值转成号码列表（下单用，支持全部类型）。"""
+        raw_s = (raw or "").strip()
+        if ctype == "codes":
+            return sorted(set(_parse_codes(raw)))
+        if ctype == "zodiac":
+            return sorted(set(_zodiac_to_nums(raw)))
+        if ctype == "tail":
+            return sorted(set(_tail_to_nums(raw)))
+        if ctype == "head":
+            heads = set(_parse_tails(raw))
+            return sorted(n for n in range(1, 50) if (n - 1) // 10 in heads)
+        if ctype == "size":
+            return _size_to_nums(raw_s)
+        if ctype == "oddeven":
+            return _oddeven_to_nums(raw_s)
+        if ctype == "jaye":
+            return sorted(set(_jaye_to_nums(raw_s)))
+        if ctype == "wave":
+            w = _TAG_ALIAS.get("wave_color", {}).get(raw_s, raw_s)
+            return list(_WAVE.get(w, []))
+        if ctype == "heshu":
+            if raw_s == "大":
+                return sorted(n for n in range(1, 50) if (n // 10 + n % 10) >= 8)
+            if raw_s == "小":
+                return sorted(n for n in range(1, 50) if (n // 10 + n % 10) < 8)
+            return []
+        return []
+
+    # field -> meta（含所属表 + 来源 + 家族 + 类型）
+    field_meta = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+        field_meta[f] = {"table": "multi_group_summary", "source": "多组汇总", "family": fam, "label": cname, "type": ctype, "expect": expect}
+    for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+        field_meta[f] = {"table": "multi_group_summary2", "source": "多组汇总2", "family": fam, "label": cname, "type": ctype, "expect": expect}
+
+    agg = {f: {"hit": 0, "total": 0, "rand": 0.0} for f in field_meta}
+    daily_rows = []
+
+    # 按日期合并两表行
+    by_date = {}
+    for r in db.execute("SELECT * FROM multi_group_summary ORDER BY draw_date").fetchall():
+        by_date.setdefault(r["draw_date"], {})["t1"] = r
+    for r in db.execute("SELECT * FROM multi_group_summary2 ORDER BY draw_date").fetchall():
+        by_date.setdefault(r["draw_date"], {})["t2"] = r
+
+    matched = 0
+    for d in sorted(by_date.keys()):
+        if year_month and not str(d).startswith(year_month):
+            continue
+        if d not in open_map:
+            continue
+        matched += 1
+        open_num, cycle_id = open_map[d]
+        zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+        open_labels = match_labels(open_num, zm)
+        t1 = by_date[d].get("t1")
+        t2 = by_date[d].get("t2")
+        period = ""
+        if t1 and t1["period"]:
+            period = t1["period"]
+        elif t2 and t2["period"]:
+            period = t2["period"]
+        rec = {"date": d, "period": period, "open_num": open_num, "vals": {}}
+        for f, meta in field_meta.items():
+            row = t1 if meta["table"] == "multi_group_summary" else t2
+            if row is None:
+                continue
+            raw = row[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            a = agg[f]
+            a["total"] += 1
+            hit, rr = _judge(raw, meta["type"], open_num, open_labels)
+            a["rand"] += rr
+            if hit:
+                a["hit"] += 1
+            rec["vals"][f] = {"raw": str(raw).strip(), "hit": hit, "rand": rr, "nums": _to_nums(raw, meta["type"])}
+        daily_rows.append(rec)
+
+    items = []
+    for f, meta in field_meta.items():
+        a = agg[f]
+        t = a["total"]
+        rate = a["hit"] / t if t else 0.0
+        rr = a["rand"] / t if t else 0.0
+        items.append({
+            "source": meta["source"], "family": meta["family"], "field": f,
+            "label": meta["label"], "type": meta["type"], "expect": meta["expect"],
+            "hit": a["hit"], "total": t,
+            "rate": round(rate, 4), "random_rate": round(rr, 4),
+            "excess": round(rate - rr, 4),
+        })
+
+    min_base = 100
+    # 按月统计时单月样本少，不设样本量门槛，仅按超额>3%筛选
+    if year_month:
+        qualified = [it for it in items if it["excess"] > 0.03]
+    else:
+        qualified = [it for it in items if it["total"] > min_base and it["excess"] > 0.03]
+    qualified.sort(key=lambda x: -x["excess"])
+
+    # 滚动窗口预警：近一周(7期) / 近一月(30期) 超额，低于2%预警
+    for q in qualified:
+        f = q["field"]
+        seq = [rec["vals"][f] for rec in daily_rows if f in rec["vals"]]
+        def _win(n):
+            w = seq[-n:]
+            if not w:
+                return None
+            h = sum(1 for v in w if v["hit"])
+            t = len(w)
+            rnd = sum(v["rand"] for v in w)
+            rt = h / t
+            rr = rnd / t
+            return {"hit": h, "total": t, "rate": round(rt, 4), "random_rate": round(rr, 4), "excess": round(rt - rr, 4)}
+        w7 = _win(7)
+        w30 = _win(30)
+        q["w7"] = w7
+        q["w30"] = w30
+        q["alert"] = bool((w7 and w7["excess"] < 0.02) or (w30 and w30["excess"] < 0.02))
+
+    # 逐日明细：只保留 qualified 字段，倒序（最新在上）
+    qfields = [q["field"] for q in qualified]
+    daily_fields = [{"field": f, "label": field_meta[f]["label"], "source": field_meta[f]["source"],
+                     "family": field_meta[f]["family"], "type": field_meta[f]["type"]} for f in qfields]
+    daily = []
+    for rec in daily_rows:
+        vals = {f: rec["vals"][f] for f in qfields if f in rec["vals"]}
+        daily.append({"date": rec["date"], "period": rec["period"], "open_num": rec["open_num"], "vals": vals})
+    daily.reverse()
+
+    # 当前期（最新采集期，可能未开奖）：用于「组投票选号」，返回各字段 raw + 转号码
+    current = None
+    if by_date:
+        latest_date = max(by_date.keys())
+        lr = by_date[latest_date]
+        lt1 = lr.get("t1")
+        lt2 = lr.get("t2")
+        cperiod = ""
+        if lt1 and lt1["period"]:
+            cperiod = lt1["period"]
+        elif lt2 and lt2["period"]:
+            cperiod = lt2["period"]
+        cvals = {}
+        for f, meta in field_meta.items():
+            row = lt1 if meta["table"] == "multi_group_summary" else lt2
+            if row is None:
+                continue
+            raw = row[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            cvals[f] = {"raw": str(raw).strip(), "nums": _to_nums(raw, meta["type"]), "type": meta["type"]}
+        current = {"date": latest_date, "period": cperiod, "vals": cvals}
+
+    # 可下单字段：全量>3% 且 近一周>2%（仅全量视图；按月视图不参与下单决策）
+    buy_fields = []
+    order_daily = []
+    order_summary = None
+    if not year_month:
+        buy_fields = [q for q in qualified if q["excess"] > 0.03 and q.get("w7") and q["w7"]["excess"] > 0.02]
+        last_rec = daily_rows[-1] if daily_rows else None
+        for q in buy_fields:
+            if last_rec and q["field"] in last_rec["vals"]:
+                v = last_rec["vals"][q["field"]]
+                nums = _to_nums(v["raw"], q["type"])
+                q["nums_today"] = nums
+                q["num_count_today"] = len(nums)
+                q["invest_today"] = round(len(nums) * 5.0, 2)
+            else:
+                q["nums_today"] = []
+                q["num_count_today"] = 0
+                q["invest_today"] = 0.0
+        # 历史逐期回测（每号5元，命中赢47×5）
+        for rec in daily_rows:
+            items = []
+            for q in buy_fields:
+                f = q["field"]
+                v = rec["vals"].get(f)
+                if not v:
+                    continue
+                nums = _to_nums(v["raw"], q["type"])
+                n = len(nums)
+                invest = n * 5.0
+                win = 235.0 if v["hit"] else 0.0
+                profit = win - invest
+                items.append({
+                    "field": f, "label": q["label"], "source": q["source"], "family": q["family"], "type": q["type"],
+                    "nums": nums, "num_count": n, "invest": round(invest, 2),
+                    "hit": v["hit"], "win": round(win, 2), "profit": round(profit, 2),
+                })
+            order_daily.append({"date": rec["date"], "period": rec["period"], "open_num": rec["open_num"], "items": items})
+        order_daily.reverse()
+        total_invest = round(sum(it["invest"] for rec in order_daily for it in rec["items"]), 2)
+        total_profit = round(sum(it["profit"] for rec in order_daily for it in rec["items"]), 2)
+        total_hit = sum(1 for rec in order_daily for it in rec["items"] if it["hit"])
+        total_count = sum(1 for rec in order_daily for it in rec["items"])
+        order_summary = {
+            "fields": len(buy_fields),
+            "periods": len(order_daily),
+            "total_invest": total_invest,
+            "total_profit": total_profit,
+            "total_roi": round(total_profit / total_invest * 100, 2) if total_invest else 0.0,
+            "total_hit": total_hit,
+            "total_count": total_count,
+            "hit_rate": round(total_hit / total_count * 100, 2) if total_count else 0.0,
+        }
+
+    db.close()
+    return {
+        "year_month": year_month,
+        "matched_periods": matched,
+        "min_base": min_base,
+        "min_excess": 0.03,
+        "items": items,
+        "qualified": qualified,
+        "daily_fields": daily_fields,
+        "daily": daily,
+        "current": current,
+        "buy_fields": buy_fields,
+        "order_daily": order_daily,
+        "order_summary": order_summary,
+    }
+
+
+@app.get("/api/highExcessVoteBacktest")
+def high_excess_vote_backtest(user=Header(None, alias="authorization"), fields: str = ""):
+    """按选中的组投票，统计各票数档位（恰好 2/3/4/5 票）的历史命中率 + 盈亏比。
+    每号 1 元标准化：命中赚 (47−N)，未中亏 N。空仓期（该档位无号码）跳过不下注。"""
+    require_user(user)
+    if not fields:
+        return {"ok": False, "error": "请先选择至少 2 组"}
+    picked = [f for f in fields.split(",") if f.strip()]
+    if len(picked) < 2:
+        return {"ok": False, "error": "请至少选择 2 组"}
+
+    field_meta = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+        field_meta[f] = {"table": "multi_group_summary", "ctype": ctype, "label": cname, "family": fam}
+    for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+        field_meta[f] = {"table": "multi_group_summary2", "ctype": ctype, "label": cname, "family": fam}
+    picked = [f for f in picked if f in field_meta]
+    if len(picked) < 2:
+        return {"ok": False, "error": "字段不合法"}
+
+    db = get_db()
+    open_map = {}
+    for r in db.execute("SELECT record_date, source_number FROM number_knowledge_record WHERE status=1").fetchall():
+        try:
+            open_map[r["record_date"]] = int(r["source_number"])
+        except Exception:
+            pass
+
+    by_date = {}
+    for r in db.execute("SELECT * FROM multi_group_summary ORDER BY draw_date").fetchall():
+        by_date.setdefault(r["draw_date"], {})["t1"] = r
+    for r in db.execute("SELECT * FROM multi_group_summary2 ORDER BY draw_date").fetchall():
+        by_date.setdefault(r["draw_date"], {})["t2"] = r
+
+    stats = {}
+    total_periods = 0
+    for d in sorted(by_date.keys()):
+        if d not in open_map:
+            continue
+        total_periods += 1
+        open_num = open_map[d]
+        rows = by_date[d]
+        votes = {}
+        for f in picked:
+            meta = field_meta[f]
+            row = rows.get("t1" if meta["table"] == "multi_group_summary" else "t2")
+            if row is None:
+                continue
+            raw = row[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            for n in _field_to_nums(raw, meta["ctype"]):
+                votes[n] = votes.get(n, 0) + 1
+        for v in range(2, len(picked) + 1):
+            nums = sorted(n for n, cnt in votes.items() if cnt == v)
+            if not nums:
+                continue
+            s = stats.setdefault(v, {"hits": 0, "bets": 0, "invest": 0.0, "profit": 0.0})
+            N = len(nums)
+            hit = open_num in nums
+            s["hits"] += 1 if hit else 0
+            s["bets"] += 1
+            s["invest"] += N * 1.0
+            s["profit"] += ((47 - N) if hit else -N) * 1.0
+    db.close()
+
+    groups = []
+    for v in sorted(stats.keys(), reverse=True):
+        s = stats[v]
+        hit_rate = s["hits"] / s["bets"] * 100 if s["bets"] else 0
+        roi = s["profit"] / s["invest"] * 100 if s["invest"] else 0
+        groups.append({
+            "votes": v,
+            "bet_periods": s["bets"],
+            "hits": s["hits"],
+            "hit_rate": round(hit_rate, 2),
+            "invest": round(s["invest"], 2),
+            "profit": round(s["profit"], 2),
+            "roi": round(roi, 2),
+            "avg_nums": round(s["invest"] / s["bets"], 1) if s["bets"] else 0,
+        })
+    return {"ok": True, "fields": picked, "total_periods": total_periods, "groups": groups}
+
+
+# ============================================================
+# 高超额下单固化台账（真实下单：事前固化 + 开奖结算，无前视）
+# ============================================================
+HE_ORDER_PER = 5.0  # 每号 5 元
+
+
+def _high_excess_field_meta():
+    meta = {}
+    for f, cname, fam, ctype, expect in MULTI_GROUP_COLS:
+        meta[f] = {"table": "multi_group_summary", "source": "多组汇总", "family": fam, "label": cname, "type": ctype, "expect": expect}
+    for f, cname, fam, ctype, expect in MULTI_GROUP2_COLS:
+        meta[f] = {"table": "multi_group_summary2", "source": "多组汇总2", "family": fam, "label": cname, "type": ctype, "expect": expect}
+    return meta
+
+
+def _ensure_high_excess_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS high_excess_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE,
+      period TEXT,
+      fields_json TEXT,
+      invest REAL,
+      hit_count INTEGER,
+      win REAL,
+      profit REAL,
+      open_num INTEGER,
+      create_time TEXT
+    )""")
+
+
+def _he_judge(raw, ctype, open_num, open_labels):
+    raw_s = str(raw).strip()
+    if ctype == "codes":
+        nums = _parse_codes(raw)
+        return (open_num in nums), len(nums) / 49.0
+    if ctype == "zodiac":
+        zs = _parse_zodiacs(raw)
+        return (open_labels["zodiac"] in zs), len(zs) / 12.0
+    if ctype == "tail":
+        ts = _parse_tails(raw)
+        return ((open_num % 10) in ts), len(ts) / 10.0
+    if ctype == "head":
+        hs = _parse_tails(raw)
+        return (((open_num - 1) // 10) in hs), len(hs) / 5.0
+    if ctype == "jaye":
+        z = open_labels["zodiac"]
+        is_beast = z in "鼠虎兔龙蛇猴"
+        hit = (raw_s == "野兽" and is_beast) or (raw_s == "家畜" and not is_beast)
+        return hit, 0.5
+    if ctype == "heshu":
+        hit = ((open_num // 10 + open_num % 10) >= 8) == (raw_s == "大")
+        return hit, 20.0 / 49.0
+    if ctype == "size":
+        hit = open_labels["big_small"] == _TAG_ALIAS["big_small"].get(raw_s, raw_s)
+        return hit, 25.0 / 49.0
+    if ctype == "wave":
+        hit = open_labels["wave_color"] == _TAG_ALIAS["wave_color"].get(raw_s, raw_s)
+        return hit, 17.0 / 49.0
+    if ctype == "oddeven":
+        hit = open_labels["odd_even"] == _TAG_ALIAS["odd_even"].get(raw_s, raw_s)
+        return hit, 25.0 / 49.0
+    return False, 0.0
+
+
+def _high_excess_order_select(db, upto_date):
+    """无前视筛选：截至 upto_date（含）的字段，全量超额>3% 且 近一周(7期)>2%。"""
+    cycle_maps = _load_cycle_maps(db)
+    field_meta = _high_excess_field_meta()
+    opens = {}
+    for r in db.execute("SELECT record_date, source_number, cycle_id FROM number_knowledge_record WHERE status=1 AND record_date <= ?", (upto_date,)).fetchall():
+        try:
+            opens[r["record_date"]] = (int(r["source_number"]), r["cycle_id"])
+        except Exception:
+            pass
+    by_date = {}
+    for r in db.execute("SELECT * FROM multi_group_summary WHERE draw_date <= ? ORDER BY draw_date", (upto_date,)).fetchall():
+        by_date.setdefault(r["draw_date"], {})["t1"] = r
+    for r in db.execute("SELECT * FROM multi_group_summary2 WHERE draw_date <= ? ORDER BY draw_date", (upto_date,)).fetchall():
+        by_date.setdefault(r["draw_date"], {})["t2"] = r
+    seq = {f: [] for f in field_meta}
+    for d in sorted(by_date.keys()):
+        if d not in opens:
+            continue
+        open_num, cycle_id = opens[d]
+        zm = cycle_maps.get(cycle_id, DEFAULT_ZODIAC)
+        ol = match_labels(open_num, zm)
+        t1 = by_date[d].get("t1")
+        t2 = by_date[d].get("t2")
+        for f, meta in field_meta.items():
+            row = t1 if meta["table"] == "multi_group_summary" else t2
+            if row is None:
+                continue
+            raw = row[f]
+            if raw is None or str(raw).strip() == "":
+                continue
+            hit, rr = _he_judge(raw, meta["type"], open_num, ol)
+            seq[f].append((hit, rr))
+    out = []
+    for f, meta in field_meta.items():
+        s = seq[f]
+        if len(s) <= 100:
+            continue
+        total = len(s)
+        hit = sum(1 for h, _ in s if h)
+        rand = sum(rr for _, rr in s)
+        excess = hit / total - rand / total
+        w7 = s[-7:]
+        hit7 = sum(1 for h, _ in w7 if h)
+        rand7 = sum(rr for _, rr in w7)
+        w7_excess = hit7 / len(w7) - rand7 / len(w7)
+        if excess > 0.03 and w7_excess > 0.02:
+            out.append({"field": f, "label": meta["label"], "source": meta["source"], "family": meta["family"], "type": meta["type"],
+                        "excess": round(excess, 4), "w7_excess": round(w7_excess, 4)})
+    out.sort(key=lambda x: -x["excess"])
+    return out
+
+
+def _generate_high_excess_order():
+    """固化最新预测期的高超额下单（每号5元）。无前视：选号用 bet_date 之前的开奖数据。"""
+    db = get_db()
+    _ensure_high_excess_order_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d = row["draw_date"]
+    if db.execute("SELECT id FROM high_excess_order WHERE bet_date=?", (d,)).fetchone() is not None:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True}
+    prev = db.execute("SELECT MAX(record_date) FROM number_knowledge_record WHERE status=1 AND record_date < ?", (d,)).fetchone()[0]
+    if not prev:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True, "reason": "无历史开奖"}
+    sel = _high_excess_order_select(db, prev)
+    if not sel:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True, "reason": "无满足双门槛字段"}
+    t1 = db.execute("SELECT * FROM multi_group_summary WHERE draw_date=?", (d,)).fetchone()
+    t2 = db.execute("SELECT * FROM multi_group_summary2 WHERE draw_date=?", (d,)).fetchone()
+    field_meta = _high_excess_field_meta()
+    fields = []
+    total_invest = 0.0
+    for it in sel:
+        row2 = t1 if field_meta[it["field"]]["table"] == "multi_group_summary" else t2
+        if row2 is None:
+            continue
+        raw = row2[it["field"]]
+        if raw is None or str(raw).strip() == "":
+            continue
+        nums = _field_to_nums(raw, it["type"])
+        n = len(nums)
+        if n == 0:
+            continue
+        invest = round(n * HE_ORDER_PER, 2)
+        fields.append({"field": it["field"], "label": it["label"], "source": it["source"], "family": it["family"], "type": it["type"],
+                       "nums": nums, "num_count": n, "invest": invest, "hit": None, "win": None, "profit": None})
+        total_invest += invest
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT INTO high_excess_order (bet_date, period, fields_json, invest, hit_count, win, profit, open_num, create_time) VALUES (?,?,?,?,NULL,NULL,NULL,NULL,?)",
+               (d, row["period"], json.dumps(fields, ensure_ascii=False), round(total_invest, 2), now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "fields": len(fields), "invest": round(total_invest, 2)}
+
+
+def _settle_high_excess_order():
+    """结算 pending 下单（开奖已出）。"""
+    db = get_db()
+    _ensure_high_excess_order_table(db)
+    pending = db.execute("SELECT id, bet_date, fields_json FROM high_excess_order WHERE open_num IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        fields = json.loads(p["fields_json"]) if p["fields_json"] else []
+        hit_count = 0
+        win = 0.0
+        profit = 0.0
+        for f in fields:
+            hit = 1 if open_num in f["nums"] else 0
+            w = 235.0 if hit else 0.0
+            pr = round(w - f["invest"], 2)
+            f["hit"] = hit
+            f["win"] = round(w, 2)
+            f["profit"] = pr
+            if hit:
+                hit_count += 1
+            win += w
+            profit += pr
+        db.execute("UPDATE high_excess_order SET open_num=?, hit_count=?, win=?, profit=?, fields_json=? WHERE id=?",
+                   (open_num, hit_count, round(win, 2), round(profit, 2), json.dumps(fields, ensure_ascii=False), p["id"]))
+        settled += 1
+    db.commit()
+    db.close()
+    return settled
+
+
+def _high_excess_order_overview():
+    db = get_db()
+    _ensure_high_excess_order_table(db)
+    rows = db.execute("SELECT * FROM high_excess_order ORDER BY bet_date").fetchall()
+    records = []
+    total_invest = 0.0
+    total_profit = 0.0
+    total_hit = 0
+    total_count = 0
+    for r in rows:
+        fields = json.loads(r["fields_json"]) if r["fields_json"] else []
+        for f in fields:
+            total_count += 1
+            if f.get("hit") == 1:
+                total_hit += 1
+        total_invest += (r["invest"] or 0)
+        total_profit += (r["profit"] or 0)
+        records.append({"date": r["bet_date"], "period": r["period"], "open_num": r["open_num"],
+                        "fields": fields, "invest": r["invest"], "profit": r["profit"]})
+    records.reverse()
+    summary = {
+        "periods": len(rows),
+        "settled": sum(1 for r in rows if r["open_num"] is not None),
+        "total_invest": round(total_invest, 2),
+        "total_profit": round(total_profit, 2),
+        "total_roi": round(total_profit / total_invest * 100, 2) if total_invest else 0.0,
+        "total_hit": total_hit,
+        "total_count": total_count,
+        "hit_rate": round(total_hit / total_count * 100, 2) if total_count else 0.0,
+    }
+    db.close()
+    return {"per": HE_ORDER_PER, "summary": summary, "records": records}
+
+
+@app.get("/api/highExcessOrder")
+def high_excess_order(user=Header(None, alias="authorization")):
+    """高超额下单固化台账（每号5元，事前固化+结算，无前视）。"""
+    require_user(user)
+    _generate_high_excess_order()
+    _settle_high_excess_order()
+    return _high_excess_order_overview()
+
+
+# ============================================================
+# 高超额「共识投票」固化台账（只买被 > 一半字段同时预测的号码）
+# ============================================================
+def _ensure_high_excess_consensus_order_table(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS high_excess_consensus_order (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bet_date TEXT UNIQUE,
+      period TEXT,
+      nums_json TEXT,
+      field_count INTEGER,
+      threshold REAL,
+      invest REAL,
+      open_num INTEGER,
+      hit INTEGER,
+      win REAL,
+      profit REAL,
+      create_time TEXT
+    )""")
+
+
+def _generate_high_excess_consensus_order():
+    """固化最新期「共识投票」下单：只买被 > 一半字段同时预测的号码（每号5元）。无前视。"""
+    db = get_db()
+    _ensure_high_excess_consensus_order_table(db)
+    row = db.execute("SELECT draw_date, period FROM multi_group_summary ORDER BY draw_date DESC LIMIT 1").fetchone()
+    if not row:
+        db.close()
+        return {"generated": 0, "date": ""}
+    d = row["draw_date"]
+    if db.execute("SELECT id FROM high_excess_consensus_order WHERE bet_date=?", (d,)).fetchone() is not None:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True}
+    prev = db.execute("SELECT MAX(record_date) FROM number_knowledge_record WHERE status=1 AND record_date < ?", (d,)).fetchone()[0]
+    if not prev:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True, "reason": "无历史开奖"}
+    sel = _high_excess_order_select(db, prev)
+    if not sel:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True, "reason": "无满足双门槛字段"}
+    t1 = db.execute("SELECT * FROM multi_group_summary WHERE draw_date=?", (d,)).fetchone()
+    t2 = db.execute("SELECT * FROM multi_group_summary2 WHERE draw_date=?", (d,)).fetchone()
+    field_meta = _high_excess_field_meta()
+    votes = {}
+    for it in sel:
+        row2 = t1 if field_meta[it["field"]]["table"] == "multi_group_summary" else t2
+        if row2 is None:
+            continue
+        raw = row2[it["field"]]
+        if raw is None or str(raw).strip() == "":
+            continue
+        for n in _field_to_nums(raw, it["type"]):
+            votes[n] = votes.get(n, 0) + 1
+    field_count = len(sel)
+    threshold = field_count / 2.0
+    buy = sorted(n for n, c in votes.items() if c > threshold)
+    if not buy:
+        db.close()
+        return {"generated": 0, "date": d, "skipped": True, "reason": "无共识号码(>一半)", "field_count": field_count}
+    nums_json = json.dumps([{"num": n, "votes": votes[n]} for n in buy], ensure_ascii=False)
+    invest = round(len(buy) * HE_ORDER_PER, 2)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("INSERT INTO high_excess_consensus_order (bet_date, period, nums_json, field_count, threshold, invest, open_num, hit, win, profit, create_time) VALUES (?,?,?,?,?,?,NULL,NULL,NULL,NULL,?)",
+               (d, row["period"], nums_json, field_count, threshold, invest, now))
+    db.commit()
+    db.close()
+    return {"generated": 1, "date": d, "field_count": field_count, "buy": len(buy), "invest": invest}
+
+
+def _settle_high_excess_consensus_order():
+    db = get_db()
+    _ensure_high_excess_consensus_order_table(db)
+    pending = db.execute("SELECT id, bet_date, nums_json, invest FROM high_excess_consensus_order WHERE open_num IS NULL ORDER BY bet_date").fetchall()
+    settled = 0
+    for p in pending:
+        orow = db.execute("SELECT source_number FROM number_knowledge_record WHERE record_date=? AND status=1", (p["bet_date"],)).fetchone()
+        if not orow:
+            continue
+        open_num = int(orow["source_number"])
+        nums = [x["num"] for x in json.loads(p["nums_json"])] if p["nums_json"] else []
+        hit = 1 if open_num in nums else 0
+        win = 235.0 if hit else 0.0
+        profit = round(win - p["invest"], 2)
+        db.execute("UPDATE high_excess_consensus_order SET open_num=?, hit=?, win=?, profit=? WHERE id=?",
+                   (open_num, hit, round(win, 2), profit, p["id"]))
+        settled += 1
+    db.commit()
+    db.close()
+    return settled
+
+
+def _high_excess_consensus_order_overview():
+    db = get_db()
+    _ensure_high_excess_consensus_order_table(db)
+    rows = db.execute("SELECT * FROM high_excess_consensus_order ORDER BY bet_date").fetchall()
+    records = []
+    total_invest = 0.0
+    total_profit = 0.0
+    total_hit = 0
+    total_count = 0
+    vote_stat = {}
+    for r in rows:
+        nums = json.loads(r["nums_json"]) if r["nums_json"] else []
+        total_count += 1
+        total_invest += (r["invest"] or 0)
+        total_profit += (r["profit"] or 0)
+        if r["hit"] == 1:
+            total_hit += 1
+        for x in nums:
+            v = x["votes"]
+            st = vote_stat.setdefault(v, {"votes": v, "cnt": 0, "hit": 0, "invest": 0.0, "profit": 0.0})
+            st["cnt"] += 1
+            st["invest"] += HE_ORDER_PER
+            if r["open_num"] is not None and x["num"] == r["open_num"]:
+                st["hit"] += 1
+                st["profit"] += 235.0 - HE_ORDER_PER
+            else:
+                st["profit"] += -HE_ORDER_PER
+        records.append({"date": r["bet_date"], "period": r["period"], "open_num": r["open_num"],
+                        "field_count": r["field_count"], "threshold": r["threshold"],
+                        "nums": nums, "invest": r["invest"], "hit": r["hit"], "profit": r["profit"]})
+    records.reverse()
+    summary = {
+        "periods": len(rows),
+        "settled": sum(1 for r in rows if r["open_num"] is not None),
+        "total_invest": round(total_invest, 2),
+        "total_profit": round(total_profit, 2),
+        "total_roi": round(total_profit / total_invest * 100, 2) if total_invest else 0.0,
+        "total_hit": total_hit,
+        "total_count": total_count,
+        "hit_rate": round(total_hit / total_count * 100, 2) if total_count else 0.0,
+    }
+    vote_list = []
+    for v in sorted(vote_stat.keys()):
+        st = vote_stat[v]
+        vote_list.append({
+            "votes": v,
+            "cnt": st["cnt"],
+            "hit": st["hit"],
+            "hit_rate": round(st["hit"] / st["cnt"] * 100, 1) if st["cnt"] else 0,
+            "invest": round(st["invest"], 2),
+            "profit": round(st["profit"], 2),
+            "roi": round(st["profit"] / st["invest"] * 100, 1) if st["invest"] else 0,
+        })
+    db.close()
+    return {"per": HE_ORDER_PER, "summary": summary, "vote_stat": vote_list, "records": records}
+
+
+@app.get("/api/highExcessConsensusOrder")
+def high_excess_consensus_order(user=Header(None, alias="authorization")):
+    """高超额「共识投票」固化台账（只买 > 一半字段共识的号码，每号5元）。"""
+    require_user(user)
+    _generate_high_excess_consensus_order()
+    _settle_high_excess_consensus_order()
+    return _high_excess_consensus_order_overview()
 
 
 # ============================================================
