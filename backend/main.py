@@ -11140,6 +11140,29 @@ def predict_site_logs(page: int = 1, size: int = 20, user=Header(None, alias="au
     return {"rows": [dict(r) for r in rows], "total": total, "page": page, "size": size}
 
 
+@app.post("/api/predictSite/cdpStart")
+def predict_site_cdp_start(user=Header(None, alias="authorization")):
+    """启动/重启 CDP Edge 采集实例（9224）。幂等：已监听则直接返回成功。"""
+    require_user(user)
+    import fetch_predict
+    ok = fetch_predict.ensure_cdp()
+    return {"ok": ok, "status": "running" if ok else "failed", "cdp": "http://172.23.128.1:9224"}
+
+
+@app.get("/api/predictSite/cdpStatus")
+def predict_site_cdp_status(user=Header(None, alias="authorization")):
+    """查询 CDP Edge 采集实例状态（9224 是否监听）。"""
+    require_user(user)
+    import urllib.request
+    running = False
+    try:
+        urllib.request.urlopen("http://172.23.128.1:9224/json/version", timeout=3)
+        running = True
+    except Exception:
+        pass
+    return {"running": running, "cdp": "http://172.23.128.1:9224"}
+
+
 # ============================================================
 # 十七、静态文件 + SPA
 # ============================================================

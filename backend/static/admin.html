@@ -3820,7 +3820,11 @@ table.data tr.warn td{background:var(--warnbg)}
         <div class="topbar"><h2>预测采集 · 4家预测数据来源</h2><div class="user-info">{{ user.real_name || user.username }}<span class="logout-btn" @click="doLogout">退出</span></div></div>
         <div class="card">
           <div class="card-title">🌐 采集站点配置
-            <button class="btn btn-sm" :class="{loading:fetchingAll}" :disabled="fetchingAll || !!fetchingSiteKey" @click="fetchAllSites" style="float:right;padding:4px 12px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:8px"><span v-if="fetchingAll" class="spinner"></span>{{ fetchingAll ? '采集中…' : '⚡ 一键采集全部' }}</button>
+            <span style="float:right;display:inline-flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:var(--ink2)">CDP 采集实例：<b :style="'color:' + (cdpRunning ? 'var(--ok)' : '#dc2626')">{{ cdpRunning ? '✅ 已启动' : '❌ 未启动' }}</b></span>
+              <button class="btn btn-sm" :class="{loading:cdpStarting}" :disabled="cdpStarting" @click="startCdp" style="padding:4px 12px;font-size:12px;background:var(--btn2);color:#fff;border:none;border-radius:8px"><span v-if="cdpStarting" class="spinner"></span>{{ cdpStarting ? '启动中…' : '▶ 启动 CDP' }}</button>
+              <button class="btn btn-sm" :class="{loading:fetchingAll}" :disabled="fetchingAll || !!fetchingSiteKey" @click="fetchAllSites" style="padding:4px 12px;font-size:12px;background:var(--warn);color:#fff;border:none;border-radius:8px"><span v-if="fetchingAll" class="spinner"></span>{{ fetchingAll ? '采集中…' : '⚡ 一键采集全部' }}</button>
+            </span>
           </div>
           <div style="font-size:12px;color:var(--ink2);margin-bottom:10px">每行一个预测网站，配置网址+定时采集时间（HH:MM）后点「保存」；点「一键采集」立即抓取并入库到多组汇总。</div>
           <div v-for="s in predictSites" :key="s.site_key" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
@@ -4671,6 +4675,8 @@ createApp({
     const fetchLogPage = ref(1);
     const fetchingAll = ref(false);
     const fetchingSiteKey = ref('');
+    const cdpRunning = ref(false);
+    const cdpStarting = ref(false);
     async function loadPredictSites(){
       try {
         const d = await api('GET', '/api/predictSite/config');
@@ -4709,7 +4715,23 @@ createApp({
         fetchLogTotal.value = d.total || 0;
       } catch(e){}
     }
-    function loadPredictSitePage(){ loadPredictSites(); loadFetchLogs(); }
+    async function checkCdpStatus(){
+      try {
+        const d = await api('GET', '/api/predictSite/cdpStatus');
+        cdpRunning.value = !!d.running;
+      } catch(e){ cdpRunning.value = false; }
+    }
+    async function startCdp(){
+      if (cdpStarting.value) return;
+      cdpStarting.value = true;
+      try {
+        const r = await api('POST', '/api/predictSite/cdpStart');
+        cdpRunning.value = !!r.ok;
+        toast(r.ok ? 'CDP 采集实例已启动 ✅' : 'CDP 启动失败，请检查 C:\\Temp\\restart_cdp_nw.ps1');
+      } catch(e){ toast(e.message); }
+      finally { cdpStarting.value = false; }
+    }
+    function loadPredictSitePage(){ loadPredictSites(); loadFetchLogs(); checkCdpStatus(); }
 
     function routeLoad(){
       if (cur.value === '/dashboard') loadDash();
@@ -5964,7 +5986,7 @@ createApp({
       mgFamily, mgFamilies, mgConstraints, mgCols, mgRows, mgTotal, mgPage, mgPages, mgPeriod, mgDateFrom, mgDateTo, mgHitFamilies, mgHitPeriods, loadMultiGroup, loadMultiGroupPage, mgEditing, mgEditVal, mgStartEdit, mgSaveEdit, mgCancelEdit,
       mg2Family, mg2Families, mg2Constraints, mg2Cols, mg2Rows, mg2Total, mg2Page, mg2Pages, mg2Period, mg2DateFrom, mg2DateTo, mg2HitFamilies, mg2HitPeriods, loadMultiGroup2, loadMultiGroup2Page, mg2Editing, mg2EditVal, mg2StartEdit, mg2SaveEdit, mg2CancelEdit,
       highExcess, highExcessOrder, highExcessConsensus, highExcessLoading, highExcessYearMonth, highExcessSource, highExcessType, highExcessList, highExcessTypeLabel, highExcessDailyFields, highExcessDaily, highExcessBuyFields, highExcessOrderRecords, highExcessOrderSummary, highExcessTypeStat, highExcessConsensusSummary, highExcessConsensusVoteStat, highExcessConsensusRecords, highExcessPickedFields, highExcessCurrent, highExcessPickPeriod, highExcessVoteGroups, highExcessGe2Nums, highExcessAllNums, copyHighExcessVoteGroup, copyHighExcessGe2, copyHighExcessAll, highExcessBacktest, loadHighExcessBacktest, loadHighExcess,
-      predictSites, fetchLogs, fetchLogTotal, fetchLogPage, loadPredictSites, savePredictSite, fetchSite, fetchAllSites, loadFetchLogs, fetchingAll, fetchingSiteKey,
+      predictSites, fetchLogs, fetchLogTotal, fetchLogPage, loadPredictSites, savePredictSite, fetchSite, fetchAllSites, loadFetchLogs, fetchingAll, fetchingSiteKey, cdpRunning, cdpStarting, checkCdpStatus, startCdp,
       showDetail, detail, showAdd, addForm, showCycle, cycleForm, showHistory, histDetail, showDimTime, dimTime, showUser, userForm,
       dimLabels, pad, doLogin, doLogout, go, loadRecords, loadCycles, loadHistory, loadDimStats,
       sortDim, sortMark, rankStyle, rateColor, loadSignalTrack, rebuildSignalTrack,
