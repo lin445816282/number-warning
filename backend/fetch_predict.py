@@ -762,7 +762,17 @@ def fetch_and_save(site, url, wait=10, force_period=None):
             else:
                 t = target_period(text)
     if not t:
-        return {"site": site, "status": "fail", "error": "未识别到目标期号"}
+        _txt = (text or "").strip()
+        _snippet = _txt.replace("\n", " ")[:150]
+        if not _txt:
+            _why = "采集文本为空"
+        elif "期" not in _txt:
+            _why = "文本无「期」字样（疑似空白页/导航壳/验证码页）"
+        else:
+            _nums = re.findall(r'\d+\s*期', _txt)
+            _why = "含「期」但无「第X期」格式" + (("，疑似期号：" + "、".join(_nums[:8])) if _nums else "（页面结构可能变更）")
+        return {"site": site, "status": "fail",
+                "error": f"未识别到目标期号（{_why}；采集文本 {len(_txt)} 字）：{_snippet}"}
     # 未指定期号时约束上限，防止采到未来期
     if force_period is None and t > period_ceiling():
         t = period_ceiling()
